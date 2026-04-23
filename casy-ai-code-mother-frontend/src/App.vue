@@ -1,13 +1,17 @@
-<script setup lang="ts"></script>
-
 <template>
-  <h1>You did it!</h1>
-  <p>
-    Visit <a href="https://vuejs.org/" target="_blank" rel="noopener">vuejs.org</a> to read the
-    documentation
-  </p>
-  <a-button type="primary">Primary Button</a-button>
-
+  <a-config-provider :locale="locale">
+    <BasicLayout />
+  </a-config-provider>
 </template>
 
-<style scoped></style>
+<script setup lang="ts">
+import BasicLayout from '@/layouts/BasicLayout.vue'
+import zhCN from 'ant-design-vue/es/locale/zh_CN'
+import dayjs from 'dayjs'
+import 'dayjs/locale/zh-cn'
+import { ref } from 'vue'
+
+dayjs.locale('zh-cn')
+
+const locale = ref(zhCN)
+</script>
