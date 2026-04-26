@@ -45,4 +45,8 @@ public class ResultUtils {
     public static BaseResponse<?> error(ErrorCode errorCode, String message) {
         return new BaseResponse<>(errorCode.getCode(), null, message);
     }
+
+    public static <T> BaseResponse<T> ok() {
+        return new BaseResponse<>(0, null, "ok");
+    }
 }
