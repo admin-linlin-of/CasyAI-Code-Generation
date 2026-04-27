@@ -23,7 +23,7 @@ import java.sql.Timestamp;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(value = "user", schema = "public")
+@Table(value = "t_user", schema = "public")
 public class User implements Serializable {
 
     @Serial
@@ -32,97 +32,97 @@ public class User implements Serializable {
     /**
      * id
      */
-    @Id(keyType=KeyType.Generator, value= KeyGenerators.flexId)
+    @Id(keyType = KeyType.Generator, value = KeyGenerators.flexId)
     private Long id;
 
     /**
-     * 账号
+     * 用户账号
      */
-    @Column("userAccount")
+    @Column("user_account")
     private String userAccount;
 
     /**
-     * 密码
+     * 用户密码
      */
-    @Column("userPassword")
+    @Column("user_password")
     private String userPassword;
 
     /**
      * 用户昵称
      */
-    @Column("userName")
+    @Column("user_name")
     private String userName;
 
     /**
      * 用户头像
      */
-    @Column("userAvatar")
+    @Column("user_avatar")
     private String userAvatar;
 
     /**
      * 用户简介
      */
-    @Column("userProfile")
+    @Column("user_profile")
     private String userProfile;
 
     /**
      * 用户角色：user/admin
      */
-    @Column("userRole")
+    @Column("user_role")
     private String userRole;
 
     /**
      * 会员过期时间
      */
-    @Column("vipExpireTime")
+    @Column("vip_expire_time")
     private Timestamp vipExpireTime;
 
     /**
      * 会员兑换码
      */
-    @Column("vipCode")
+    @Column("vip_code")
     private String vipCode;
 
     /**
      * 会员编号
      */
-    @Column("vipNumber")
+    @Column("vip_number")
     private Long vipNumber;
 
     /**
      * 分享码
      */
-    @Column("shareCode")
+    @Column("share_code")
     private String shareCode;
 
     /**
-     * 邀请用户 id
+     * 邀请用户ID
      */
-    @Column("inviteUser")
+    @Column("invite_user")
     private Long inviteUser;
 
     /**
      * 编辑时间
      */
-    @Column("editTime")
+    @Column("edit_time")
     private Timestamp editTime;
 
     /**
      * 创建时间
      */
-    @Column("createTime")
+    @Column("create_time")
     private Timestamp createTime;
 
     /**
      * 更新时间
      */
-    @Column("updateTime")
+    @Column("update_time")
     private Timestamp updateTime;
 
     /**
-     * 是否删除
+     * 是否删除 0-未删除 1-已删除
      */
-    @Column(value = "isDelete", isLogicDelete = true)
+    @Column(value = "is_delete", isLogicDelete = true)
     private Integer isDelete;
 
 }

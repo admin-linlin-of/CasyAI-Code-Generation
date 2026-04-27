@@ -33,10 +33,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         ThrowUtils.throwIf(StrUtil.hasBlank(userAccount, userPassword, checkPassword), ErrorCode.PARAMS_ERROR, "参数不能为空");
         ThrowUtils.throwIf(userAccount.length() < 4, ErrorCode.PARAMS_ERROR, "用户账户不能低于位");
         ThrowUtils.throwIf(userPassword.length() < 8, ErrorCode.PARAMS_ERROR, "用户密码过短");
-        ThrowUtils.throwIf(StrUtil.equals(userPassword, checkPassword), ErrorCode.PARAMS_ERROR, "两次输入的密码不一致");
+        ThrowUtils.throwIf(!StrUtil.equals(userPassword, checkPassword), ErrorCode.PARAMS_ERROR, "两次输入的密码不一致");
         // 2.检查是否重复
         QueryWrapper queryWrapper = new QueryWrapper();
-        queryWrapper.eq("userAccount", userAccount);
+        queryWrapper.eq("user_account", userAccount);
         long count = count(queryWrapper);
         ThrowUtils.throwIf(count > 0, ErrorCode.PARAMS_ERROR,"账号已存在");
         // 3.加密
@@ -47,7 +47,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setUserPassword(encryptPassword);
         user.setUserName("默认昵称：" + UUID.randomUUID().toString());
         user.setUserRole(UserRoleEnum.USER.getValue());
-        ThrowUtils.throwIf(save(user), ErrorCode.SYSTEM_ERROR, "注册失败，数据库错误");
+        ThrowUtils.throwIf(!save(user), ErrorCode.SYSTEM_ERROR, "注册失败，数据库错误");
         return user.getId();
     }
 

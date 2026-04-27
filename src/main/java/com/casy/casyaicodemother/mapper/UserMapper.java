@@ -1,7 +1,7 @@
 package com.casy.casyaicodemother.mapper;
 
-import com.mybatisflex.core.BaseMapper;
 import com.casy.casyaicodemother.entity.User;
+import com.mybatisflex.core.BaseMapper;
 
 /**
  * 用户 映射层。

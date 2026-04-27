@@ -29,6 +29,11 @@ server:
   servlet:
     context-path: /api
 
+mybatis-flex:
+  configuration:
+    # 开启 数据库下划线 ↔ 实体类驼峰
+    map-underscore-to-camel-case: true
+
 
 ############## Sa-Token 配置 (文档: https://sa-token.cc) ##############
 sa-token:

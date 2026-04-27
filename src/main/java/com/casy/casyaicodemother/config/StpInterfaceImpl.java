@@ -24,15 +24,10 @@ public class StpInterfaceImpl implements StpInterface {
         List<String> roles = getRoleList(loginId, loginType);
         Set<String> perms = new LinkedHashSet<>();
         if (roles.contains("admin")) {
-            perms.add("user.add");
-            perms.add("user.update");
-            perms.add("user.get");
-            perms.add("user.delete");
-            perms.add("art.*");
+            perms.add("*");
         }
         if (roles.contains("user")) {
             perms.add("user.get");
-            perms.add("art.read");
         }
         return new ArrayList<>(perms);
     }

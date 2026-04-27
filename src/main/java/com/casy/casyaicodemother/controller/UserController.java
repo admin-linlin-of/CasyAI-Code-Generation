@@ -1,5 +1,7 @@
 package com.casy.casyaicodemother.controller;
 
+import cn.dev33.satoken.annotation.SaCheckLogin;
+import cn.dev33.satoken.annotation.SaCheckPermission;
 import cn.dev33.satoken.stp.StpUtil;
 import com.casy.casyaicodemother.common.BaseResponse;
 import com.casy.casyaicodemother.common.ResultUtils;
@@ -46,7 +48,7 @@ public class UserController {
     }
 
     // 测试登录，浏览器访问： http://localhost:8124/user/doLogin?username=zhang&password=123456
-    @RequestMapping("login")
+    @PostMapping("login")
     public BaseResponse<LoginUserVO> login(@RequestBody UserLoginRequest userLoginRequest) {
         ThrowUtils.throwIf(userLoginRequest == null, ErrorCode.PARAMS_ERROR);
         String userAccount = userLoginRequest.getUserAccount();
@@ -56,12 +58,15 @@ public class UserController {
         return ResultUtils.success(loginUserVO);
     }
 
+    @SaCheckLogin
+    @SaCheckPermission("user.get")
     @GetMapping("/get/login")
     public BaseResponse<LoginUserVO> getLoginUser() {
         User loginUser = userService.getLoginUser();
         return ResultUtils.success(userService.getLoginUserVO(loginUser));
     }
 
+    @SaCheckLogin
     @PostMapping("/logout")
     public BaseResponse<Boolean> userLogout(HttpServletRequest request) {
         ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
@@ -75,6 +80,7 @@ public class UserController {
      * @param user 用户
      * @return {@code true} 保存成功，{@code false} 保存失败
      */
+    @SaCheckPermission("user.add")
     @PostMapping("save")
     public boolean save(@RequestBody User user) {
         return userService.save(user);
@@ -86,6 +92,7 @@ public class UserController {
      * @param id 主键
      * @return {@code true} 删除成功，{@code false} 删除失败
      */
+    @SaCheckPermission("user.remove")
     @DeleteMapping("remove/{id}")
     public boolean remove(@PathVariable Long id) {
         return userService.removeById(id);
@@ -97,6 +104,7 @@ public class UserController {
      * @param user 用户
      * @return {@code true} 更新成功，{@code false} 更新失败
      */
+    @SaCheckPermission("user.update")
     @PutMapping("update")
     public boolean update(@RequestBody User user) {
         return userService.updateById(user);
@@ -107,6 +115,7 @@ public class UserController {
      *
      * @return 所有数据
      */
+    @SaCheckPermission("user.list")
     @GetMapping("list")
     public List<User> list() {
         return userService.list();
@@ -118,6 +127,7 @@ public class UserController {
      * @param id 用户主键
      * @return 用户详情
      */
+    @SaCheckPermission("user.getInfo")
     @GetMapping("getInfo/{id}")
     public User getInfo(@PathVariable Long id) {
         return userService.getById(id);
@@ -129,6 +139,7 @@ public class UserController {
      * @param page 分页对象
      * @return 分页对象
      */
+    @SaCheckPermission("user.page")
     @GetMapping("page")
     public Page<User> page(Page<User> page) {
         return userService.page(page);

@@ -1,59 +1,60 @@
--- 1. 创建自动更新时间的触发器函数
+-- 1. 创建自动更新时间的触发器函数（蛇形命名）
 CREATE OR REPLACE FUNCTION update_modified_column()
     RETURNS TRIGGER AS $$
 BEGIN
-    NEW."updateTime" = CURRENT_TIMESTAMP;
+    NEW.update_time = CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
--- 2. 创建用户表（移除表内普通索引，仅保留约束）
-CREATE TABLE IF NOT EXISTS "user"
+-- 2. 创建用户表（全小写+蛇形命名，移除双引号，表名改为 t_user 避免关键字冲突）
+CREATE TABLE IF NOT EXISTS t_user
 (
-    id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    "userAccount"  VARCHAR(256) NOT NULL,
-    "userPassword" VARCHAR(512) NOT NULL,
-    "userName"     VARCHAR(256) NULL,
-    "userAvatar"   VARCHAR(1024) NULL,
-    "userProfile"  VARCHAR(512) NULL,
-    "userRole"     VARCHAR(256) NOT NULL DEFAULT 'user',
-    "vipExpireTime" TIMESTAMP NULL,
-    "vipCode"       VARCHAR(128) NULL,
-    "vipNumber"     BIGINT NULL,
-    "shareCode"     VARCHAR(20) DEFAULT NULL,
-    "inviteUser"    BIGINT DEFAULT NULL,
-    "editTime"     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "createTime"   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updateTime"   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "isDelete"     SMALLINT NOT NULL DEFAULT 0,
-    -- 唯一约束（PG 支持表内定义）
-    CONSTRAINT uk_userAccount UNIQUE ("userAccount")
+    id              BIGINT NOT NULL PRIMARY KEY,
+    user_account    VARCHAR(256) NOT NULL,
+    user_password   VARCHAR(512) NOT NULL,
+    user_name       VARCHAR(256) NULL,
+    user_avatar     VARCHAR(1024) NULL,
+    user_profile    VARCHAR(512) NULL,
+    user_role       VARCHAR(256) NOT NULL DEFAULT 'user',
+    vip_expire_time TIMESTAMP NULL,
+    vip_code        VARCHAR(128) NULL,
+    vip_number      BIGINT NULL,
+    share_code      VARCHAR(20) DEFAULT NULL,
+    invite_user     BIGINT DEFAULT NULL,
+    edit_time       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    create_time     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_delete       SMALLINT NOT NULL DEFAULT 0,
+    -- 唯一约束（蛇形命名）
+    CONSTRAINT uk_user_account UNIQUE (user_account)
 );
 
--- 3. 单独创建普通索引（PostgreSQL 标准语法）
-CREATE INDEX idx_userName ON "user" ("userName");
+-- 3. 创建索引（蛇形命名）
+DROP INDEX IF EXISTS idx_user_name;
+CREATE INDEX idx_user_name ON t_user (user_name);
 
 -- 4. 绑定更新时间触发器
 CREATE TRIGGER update_user_modtime
-    BEFORE UPDATE ON "user"
+    BEFORE UPDATE ON t_user
     FOR EACH ROW
 EXECUTE FUNCTION update_modified_column();
 
--- 5. 添加表 + 所有字段注释
-COMMENT ON TABLE "user" IS '用户';
-COMMENT ON COLUMN "user".id IS 'id';
-COMMENT ON COLUMN "user"."userAccount" IS '账号';
-COMMENT ON COLUMN "user"."userPassword" IS '密码';
-COMMENT ON COLUMN "user"."userName" IS '用户昵称';
-COMMENT ON COLUMN "user"."userAvatar" IS '用户头像';
-COMMENT ON COLUMN "user"."userProfile" IS '用户简介';
-COMMENT ON COLUMN "user"."userRole" IS '用户角色：user/admin';
-COMMENT ON COLUMN "user"."vipExpireTime" IS '会员过期时间';
-COMMENT ON COLUMN "user"."vipCode" IS '会员兑换码';
-COMMENT ON COLUMN "user"."vipNumber" IS '会员编号';
-COMMENT ON COLUMN "user"."shareCode" IS '分享码';
-COMMENT ON COLUMN "user"."inviteUser" IS '邀请用户 id';
-COMMENT ON COLUMN "user"."editTime" IS '编辑时间';
-COMMENT ON COLUMN "user"."createTime" IS '创建时间';
-COMMENT ON COLUMN "user"."updateTime" IS '更新时间';
-COMMENT ON COLUMN "user"."isDelete" IS '是否删除';
+-- 5. 表+字段注释（对应蛇形列名）
+COMMENT ON TABLE t_user IS '用户表';
+COMMENT ON COLUMN t_user.id IS '主键ID';
+COMMENT ON COLUMN t_user.user_account IS '用户账号';
+COMMENT ON COLUMN t_user.user_password IS '用户密码';
+COMMENT ON COLUMN t_user.user_name IS '用户昵称';
+COMMENT ON COLUMN t_user.user_avatar IS '用户头像';
+COMMENT ON COLUMN t_user.user_profile IS '用户简介';
+COMMENT ON COLUMN t_user.user_role IS '用户角色：user/admin';
+COMMENT ON COLUMN t_user.vip_expire_time IS '会员过期时间';
+COMMENT ON COLUMN t_user.vip_code IS '会员兑换码';
+COMMENT ON COLUMN t_user.vip_number IS '会员编号';
+COMMENT ON COLUMN t_user.share_code IS '分享码';
+COMMENT ON COLUMN t_user.invite_user IS '邀请用户ID';
+COMMENT ON COLUMN t_user.edit_time IS '编辑时间';
+COMMENT ON COLUMN t_user.create_time IS '创建时间';
+COMMENT ON COLUMN t_user.update_time IS '更新时间';
+COMMENT ON COLUMN t_user.is_delete IS '是否删除 0-未删除 1-已删除';
