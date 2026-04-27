@@ -1,9 +1,14 @@
 package com.casy.casyaicodemother.service;
 
 import com.casy.casyaicodemother.entity.User;
+import com.casy.casyaicodemother.model.dto.user.UserQueryRequest;
 import com.casy.casyaicodemother.model.vo.user.LoginUserVO;
+import com.casy.casyaicodemother.model.vo.user.UserVO;
+import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.service.IService;
 import jakarta.servlet.http.HttpServletRequest;
+
+import java.util.List;
 
 /**
  * 用户 服务层。
@@ -60,4 +65,9 @@ public interface UserService extends IService<User> {
      */
     void userLogout(HttpServletRequest request);
 
+    UserVO getUserVO(User user);
+
+    List<UserVO> getUserVOList(List<User> userList);
+
+    QueryWrapper getQueryWrapper(UserQueryRequest userQueryRequest);
 }
