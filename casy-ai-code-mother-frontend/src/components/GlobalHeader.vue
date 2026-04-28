@@ -16,15 +16,35 @@
     </div>
 
     <div class="global-header__right">
-      <a-button type="primary">登录</a-button>
+      <div v-if="loginUserStore.loginUser.id">
+        <a-dropdown>
+          <a-space>
+            <a-avatar :src="loginUserStore.loginUser.userAvatar" />
+            {{ loginUserStore.loginUser.userName ?? '无名' }}
+          </a-space>
+          <template #overlay>
+            <a-menu>
+              <a-menu-item @click="doLogout">
+                <LogoutOutlined />
+                退出登录
+              </a-menu-item>
+            </a-menu>
+          </template>
+        </a-dropdown>
+      </div>
+      <div v-else>
+        <a-button type="primary" href="/user/login">登录</a-button>
+      </div>
     </div>
   </a-layout-header>
 </template>
 
 <script setup lang="ts">
-import type { MenuProps } from 'ant-design-vue'
+import { type MenuProps, message } from 'ant-design-vue'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { LogoutOutlined } from '@ant-design/icons-vue'
+import defaultLogoUrl from '@/assets/logo.png?url'
 
 const props = defineProps<{
   menuItems?: MenuProps['items']
@@ -32,8 +52,14 @@ const props = defineProps<{
   logoSrc?: string
 }>()
 
+import { useLoginUserStore } from '@/stores/loginUser.ts'
+import { userLogout } from '@/api/userController.ts'
+
+const loginUserStore = useLoginUserStore()
+loginUserStore.fetchLoginUser()
+
 const title = computed(() => props.title ?? 'Casy AI Code Mother')
-const logoSrc = computed(() => props.logoSrc ?? '/logo.png')
+const logoSrc = computed(() => props.logoSrc ?? defaultLogoUrl)
 
 const router = useRouter()
 const route = useRoute()
@@ -55,6 +81,20 @@ const onMenuClick: MenuProps['onClick'] = (info) => {
     (i) => i && typeof i === 'object' && String((i as any).key) === key,
   ) as any
   if (item?.path) router.push(item.path)
+}
+
+// 用户注销
+const doLogout = async () => {
+  const res = await userLogout()
+  if (res.data.code === 0) {
+    loginUserStore.setLoginUser({
+      userName: '未登录',
+    })
+    message.success('退出登录成功')
+    await router.push('/user/login')
+  } else {
+    message.error('退出登录失败，' + res.data.message)
+  }
 }
 </script>
 
@@ -118,4 +158,3 @@ const onMenuClick: MenuProps['onClick'] = (info) => {
   }
 }
 </style>
-

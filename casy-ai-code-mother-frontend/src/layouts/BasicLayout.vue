@@ -24,7 +24,7 @@ type MenuItemConfig = {
 
 const menuItems = computed<MenuItemConfig[]>(() => [
   { key: 'home', label: '首页', path: '/' },
-  { key: 'about', label: "关于", path: '/about' },
+  { key: 'userManage', label: '用户管理', path: '/user/userManage' },
 ])
 
 const headerMenuItems = computed<MenuProps['items']>(() =>
@@ -46,4 +46,3 @@ const headerMenuItems = computed<MenuProps['items']>(() =>
   padding-bottom: 72px; /* 预留底部固定 Footer 的高度 */
 }
 </style>
-
