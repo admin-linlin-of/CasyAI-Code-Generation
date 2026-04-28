@@ -1,5 +1,6 @@
 package com.casy.casyaicodemother.service.impl;
 
+import cn.dev33.satoken.session.SaSession;
 import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
@@ -107,7 +108,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         // 先判断是否已登录
         if( StpUtil.isLogin() ) {
             QueryWrapper queryWrapper = new QueryWrapper();
-            queryWrapper.eq("id", StpUtil.getTokenValue());
+            SaSession session = StpUtil.getSession();
+            queryWrapper.eq("id", session.get("id"));
             User user = this.mapper.selectOneByQuery(queryWrapper);
             if (user == null) {
                 throw new BusinessException(ErrorCode.SYSTEM_ERROR, "用户不存在");

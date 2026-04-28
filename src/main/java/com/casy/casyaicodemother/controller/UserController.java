@@ -3,6 +3,7 @@ package com.casy.casyaicodemother.controller;
 import cn.dev33.satoken.annotation.SaCheckLogin;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import cn.dev33.satoken.annotation.SaCheckRole;
+import cn.dev33.satoken.session.SaSession;
 import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.bean.BeanUtil;
 import com.casy.casyaicodemother.common.BaseResponse;
@@ -18,6 +19,7 @@ import com.casy.casyaicodemother.model.vo.user.LoginUserVO;
 import com.casy.casyaicodemother.model.vo.user.UserVO;
 import com.casy.casyaicodemother.service.UserService;
 import com.mybatisflex.core.paginate.Page;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.*;
@@ -60,6 +62,10 @@ public class UserController {
         String userPassword = userLoginRequest.getUserPassword();
         LoginUserVO loginUserVO = userService.userLogin(userAccount, userPassword);
         StpUtil.login(loginUserVO.getId());
+        // 获取当前会话的 Account-Session
+        SaSession session = StpUtil.getSession();
+        // 从 Account-Session 写入数据
+        session.set("id", loginUserVO.getId());
         return ResultUtils.success(loginUserVO);
     }
 
@@ -190,9 +196,7 @@ public class UserController {
         return ResultUtils.success(userService.getUserVO(user));
     }
 
-    /**
-     * 删除用户
-     */
+    @Operation(summary = "删除用户")
     @PostMapping("/delete")
     @SaCheckRole(UserConstant.ADMIN_ROLE)
     public BaseResponse<Boolean> deleteUser(@RequestBody DeleteRequest deleteRequest) {
