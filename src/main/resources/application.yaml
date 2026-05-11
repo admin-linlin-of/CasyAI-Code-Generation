@@ -1,4 +1,6 @@
 spring:
+  profiles:
+    active: local
   application:
     name: casy-ai-code-mother
   # 数据源配置
@@ -63,3 +65,14 @@ knife4j:
   enable: true
   setting:
     language: zh_cn
+
+# local的配置
+# 自定义的langchain4j配置
+#langchain4j:
+#  open-ai:
+#    chat-model:
+#      base-url: https://api.deepseek.com
+#      api-key: -------
+#      model-name: deepseek-chat
+#      log-requests: true
+#      log-responses: true

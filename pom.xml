@@ -116,6 +116,23 @@
             <artifactId>HikariCP</artifactId>
         </dependency>
 
+        <!-- https://docs.langchain4j.dev/tutorials/spring-boot-integration#spring-boot-starters -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai-spring-boot4-starter</artifactId>
+            <version>1.14.1-beta24</version>
+        </dependency>
+        <!-- https://docs.langchain4j.dev/get-started -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai</artifactId>
+            <version>1.14.1</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j</artifactId>
+            <version>1.14.1</version>
+        </dependency>
     </dependencies>
 
     <build>
