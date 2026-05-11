@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 import java.io.Serial;
 import java.io.Serializable;
 import java.sql.Timestamp;
+import java.util.List;
 
 /**
  * 用户 实体类。
@@ -125,4 +126,6 @@ public class User implements Serializable {
     @Column(value = "is_delete", isLogicDelete = true)
     private Integer isDelete;
 
+    @Column(ignore = true)
+    private List<String> permissions;
 }

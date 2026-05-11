@@ -5,6 +5,7 @@ import lombok.Data;
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 脱敏后的登录用户信息
@@ -51,6 +52,11 @@ public class LoginUserVO implements Serializable {
      * 更新时间
      */
     private LocalDateTime updateTime;
+
+    /**
+     * 权限集合
+     */
+    private List<String> permissions;
 
     @Serial
     private static final long serialVersionUID = 1L;

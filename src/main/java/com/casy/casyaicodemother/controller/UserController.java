@@ -66,6 +66,7 @@ public class UserController {
         SaSession session = StpUtil.getSession();
         // 从 Account-Session 写入数据
         session.set("id", loginUserVO.getId());
+        loginUserVO.setPermissions(StpUtil.getPermissionList());
         return ResultUtils.success(loginUserVO);
     }
 
@@ -74,6 +75,7 @@ public class UserController {
     @GetMapping("/get/login")
     public BaseResponse<LoginUserVO> getLoginUser() {
         User loginUser = userService.getLoginUser();
+        loginUser.setPermissions(StpUtil.getPermissionList());
         return ResultUtils.success(userService.getLoginUserVO(loginUser));
     }
 
