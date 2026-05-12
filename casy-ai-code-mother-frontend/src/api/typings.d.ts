@@ -66,6 +66,7 @@ declare namespace API {
     userRole?: string
     createTime?: string
     updateTime?: string
+    permissions?: string[]
   }
 
   type pageParams = {
@@ -111,6 +112,7 @@ declare namespace API {
     createTime?: string
     updateTime?: string
     isDelete?: number
+    permissions?: string[]
   }
 
   type UserAddRequest = {

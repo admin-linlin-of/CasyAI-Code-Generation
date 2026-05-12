@@ -3,6 +3,7 @@ import Home from '@/views/Home.vue'
 import Login from '@/views/user/Login.vue'
 import UserManager from '../views/user/UserManager.vue'
 import Register from '@/views/user/Register.vue'
+import ACCESS_ENUM from '@/constant/constant.ts'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -26,6 +27,9 @@ const router = createRouter({
       path: '/user/userManage',
       name: '用户管理',
       component: UserManager,
+      meta: {
+        access: ACCESS_ENUM.ADMIN,
+      },
     },
   ],
 })

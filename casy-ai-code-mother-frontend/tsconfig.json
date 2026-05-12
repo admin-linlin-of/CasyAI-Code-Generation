@@ -7,5 +7,11 @@
     {
       "path": "./tsconfig.app.json"
     }
-  ]
+  ],
+  "compilerOptions": {
+    "baseUrl": "./", // 项目根目录，也可以写 "./src"，看你的项目结构
+    "paths": {
+      "@/*": ["src/*"] // 关键配置：告诉 TypeScript，@/ 对应 src/ 目录
+    }
+  }
 }
