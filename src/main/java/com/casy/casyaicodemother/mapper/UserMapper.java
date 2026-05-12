@@ -1,6 +1,6 @@
 package com.casy.casyaicodemother.mapper;
 
-import com.casy.casyaicodemother.entity.User;
+import com.casy.casyaicodemother.model.entity.User;
 import com.mybatisflex.core.BaseMapper;
 
 /**

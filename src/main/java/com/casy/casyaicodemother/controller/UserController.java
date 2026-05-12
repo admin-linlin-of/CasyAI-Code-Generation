@@ -10,7 +10,7 @@ import com.casy.casyaicodemother.common.BaseResponse;
 import com.casy.casyaicodemother.common.DeleteRequest;
 import com.casy.casyaicodemother.common.ResultUtils;
 import com.casy.casyaicodemother.constant.UserConstant;
-import com.casy.casyaicodemother.entity.User;
+import com.casy.casyaicodemother.model.entity.User;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.exception.ThrowUtils;

@@ -1,4 +1,4 @@
-package com.casy.casyaicodemother.entity;
+package com.casy.casyaicodemother.model.entity;
 
 import com.mybatisflex.annotation.Column;
 import com.mybatisflex.annotation.Id;

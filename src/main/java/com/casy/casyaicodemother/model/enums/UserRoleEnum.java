@@ -1,4 +1,4 @@
-package com.casy.casyaicodemother.enums;
+package com.casy.casyaicodemother.model.enums;
 
 import cn.hutool.core.util.ObjUtil;
 import lombok.Getter;

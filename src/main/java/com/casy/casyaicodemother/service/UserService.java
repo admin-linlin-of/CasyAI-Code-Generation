@@ -1,6 +1,6 @@
 package com.casy.casyaicodemother.service;
 
-import com.casy.casyaicodemother.entity.User;
+import com.casy.casyaicodemother.model.entity.User;
 import com.casy.casyaicodemother.model.dto.user.UserQueryRequest;
 import com.casy.casyaicodemother.model.vo.user.LoginUserVO;
 import com.casy.casyaicodemother.model.vo.user.UserVO;

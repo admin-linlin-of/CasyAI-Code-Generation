@@ -13,6 +13,7 @@ import java.util.regex.Pattern;
  *
  * @author yupi
  */
+@Deprecated
 public class CodeParser {
 
     /** Markdown 围栏：```html 与闭合 ``` 之间的正文，含换行；无围栏时多文件 HTML 走 {@link #LOOSE_HTML_PATTERN}。 */
@@ -127,6 +128,13 @@ public class CodeParser {
         return null;
     }
 
+    /**
+     * 按给定正则首次匹配整段文本（{@link Matcher#group(int) group(0)}），用于无捕获组或需要完整匹配串的场景。
+     *
+     * @param content 原始内容
+     * @param pattern 正则模式
+     * @return 首次匹配的完整子串；未匹配则 {@code null}
+     */
     private static String extractFullMatch(String content, Pattern pattern) {
         Matcher matcher = pattern.matcher(content);
         if (matcher.find()) {
@@ -135,6 +143,12 @@ public class CodeParser {
         return null;
     }
 
+    /**
+     * 从左到右返回第一个非空且 trim 后非空的字符串；全不满足或 {@code values == null} 时返回 {@code null}。
+     *
+     * @param values 候选字符串（如多种解析策略的结果依次传入）
+     * @return 第一个有效字符串，否则 {@code null}
+     */
     private static String firstNonBlank(String... values) {
         if (values == null) {
             return null;
