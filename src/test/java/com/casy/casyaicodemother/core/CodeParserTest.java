@@ -12,7 +12,7 @@ class CodeParserTest {
     void parseHtmlCode() {
         String codeContent = """
                 随便写一段描述：
-                html 格式
+                ```html
                 <!DOCTYPE html>
                 <html>
                 <head>
@@ -22,7 +22,7 @@ class CodeParserTest {
                     <h1>Hello World!</h1>
                 </body>
                 </html>
-
+                ```
                 随便写一段描述
                 """;
         HtmlCodeResult result = CodeParser.parseHtmlCode(codeContent);
@@ -34,7 +34,7 @@ class CodeParserTest {
     void parseMultiFileCode() {
         String codeContent = """
                 创建一个完整的网页：
-                html 格式
+                ```html
                 <!DOCTYPE html>
                 <html>
                 <head>
@@ -46,8 +46,8 @@ class CodeParserTest {
                     <script src="script.js"></script>
                 </body>
                 </html>
-
-                css 格式
+                ```
+                ```css
                 h1 {
                     color: blue;
                     text-align: center;
@@ -55,7 +55,7 @@ class CodeParserTest {
                 ```
                 ```js
                 console.log('页面加载完成');
-
+                ```
                 文件创建完成！
                 """;
         MultiFileCodeResult result = CodeParser.parseMultiFileCode(codeContent);

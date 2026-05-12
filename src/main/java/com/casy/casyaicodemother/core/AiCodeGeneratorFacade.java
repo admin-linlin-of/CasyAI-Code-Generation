@@ -1,8 +1,12 @@
 package com.casy.casyaicodemother.core;
 
 import com.casy.casyaicodemother.ai.AiCodeGeneratorService;
+import com.casy.casyaicodemother.ai.model.HtmlCodeResult;
+import com.casy.casyaicodemother.ai.model.MultiFileCodeResult;
 import com.casy.casyaicodemother.core.parser.CodeParserExecutor;
 import com.casy.casyaicodemother.core.save.CodeFileSaverExecutor;
+import com.casy.casyaicodemother.exception.BusinessException;
+import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -18,11 +22,63 @@ public class AiCodeGeneratorFacade {
     @Resource
     private AiCodeGeneratorService aiCodeGeneratorService;
 
+    /**
+     * 统一入口：根据类型生成并保存代码
+     *
+     * @param userMessage     用户提示词
+     * @param codeGenTypeEnum 生成类型
+     * @return 保存的目录
+     */
+    public File generateAndSaveCode(String userMessage, CodeGenTypeEnum codeGenTypeEnum) {
+        if (codeGenTypeEnum == null) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
+        }
+        return switch(codeGenTypeEnum) {
+            case HTML -> {
+                HtmlCodeResult htmlCodeResult = aiCodeGeneratorService.generateHtmlCode(userMessage);
+                yield CodeFileSaverExecutor.executeSaver(htmlCodeResult, CodeGenTypeEnum.HTML);
+            }
+            case MULTI_FILE -> {
+                MultiFileCodeResult multiFileCodeResult = aiCodeGeneratorService.generateMultiFileCode(userMessage);
+                yield CodeFileSaverExecutor.executeSaver(multiFileCodeResult, CodeGenTypeEnum.MULTI_FILE);
+            }
+            default -> {
+                String errorMessage = "不支持的生成类型：" + codeGenTypeEnum.getValue();
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, errorMessage);
+            }
+        };
+    }
 
+    /**
+     * 统一入口：根据类型生成并保存代码 (流式)
+     *
+     * @param userMessage     用户提示词
+     * @param codeGenTypeEnum 生成类型
+     * @return 保存的目录
+     */
+    public Flux<String> generateAndSaveCodeStream(String userMessage, CodeGenTypeEnum codeGenTypeEnum) {
+        if (codeGenTypeEnum == null) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
+        }
+        return switch(codeGenTypeEnum) {
+            case HTML -> {
+                Flux<String> stringFlux = aiCodeGeneratorService.generateHtmlCodeStream(userMessage);
+                yield processCodeStream(stringFlux, CodeGenTypeEnum.HTML);
+            }
+            case MULTI_FILE -> {
+                Flux<String> stringFlux = aiCodeGeneratorService.generateMultiFileCodeStream(userMessage);
+                yield processCodeStream(stringFlux, CodeGenTypeEnum.MULTI_FILE);
+            }
+            default -> {
+                String errorMessage = "不支持的生成类型：" + codeGenTypeEnum.getValue();
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, errorMessage);
+            }
+        };
+    }
 
 
     /**
-     * 通用流式代码处理方法
+     * 通用流式代码处理方法，实时收集流中响应信息
      *
      * @param codeStream  代码流
      * @param codeGenType 代码生成类型
@@ -39,7 +95,7 @@ public class AiCodeGeneratorFacade {
                 Object parsedResult = CodeParserExecutor.executeParser(codeGenType, completeCode);
                 // 使用执行器保存代码
                 File savedDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenType);
-                log.info("保存成功，路径为：" + savedDir.getAbsolutePath());
+                log.info("保存成功，路径为：{}", savedDir.getAbsolutePath());
             } catch (Exception e) {
                 log.error("保存失败: {}", e.getMessage());
             }
