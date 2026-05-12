@@ -3,6 +3,7 @@ package com.casy.casyaicodemother.ai;
 import com.casy.casyaicodemother.ai.model.HtmlCodeResult;
 import com.casy.casyaicodemother.ai.model.MultiFileCodeResult;
 import dev.langchain4j.service.SystemMessage;
+import reactor.core.publisher.Flux;
 
 public interface AiCodeGeneratorService {
     /**
@@ -12,7 +13,16 @@ public interface AiCodeGeneratorService {
      * @return 生成的代码结果
      */
     @SystemMessage(fromResource = "prompt/codegen-html-system-prompt.txt")
-    HtmlCodeResult generateHtmlCode(String userMessage);
+    HtmlCodeResult generateHtmlCode(String userMessage); // 结构化输出
+
+    /**
+     * 响应式生成 HTML 代码
+     *
+     * @param userMessage 用户消息
+     * @return 生成的代码结果
+     */
+    @SystemMessage(fromResource = "prompt/codegen-html-system-prompt.txt")
+    Flux<String> generateHtmlCodeStream(String userMessage); // 流式输出
 
     /**
      * 生成多文件代码
@@ -23,4 +33,13 @@ public interface AiCodeGeneratorService {
     @SystemMessage(fromResource = "prompt/codegen-multi-file-system-prompt.txt")
     MultiFileCodeResult generateMultiFileCode(String userMessage);
 
+
+    /**
+     * 响应式生成多文件代码
+     *
+     * @param userMessage 用户消息
+     * @return 生成的代码结果
+     */
+    @SystemMessage(fromResource = "prompt/codegen-multi-file-system-prompt.txt")
+    Flux<String> generateMultiFileCodeStream(String userMessage);
 }
