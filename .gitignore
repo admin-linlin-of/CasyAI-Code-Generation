@@ -35,4 +35,4 @@ build/
 ### CUSTOM ###
 application-local.yml
 temp/
-
+logs/

@@ -1,14 +1,14 @@
 package com.casy.casyaicodemother.core;
 
-import com.casy.casyaicodemother.ai.AiCodeGeneratorService;
 import com.casy.casyaicodemother.ai.model.HtmlCodeResult;
 import com.casy.casyaicodemother.ai.model.MultiFileCodeResult;
+import com.casy.casyaicodemother.core.chatModel.ChatModelExecutor;
 import com.casy.casyaicodemother.core.parser.CodeParserExecutor;
 import com.casy.casyaicodemother.core.save.CodeFileSaverExecutor;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
-import jakarta.annotation.Resource;
+import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -19,9 +19,6 @@ import java.io.File;
 @Slf4j
 public class AiCodeGeneratorFacade {
 
-    @Resource
-    private AiCodeGeneratorService aiCodeGeneratorService;
-
     /**
      * 统一入口：根据类型生成并保存代码
      *
@@ -29,17 +26,17 @@ public class AiCodeGeneratorFacade {
      * @param codeGenTypeEnum 生成类型
      * @return 保存的目录
      */
-    public File generateAndSaveCode(String userMessage, CodeGenTypeEnum codeGenTypeEnum) {
+    public File generateAndSaveCode(String userMessage, CodeGenTypeEnum codeGenTypeEnum, ModelTypeEnum modelTypeEnum) {
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
         }
         return switch(codeGenTypeEnum) {
             case HTML -> {
-                HtmlCodeResult htmlCodeResult = aiCodeGeneratorService.generateHtmlCode(userMessage);
+                HtmlCodeResult htmlCodeResult = ChatModelExecutor.executeParser(modelTypeEnum).generateHtmlCode(userMessage);
                 yield CodeFileSaverExecutor.executeSaver(htmlCodeResult, CodeGenTypeEnum.HTML);
             }
             case MULTI_FILE -> {
-                MultiFileCodeResult multiFileCodeResult = aiCodeGeneratorService.generateMultiFileCode(userMessage);
+                MultiFileCodeResult multiFileCodeResult = ChatModelExecutor.executeParser(modelTypeEnum).generateMultiFileCode(userMessage);
                 yield CodeFileSaverExecutor.executeSaver(multiFileCodeResult, CodeGenTypeEnum.MULTI_FILE);
             }
             default -> {
@@ -56,17 +53,18 @@ public class AiCodeGeneratorFacade {
      * @param codeGenTypeEnum 生成类型
      * @return 保存的目录
      */
-    public Flux<String> generateAndSaveCodeStream(String userMessage, CodeGenTypeEnum codeGenTypeEnum) {
+    public Flux<String> generateAndSaveCodeStream(String userMessage, CodeGenTypeEnum codeGenTypeEnum, ModelTypeEnum modelTypeEnum) {
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
         }
         return switch(codeGenTypeEnum) {
             case HTML -> {
-                Flux<String> stringFlux = aiCodeGeneratorService.generateHtmlCodeStream(userMessage);
+
+                Flux<String> stringFlux = ChatModelExecutor.executeParser(modelTypeEnum).generateHtmlCodeStream(userMessage);
                 yield processCodeStream(stringFlux, CodeGenTypeEnum.HTML);
             }
             case MULTI_FILE -> {
-                Flux<String> stringFlux = aiCodeGeneratorService.generateMultiFileCodeStream(userMessage);
+                Flux<String> stringFlux = ChatModelExecutor.executeParser(modelTypeEnum).generateMultiFileCodeStream(userMessage);
                 yield processCodeStream(stringFlux, CodeGenTypeEnum.MULTI_FILE);
             }
             default -> {

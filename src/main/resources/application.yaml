@@ -8,7 +8,7 @@ spring:
     # 驱动类名（可省略，SpringBoot 自动识别）
     driver-class-name: org.postgresql.Driver
     # 连接URL 固定格式：jdbc:postgresql://IP:端口/数据库名
-    url: jdbc:postgresql://localhost:5432/casy_ai_code_mother
+    url: jdbc:postgresql://localhost:5432/casy_code
     username: postgres
     password: Hxb@93393
     # Hikari 连接池配置（生产环境推荐）
@@ -67,12 +67,35 @@ knife4j:
     language: zh_cn
 
 # local的配置
-# 自定义的langchain4j配置
 #langchain4j:
 #  open-ai:
-#    chat-model:
+#    streaming-chat-model:
 #      base-url: https://api.deepseek.com
-#      api-key: -------
-#      model-name: deepseek-chat
+#      api-key: ${depAPI}
+#      model-name: deepseek-v4-flash
+#      max-tokens: 8192
+#      strict-json-schema: true
+#      response-format: json_object
 #      log-requests: true
 #      log-responses: true
+#    chat-model:
+#      base-url: https://api.deepseek.com
+#      api-key: ${depAPI}
+#      model-name: deepseek-v4-flash
+#      max-tokens: 8192
+#      strict-json-schema: true
+#      response-format: json_object
+#      log-requests: true
+#      log-responses: true
+#
+#ai:
+#  gpt:
+#    base-url: http://gpttap.top/v1
+#    api-key: ${NEWAPI}
+#    model-name: gpt-5.5
+#    max-tokens: 8192
+#    strict-json-schema: true
+#    response-format: json_object
+#    log-requests: true
+#    log-responses: true
+

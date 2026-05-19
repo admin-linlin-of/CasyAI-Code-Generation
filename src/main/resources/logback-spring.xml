@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 日志配置文件加载顺序：logback.xml -> application.properties(yml) -> logback-spring.xml -->
+<!-- 官方推荐使用logback-spring.xml因为它晚于application.yml加载。可以获取application.yml中已定义的属性 -->
+<configuration>
+    <!-- Boot 自带默认转换规则等 -->
+    <!-- Boot 默认的转换字、彩色等级等；不替换则无 CONSOLE 等预定义 -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <!-- 引入 Boot 自带的 CONSOLE appender 定义（下方同名 CONSOLE 会覆盖，以使用统一 pattern） -->
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <!-- 与 application 中 logging.file.path 同步，供其它片段或扩展使用 -->
+    <springProperty name="LOG_PATH" source="logging.file.path" defaultValue="logs"/>
+    <!-- 落入磁盘日志文件名前缀，取自 spring.application.name -->
+    <springProperty name="APP_NAME" source="spring.application.name" defaultValue="application"/>
+
+    <!-- 备用格式串；当前 encoder 多直接使用 GJS_LOG_PATTERN（一般由 yml/环境注入） -->
+    <property name="FILE_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"/>
+
+    <!-- 归档根目录（相对运行目录）；与 LOG_PATH 并存时以本处为准编排子路径 -->
+    <property scope="context" name="LOGS_DIR" value="logs" />
+    <!-- SizeAndTimeBasedRollingPolicy：单文件超过此大小后递增 %i 分卷 -->
+    <property scope="context" name="SINGLE_LOG_FILE_SIZE" value="100MB"/>
+    <!-- 滚动策略保留历史文件个数（天维度由 fileNamePattern 决定） -->
+    <property scope="context" name="RETAINED_FILE_DAYS" value="366"/>
+    <!-- 日志脱敏字段(将指定字段的值部分替换星号再输出日志) -->
+    <springProperty scope="system" name="DESENSITIZATION_PATTERN_ROLES" source="logback.DESENSITIZATION_PATTERN_ROLES" defaultValue="account_no=7,13;cust_name=1,1;phone=4,7;agency_name=1,1;agency_card=1,1;customer_name=1,1;customer_full_name=1,1;customer_cert_num=7,13;cert_num=7,13" />
+    <!-- 贵金属日志内容格式模式 -->
+    <property scope="context" name="GJS_LOG_PATTERN"  value="%d{yyyyMMdd HH:mm:ss.SSS,Asia/Shanghai} %replace(%-5level){'DEBUG','info'} [%-15thread] %-50.50(%class{44}:%line) : %msg%n" />
+
+    <!-- 控制台：与 Boot 默认同名，覆盖为 ${GJS_LOG_PATTERN} -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>${GJS_LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+    <!-- 主业务文件：按日期分子目录，同城内按大小滚动；内容经脱敏编码器 -->
+    <appender name="LOGFILE_DEFAULT" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOGS_DIR}/%d{yyyyMMdd}/${APP_NAME}_%d{yyyyMMdd}.%i.log</fileNamePattern>
+            <maxHistory>${RETAINED_FILE_DAYS}</maxHistory>
+            <maxFileSize>${SINGLE_LOG_FILE_SIZE}</maxFileSize>
+        </rollingPolicy>
+        <encoder class="com.casy.casyaicodemother.logger.encoder.SimpleDesensitizePatternLayoutEncoder">
+            <rules>${DESENSITIZATION_PATTERN_ROLES}</rules>
+            <pattern>${GJS_LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+    <!-- 主文件异步包装：降日志线程阻塞；队列紧张时可按 discardingThreshold 丢弃低级别 -->
+    <appender name="ASYNC_LOGFILE_DEFAULT" class="ch.qos.logback.classic.AsyncAppender" >
+        <!-- 队列空闲% ≤ discardingThreshold 时丢弃 TRACE/DEBUG/INFO，仅保留 WARN/ERROR -->
+        <queueSize>10240</queueSize>
+        <discardingThreshold>10</discardingThreshold>
+        <includeCallerData>true</includeCallerData>
+        <!-- 等待写入磁盘的最大时长(单位ms)，超过此时长仍未被写入的则会被丢弃 -->
+        <maxFlushTime>1000</maxFlushTime>
+        <neverBlock>false</neverBlock>
+        <appender-ref ref="LOGFILE_DEFAULT" />
+    </appender>
+
+    <!-- 仅收集带 TRACINGTAGS Marker 的事件，与其它文件物理隔离 -->
+    <appender name="LOGFILE_TRACINGTAGS" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <filter class="ch.qos.logback.core.filter.EvaluatorFilter">
+            <!-- JaninoEventEvaluator + expression 可做更复杂条件；此处按 Marker 精确匹配 -->
+            <evaluator class="ch.qos.logback.classic.boolex.OnMarkerEvaluator">
+                <marker>TRACINGTAGS</marker>
+            </evaluator>
+            <OnMatch>ACCEPT</OnMatch>
+            <OnMismatch>DENY</OnMismatch>
+        </filter>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOGS_DIR}/%d{yyyyMMdd}/TRACINGTAGS_${APP_NAME}_%d{yyyyMMdd}.%i.log</fileNamePattern>
+            <maxHistory>${RETAINED_FILE_DAYS}</maxHistory>
+            <maxFileSize>${SINGLE_LOG_FILE_SIZE}</maxFileSize>
+        </rollingPolicy>
+        <encoder  class="com.casy.casyaicodemother.logger.encoder.SimpleDesensitizePatternLayoutEncoder">
+            <pattern>${GJS_LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+    <!-- 埋点文件异步写入，参数含义同 ASYNC_LOGFILE_DEFAULT -->
+    <appender name="ASYNC_LOGFILE_TRACINGTAGS" class="ch.qos.logback.classic.AsyncAppender" >
+        <!-- 队列空闲% ≤ discardingThreshold 时丢弃 TRACE/DEBUG/INFO，仅保留 WARN/ERROR -->
+        <queueSize>10240</queueSize>
+        <discardingThreshold>10</discardingThreshold>
+        <includeCallerData>true</includeCallerData>
+        <!-- 等待写入磁盘的最大时长(单位ms)，超过此时长仍未被写入的则会被丢弃 -->
+        <maxFlushTime>1000</maxFlushTime>
+        <neverBlock>false</neverBlock>
+        <appender-ref ref="LOGFILE_TRACINGTAGS" />
+    </appender>
+
+
+    <!-- dev/local/test：抬高业务与 MVC 栈日志粒度 -->
+    <springProfile name="dev | local | test">
+        <logger name="com.casy.casyaicodemother" level="DEBUG"/>
+        <logger name="org.springframework.web" level="DEBUG"/>
+    </springProfile>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="ASYNC_LOGFILE_DEFAULT"/>
+        <appender-ref ref="ASYNC_LOGFILE_TRACINGTAGS"/>
+    </root>
+
+</configuration>
