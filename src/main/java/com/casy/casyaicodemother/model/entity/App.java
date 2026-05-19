@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 import java.io.Serial;
 import java.io.Serializable;
 import java.sql.Timestamp;
+import java.time.LocalDateTime;
 
 /**
  * 应用 实体类。
@@ -89,24 +90,24 @@ public class App implements Serializable {
      * 编辑时间
      */
     @Column("edit_time")
-    private Timestamp editTime;
+    private LocalDateTime editTime;
 
     /**
      * 创建时间
      */
     @Column("create_time")
-    private Timestamp createTime;
+    private LocalDateTime createTime;
 
     /**
      * 更新时间
      */
     @Column("update_time")
-    private Timestamp updateTime;
+    private LocalDateTime updateTime;
 
     /**
      * 是否删除
      */
-    @Column("is_delete")
+    @Column(value = "is_delete", isLogicDelete = true)
     private Integer isDelete;
 
 }
