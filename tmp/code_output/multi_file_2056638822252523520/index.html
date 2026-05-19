@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录页</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="login-wrap">
+    <form class="login-card" id="loginForm">
+      <h1>欢迎登录</h1>
+      <p>请输入账号和密码继续</p>
+      <label>账号
+        <input type="text" id="username" placeholder="请输入账号" required>
+      </label>
+      <label>密码
+        <input type="password" id="password" placeholder="请输入密码" required>
+      </label>
+      <button type="submit">登录</button>
+      <div class="msg" id="msg"></div>
+    </form>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>

@@ -12,7 +12,7 @@ import java.util.Map;
 public class MyBatisCodeGenerator {
 
     // 需要生成的表名
-    private static final String[] TABLE_NAMES = {"t_user"};
+    private static final String[] TABLE_NAMES = {"t_app"};
 
     public static void main(String[] args) {
         // 从项目内读取 application.yaml。IDE/命令行 的工作目录可能不同：若在项目根目录跑 main 用第一路径；若在多模块仓库根则尝试第二路径。

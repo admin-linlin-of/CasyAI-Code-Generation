@@ -58,3 +58,48 @@ COMMENT ON COLUMN t_user.edit_time IS '编辑时间';
 COMMENT ON COLUMN t_user.create_time IS '创建时间';
 COMMENT ON COLUMN t_user.update_time IS '更新时间';
 COMMENT ON COLUMN t_user.is_delete IS '是否删除 0-未删除 1-已删除';
+
+
+-- 应用表
+CREATE TABLE IF NOT EXISTS app
+(
+    id              BIGSERIAL PRIMARY KEY,
+    app_name        VARCHAR(256) NULL,
+    cover           VARCHAR(512) NULL,
+    init_prompt     TEXT NULL,
+    code_gen_type   VARCHAR(64) NULL,
+    deploy_key      VARCHAR(64) NULL,
+    deployed_time   TIMESTAMP NULL,
+    -- priority 优先级字段：我们约定 99 表示精选应用，这样可以在主页展示高质量的应用，避免用户看到大量测试内容。
+    -- 为什么用数字‍‍而不用枚举类型呢？原因是这样更利于扩展，比如约定 999 表示置顶；还可以根据数字灵活调整各个应用的具体展示顺序。
+    priority        INT NOT NULL DEFAULT 0,
+    user_id         BIGINT NOT NULL,
+    edit_time       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    create_time     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_delete       SMALLINT NOT NULL DEFAULT 0,
+    CONSTRAINT uk_deploy_key UNIQUE (deploy_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_name ON t_app (app_name);
+CREATE INDEX IF NOT EXISTS idx_user_id ON t_app (user_id);
+
+CREATE TRIGGER update_app_modtime
+    BEFORE UPDATE ON t_app
+    FOR EACH ROW
+    EXECUTE FUNCTION update_modified_column();
+
+COMMENT ON TABLE t_app IS '应用';
+COMMENT ON COLUMN t_app.id IS 'id';
+COMMENT ON COLUMN t_app.app_name IS '应用名称';
+COMMENT ON COLUMN t_app.cover IS '应用封面';
+COMMENT ON COLUMN t_app.init_prompt IS '应用初始化的 prompt';
+COMMENT ON COLUMN t_app.code_gen_type IS '代码生成类型（枚举）';
+COMMENT ON COLUMN t_app.deploy_key IS '部署标识';
+COMMENT ON COLUMN t_app.deployed_time IS '部署时间';
+COMMENT ON COLUMN t_app.priority IS '优先级';
+COMMENT ON COLUMN t_app.user_id IS '创建用户id';
+COMMENT ON COLUMN t_app.edit_time IS '编辑时间';
+COMMENT ON COLUMN t_app.create_time IS '创建时间';
+COMMENT ON COLUMN t_app.update_time IS '更新时间';
+COMMENT ON COLUMN t_app.is_delete IS '是否删除';
