@@ -9,11 +9,11 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.lang.NonNull;
 
 /**
- * Í¨¹ı±¾ÀàÊµÏÖ¶Ô¹ó½ğÊôÈ«¾Ö{@link Global}ÖĞ±äÁ¿µÄspringContextµÄÉèÖÃ
+ * é€šè¿‡æœ¬ç±»å®ç°å¯¹å…¨å±€{@link Global}ä¸­å˜é‡çš„springContextçš„è®¾ç½®
  * <p>
- *   ÔÚSpringApplicationÖ´ĞĞÁ÷³ÌÖĞ£¬initialize(°üÀ¨ÊµÏÖ¸Ã·½·¨µÄ×ÓÀà)»áÏÈÓÚ {@linkplain ConfigurableApplicationContext#refresh()} Ö´ĞĞ
- *   ÒòÎªÔÚ¹ó½ğÊô´úÂëÖĞ£¬ÀıÈç{@link com.ylink.gess.Constant}ÀàµÄ¾²Ì¬static´úÂë£¬ĞèÒªÍ¨¹ıspringContext»ñÈ¡ÊôĞÔµÈ²Ù×÷£¬
- *   ËùÒÔĞèÒª±¾Àà¶Ô{@link Global}ÖĞ±äÁ¿µÄspringContextµÄÉèÖÃ£¬ÕâÑù¾²Ì¬static´úÂëÖĞ²ÅÄÜÊ¹ÓÃ
+ *   åœ¨SpringApplicationæ‰§è¡Œæµç¨‹ä¸­ï¼Œinitialize(åŒ…æ‹¬å®ç°è¯¥æ–¹æ³•çš„å­ç±»)ä¼šå…ˆäº {@linkplain ConfigurableApplicationContext#refresh()} æ‰§è¡Œ
+ *   å› ä¸ºåœ¨ä»£ç ä¸­ï¼Œä¾‹å¦‚{@link Constant}ç±»çš„é™æ€staticä»£ç ï¼Œéœ€è¦é€šè¿‡springContextè·å–å±æ€§ç­‰æ“ä½œï¼Œ
+ *   æ‰€ä»¥éœ€è¦æœ¬ç±»å¯¹{@link Global}ä¸­å˜é‡çš„springContextçš„è®¾ç½®ï¼Œè¿™æ ·é™æ€staticä»£ç ä¸­æ‰èƒ½ä½¿ç”¨
  * </p>
  */
 @ToString
@@ -21,7 +21,7 @@ import org.springframework.lang.NonNull;
 public class GlobalSpringContextInitializer implements ApplicationContextInitializer<ConfigurableApplicationContext> {
     @Override
     public void initialize(@NonNull ConfigurableApplicationContext applicationContext) {
-        log.debug("GjsGlobalSpringContextInitializer applicationContext: {}", applicationContext);
+        log.info("GlobalSpringContextInitializer initialize: {}", applicationContext.getId());
         Global.setSpringContext(applicationContext);
     }
 }

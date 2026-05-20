@@ -2,6 +2,7 @@ package com.casy.casyaicodemother.core;
 
 import com.casy.casyaicodemother.ai.model.HtmlCodeResult;
 import com.casy.casyaicodemother.ai.model.MultiFileCodeResult;
+import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -63,5 +64,11 @@ class CodeParserTest {
         assertNotNull(result.getHtmlCode());
         assertNotNull(result.getCssCode());
         assertNotNull(result.getJsCode());
+    }
+
+    @Test
+    void testModelType() {
+        ModelTypeEnum modelTypeEnum = ModelTypeEnum.valueOf("gpt-5.5");
+        assertNotNull(modelTypeEnum);
     }
 }

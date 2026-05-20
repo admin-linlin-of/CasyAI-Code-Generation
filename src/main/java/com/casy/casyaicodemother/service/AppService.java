@@ -1,12 +1,16 @@
 package com.casy.casyaicodemother.service;
 
-import com.casy.casyaicodemother.model.dto.app.*;
+import com.casy.casyaicodemother.model.dto.app.AppAddRequest;
+import com.casy.casyaicodemother.model.dto.app.AppAdminUpdateRequest;
+import com.casy.casyaicodemother.model.dto.app.AppQueryRequest;
+import com.casy.casyaicodemother.model.dto.app.AppUpdateRequest;
 import com.casy.casyaicodemother.model.entity.App;
 import com.casy.casyaicodemother.model.entity.User;
 import com.casy.casyaicodemother.model.vo.app.AppVO;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.service.IService;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -125,4 +129,15 @@ public interface AppService extends IService<App> {
      * @return MyBatis-Flex 查询条件
      */
     QueryWrapper getQueryWrapper(AppQueryRequest appQueryRequest);
+
+    /**
+     * 根据用户的提示词去调用AI并生成代码
+     *
+     * @param appId 应用ID
+     * @param message 用户提示词
+     * @param modelType 模型类型
+     * @param loginUser 登录用户
+     * @return AI响应流
+     */
+    Flux<String> chatToGenCode(Long appId, String message, String modelType, User loginUser);
 }

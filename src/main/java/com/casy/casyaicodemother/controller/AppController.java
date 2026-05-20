@@ -2,6 +2,8 @@ package com.casy.casyaicodemother.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
 import cn.dev33.satoken.annotation.SaCheckRole;
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.casy.casyaicodemother.common.BaseResponse;
 import com.casy.casyaicodemother.common.DeleteRequest;
 import com.casy.casyaicodemother.common.ResultUtils;
@@ -9,7 +11,10 @@ import com.casy.casyaicodemother.constant.UserConstant;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.exception.ThrowUtils;
-import com.casy.casyaicodemother.model.dto.app.*;
+import com.casy.casyaicodemother.model.dto.app.AppAddRequest;
+import com.casy.casyaicodemother.model.dto.app.AppAdminUpdateRequest;
+import com.casy.casyaicodemother.model.dto.app.AppQueryRequest;
+import com.casy.casyaicodemother.model.dto.app.AppUpdateRequest;
 import com.casy.casyaicodemother.model.entity.App;
 import com.casy.casyaicodemother.model.entity.User;
 import com.casy.casyaicodemother.model.vo.app.AppVO;
@@ -17,11 +22,18 @@ import com.casy.casyaicodemother.service.AppService;
 import com.casy.casyaicodemother.service.UserService;
 import com.mybatisflex.core.paginate.Page;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
+
+import java.util.Map;
 
 /**
  * 应用 控制层。
  */
+@Slf4j
 @RestController
 @RequestMapping("/app")
 public class AppController {
@@ -170,5 +182,32 @@ public class AppController {
         ThrowUtils.throwIf(id <= 0, ErrorCode.PARAMS_ERROR);
         App app = appService.getAppById(id);
         return ResultUtils.success(app);
+    }
+
+    /**
+     * 应用聊天生成代码（流式 SSE）
+     *
+     * @param appId     应用 ID
+     * @param message   用户消息
+     * @param modelType 模型类型
+     * @return 生成结果流
+     */
+    @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
+                                                       @RequestParam String message,
+                                                       @RequestParam String modelType) {
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID无效");
+        ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
+        User loginUser = userService.getLoginUser();
+        //前端使用 EventSource 对接目前的接口时，会出现空格丢失问题。
+        return appService.chatToGenCode(appId, message, modelType, loginUser)
+                .map(chunk -> {
+                    // 将内容包装成JSON对象
+                    Map<String, String> wrapper = Map.of("c", chunk);
+                    String jsonData = JSONUtil.toJsonStr(wrapper);
+                    return ServerSentEvent.<String>builder()
+                            .data(jsonData)
+                            .build();
+                });
     }
 }

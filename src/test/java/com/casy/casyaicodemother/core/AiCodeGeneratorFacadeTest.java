@@ -28,14 +28,14 @@ class AiCodeGeneratorFacadeTest {
     @Test
     void generateAndSaveCodeStream() {
 
-        Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream("帮我实现一个简单的登录页，代码不要超过100行", CodeGenTypeEnum.HTML, ModelTypeEnum.GPT);
+        Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream("帮我实现一个简单的登录页，代码不要超过100行", CodeGenTypeEnum.HTML, ModelTypeEnum.GPT, 1L);
         List<String> result = stringFlux.collectList().block();
         assertNotNull(result);
     }
 
     @Test
     void generateAndSaveCode() {
-        File file = aiCodeGeneratorFacade.generateAndSaveCode("帮我实现一个简单的登录页，代码不要超过100行", CodeGenTypeEnum.MULTI_FILE, ModelTypeEnum.GPT);
+        File file = aiCodeGeneratorFacade.generateAndSaveCode("帮我实现一个简单的登录页，代码不要超过100行", CodeGenTypeEnum.MULTI_FILE, ModelTypeEnum.GPT, 1L);
         assertNotNull(file);
     }
 }

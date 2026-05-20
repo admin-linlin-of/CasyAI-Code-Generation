@@ -5,6 +5,7 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.constant.UserConstant;
+import com.casy.casyaicodemother.core.AiCodeGeneratorFacade;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.exception.ThrowUtils;
@@ -16,6 +17,7 @@ import com.casy.casyaicodemother.model.dto.app.AppUpdateRequest;
 import com.casy.casyaicodemother.model.entity.App;
 import com.casy.casyaicodemother.model.entity.User;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
+import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import com.casy.casyaicodemother.model.vo.app.AppVO;
 import com.casy.casyaicodemother.model.vo.user.UserVO;
 import com.casy.casyaicodemother.service.AppService;
@@ -25,6 +27,7 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -41,6 +44,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Resource
     private UserService userService;
+
+    @Resource
+    private AiCodeGeneratorFacade aiCodeGeneratorFacade;
 
     @Override
     public long createApp(AppAddRequest appAddRequest, User loginUser) {
@@ -103,6 +109,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Override
     public boolean deleteAppByAdmin(long id) {
+        // 查询数据库是否存在
         getAppById(id);
         return removeById(id);
     }
@@ -157,14 +164,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     public Page<AppVO> listMyAppVOByPage(AppQueryRequest appQueryRequest, User loginUser) {
         ThrowUtils.throwIf(appQueryRequest == null, ErrorCode.PARAMS_ERROR);
         int pageNum = appQueryRequest.getPageNum();
+        ThrowUtils.throwIf(appQueryRequest.getPageSize() > 20, ErrorCode.PARAMS_ERROR, "每页最多查询 20 个应用");
         int pageSize = Math.min(appQueryRequest.getPageSize(), AppConstant.MAX_PAGE_SIZE);
-        String appName = appQueryRequest.getAppName();
-        String sortField = appQueryRequest.getSortField();
-        String sortOrder = appQueryRequest.getSortOrder();
-        QueryWrapper queryWrapper = QueryWrapper.create()
-                .eq("userId", loginUser.getId())
-                .like("appName", appName, StrUtil.isNotBlank(appName))
-                .orderBy(sortField, "ascend".equals(sortOrder));
+        // 只查询当前用户的应用
+        QueryWrapper queryWrapper = getQueryWrapper(appQueryRequest);
         Page<App> appPage = page(Page.of(pageNum, pageSize), queryWrapper);
         return toAppVOPage(appPage, pageNum, pageSize, loginUser);
     }
@@ -173,14 +176,11 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     public Page<AppVO> listGoodAppVOByPage(AppQueryRequest appQueryRequest, User loginUser) {
         ThrowUtils.throwIf(appQueryRequest == null, ErrorCode.PARAMS_ERROR);
         int pageNum = appQueryRequest.getPageNum();
+        ThrowUtils.throwIf(appQueryRequest.getPageSize() > 20, ErrorCode.PARAMS_ERROR, "每页最多查询 20 个应用");
         int pageSize = Math.min(appQueryRequest.getPageSize(), AppConstant.MAX_PAGE_SIZE);
-        String appName = appQueryRequest.getAppName();
-        String sortField = appQueryRequest.getSortField();
-        String sortOrder = appQueryRequest.getSortOrder();
-        QueryWrapper queryWrapper = QueryWrapper.create()
-                .eq("priority", AppConstant.GOOD_APP_PRIORITY)
-                .like("appName", appName, StrUtil.isNotBlank(appName))
-                .orderBy(sortField, "ascend".equals(sortOrder));
+        // 只查询精选的应用
+        appQueryRequest.setPriority(AppConstant.GOOD_APP_PRIORITY);
+        QueryWrapper queryWrapper = getQueryWrapper(appQueryRequest);
         Page<App> appPage = page(Page.of(pageNum, pageSize), queryWrapper);
         return toAppVOPage(appPage, pageNum, pageSize, loginUser);
     }
@@ -221,6 +221,30 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 .orderBy(sortField, "ascend".equals(sortOrder));
     }
 
+    @Override
+    public Flux<String> chatToGenCode(Long appId, String message, String modelType, User loginUser) {
+        // 1. 参数校验
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");   // 1.参数校验
+        // 2. 查询应用信息
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        // 3. 验证用户是否有权限访问该应用，仅本人可以生成代码
+        checkAppAuth(app, loginUser);
+        // 4. 获取应用的代码生成类型
+        String codeGenTypeStr = app.getCodeGenType();
+        CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenTypeStr);
+        if (codeGenTypeEnum == null) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型");
+        }
+        ModelTypeEnum modelTypeEnum = ModelTypeEnum.getEnumByModelName(modelType);
+        if (modelTypeEnum == null) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的AI模型");
+        }
+        // 5. 调用 AI 生成代码
+        return aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, modelTypeEnum, appId);
+    }
+
     /**
      * 将应用分页结果转换为 VO 分页结果
      *
@@ -256,7 +280,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      * @param loginUser 当前登录用户
      */
     private void checkAppAuth(App app, User loginUser) {
-        ThrowUtils.throwIf(!app.getUserId().equals(loginUser.getId()), ErrorCode.NO_AUTH_ERROR);
+        ThrowUtils.throwIf(!app.getUserId().equals(loginUser.getId()), ErrorCode.NO_AUTH_ERROR, "无权访问该应用");
     }
 
     /**

@@ -1,8 +1,16 @@
+server:
+  port: 8124
+  servlet:
+    context-path: /api
 spring:
   profiles:
     active: local
   application:
     name: casy-ai-code-mother
+  mvc:
+    async:
+      request-timeout: 600000
+  # context.initializer.classes 在 Spring Boot 3.4+ 已失效，请用 META-INF/spring.factories 或 main 中 addInitializers
   # 数据源配置
   datasource:
     # 驱动类名（可省略，SpringBoot 自动识别）
@@ -26,10 +34,7 @@ spring:
     show-sql: true     # 控制台打印 SQL
     properties:
       hibernate.format_sql: true # 格式化 SQL
-server:
-  port: 8124
-  servlet:
-    context-path: /api
+
 
 mybatis-flex:
   configuration:
