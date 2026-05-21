@@ -2,7 +2,7 @@
   <div class="home-page">
     <section class="hero">
       <h1 class="hero__title">一句话，生成你的应用</h1>
-      <p class="hero__sub">输入提示词，自动创建应用并开始代码生成</p>
+      <p class="hero__sub">与 AI 对话轻松创建应用和网站</p>
       <div class="hero__panel">
         <a-textarea
           v-model:value="initPrompt"
@@ -22,118 +22,121 @@
           </a-space>
           <a-button
             :loading="creating"
-            size="large"
-            style="margin-right: -50px; margin-top: 10px"
+            class="generate-fab"
+            shape="circle"
             type="primary"
             @click="createAppByPrompt"
           >
-            创建并开始对话
+            ↑
           </a-button>
         </div>
       </div>
+      <div class="hero__tags">
+        <a-tag>波普风电商页面</a-tag>
+        <a-tag>企业网站</a-tag>
+        <a-tag>电商运营后台</a-tag>
+        <a-tag>暗黑话题社区</a-tag>
+      </div>
     </section>
 
-    <section v-if="isLogin" class="section-card">
-      <div class="section-card__head">
-        <h2>我的应用</h2>
-        <a-space>
-          <a-input-search
-            v-model:value="mySearchName"
-            allow-clear
-            placeholder="按名称搜索"
-            style="width: 260px"
-            @search="loadMyApps(1)"
-          />
-          <a-button @click="loadMyApps(1)">刷新</a-button>
-        </a-space>
-      </div>
-      <a-row :gutter="[16, 16]">
-        <a-col v-for="app in myApps" :key="app.id" :lg="8" :sm="12" :xs="24">
-          <a-card :bordered="false" class="app-card">
-            <template #cover>
-              <div class="app-card__cover">
-                <img v-if="app.cover" :src="app.cover" alt="cover" />
-                <span v-else>{{ app.appName || '未命名应用' }}</span>
-              </div>
-            </template>
-            <a-card-meta :title="app.appName || '未命名应用'">
-              <template #description>
-                <div class="app-card__meta">
-                  <span>{{ app.codeGenType || '-' }}</span>
-                  <span>{{ formatDate(app.updateTime) }}</span>
-                </div>
-              </template>
-            </a-card-meta>
-            <div class="app-card__ops">
-              <a-button type="link" @click="goChat(app.id)">继续对话</a-button>
-              <a-button type="link" @click="goEdit(app.id)">编辑</a-button>
-              <a-popconfirm title="确认删除该应用？" @confirm="doDelete(app.id)">
+    <section class="showcase">
+      <div v-if="isLogin" class="showcase-block">
+        <div class="showcase-block__head">
+          <h2>我的作品</h2>
+          <a-space>
+            <a-input-search
+              v-model:value="mySearchName"
+              allow-clear
+              placeholder="按名称搜索"
+              style="width: 220px"
+              @search="loadMyApps(1)"
+            />
+            <a-button @click="loadMyApps(1)">刷新</a-button>
+          </a-space>
+        </div>
+        <div class="my-work-list">
+          <div v-for="app in myApps" :key="app.id" class="my-work-card">
+            <div class="my-work-card__cover" @click="goChat(toAppId(app.id))">
+              <img v-if="app.cover" :src="app.cover" alt="cover" />
+              <span v-else>{{ app.appName || '未命名应用' }}</span>
+            </div>
+            <div class="my-work-card__title">{{ app.appName || '未命名应用' }}</div>
+            <div class="my-work-card__meta">{{ formatDate(app.updateTime) }}</div>
+            <div class="my-work-card__ops">
+              <a-button type="link" @click="goChat(toAppId(app.id))">继续对话</a-button>
+              <a-button type="link" @click="goEdit(toAppId(app.id))">编辑</a-button>
+              <a-popconfirm title="确认删除该应用？" @confirm="doDelete(toAppId(app.id))">
                 <a-button danger type="link">删除</a-button>
               </a-popconfirm>
             </div>
-          </a-card>
-        </a-col>
-      </a-row>
-      <a-empty v-if="myApps.length === 0" />
-      <div class="section-card__pagination">
-        <a-pagination
-          :current="myPageNum"
-          :page-size="myPageSize"
-          :page-size-options="['8', '12', '20']"
-          :total="myTotal"
-          show-size-changer
-          @change="loadMyApps"
-        />
-      </div>
-    </section>
-
-    <section class="section-card">
-      <div class="section-card__head">
-        <h2>精选应用</h2>
-        <a-space>
-          <a-input-search
-            v-model:value="goodSearchName"
-            allow-clear
-            placeholder="按名称搜索"
-            style="width: 260px"
-            @search="loadGoodApps(1)"
+          </div>
+        </div>
+        <a-empty v-if="myApps.length === 0" description="还没有创建应用" />
+        <div class="showcase__pagination">
+          <a-pagination
+            :current="myPageNum"
+            :page-size="myPageSize"
+            :page-size-options="['6', '9', '12', '20']"
+            :total="myTotal"
+            show-size-changer
+            @change="loadMyApps"
           />
-          <a-button @click="loadGoodApps(1)">刷新</a-button>
-        </a-space>
+        </div>
       </div>
-      <a-row :gutter="[16, 16]">
-        <a-col v-for="app in goodApps" :key="app.id" :lg="8" :sm="12" :xs="24">
-          <a-card :bordered="false" class="app-card">
-            <template #cover>
-              <div class="app-card__cover">
-                <img v-if="app.cover" :src="app.cover" alt="cover" />
-                <span v-else>{{ app.appName || '未命名应用' }}</span>
-              </div>
-            </template>
-            <a-card-meta :title="app.appName || '未命名应用'">
-              <template #description>
-                <div class="app-card__meta">
-                  <span>作者：{{ app.user?.userName || '-' }}</span>
-                  <span>{{ formatDate(app.updateTime) }}</span>
+      <div v-else class="showcase-block showcase-block--tip">
+        <h2>我的作品</h2>
+        <a-empty description="登录后可查看和管理你的应用" />
+      </div>
+
+      <div class="showcase-block">
+        <div class="showcase-block__head">
+          <h2>精选案例</h2>
+          <a-space>
+            <a-input-search
+              v-model:value="goodSearchName"
+              allow-clear
+              placeholder="按名称搜索"
+              style="width: 220px"
+              @search="loadGoodApps(1)"
+            />
+            <a-button @click="loadGoodApps(1)">刷新</a-button>
+          </a-space>
+        </div>
+        <div class="square-tabs">
+          <a-tag color="blue">全部</a-tag>
+          <a-tag>网站</a-tag>
+          <a-tag>工具</a-tag>
+          <a-tag>博客</a-tag>
+          <a-tag>管理后台</a-tag>
+        </div>
+        <a-row :gutter="[14, 14]">
+          <a-col v-for="app in goodApps" :key="app.id" :lg="6" :md="8" :sm="12" :xs="24">
+            <a-card :bordered="false" class="square-card" @click="goChat(toAppId(app.id))">
+              <template #cover>
+                <div class="square-card__cover">
+                  <img v-if="app.cover" :src="app.cover" alt="cover" />
+                  <span v-else>{{ app.appName || '未命名应用' }}</span>
                 </div>
               </template>
-            </a-card-meta>
-            <div class="app-card__ops">
-              <a-button type="link" @click="goChat(app.id)">查看详情</a-button>
-            </div>
-          </a-card>
-        </a-col>
-      </a-row>
-      <a-empty v-if="goodApps.length === 0" />
-      <div class="section-card__pagination">
-        <a-pagination
-          :current="goodPageNum"
-          :page-size="goodPageSize"
-          :page-size-options="['8', '12', '20']"
-          :total="goodTotal"
-          show-size-changer
-          @change="loadGoodApps"
-        />
+              <a-card-meta :title="app.appName || '未命名应用'">
+                <template #description>
+                  <div class="square-card__desc">{{ app.user?.userName || 'NoCode 官方' }}</div>
+                </template>
+              </a-card-meta>
+            </a-card>
+          </a-col>
+        </a-row>
+        <a-empty v-if="goodApps.length === 0" description="暂无精选应用" />
+        <div class="showcase__pagination">
+          <a-pagination
+            :current="goodPageNum"
+            :page-size="goodPageSize"
+            :page-size-options="['8', '12', '20']"
+            :total="goodTotal"
+            show-size-changer
+            @change="loadGoodApps"
+          />
+        </div>
       </div>
     </section>
   </div>
@@ -167,7 +170,7 @@ const modelTypeOptions = [
 const myApps = ref<API.AppVO[]>([])
 const myTotal = ref(0)
 const myPageNum = ref(1)
-const myPageSize = ref(8)
+const myPageSize = ref(6)
 const mySearchName = ref('')
 
 const goodApps = ref<API.AppVO[]>([])
@@ -177,6 +180,11 @@ const goodPageSize = ref(8)
 const goodSearchName = ref('')
 
 const trimmedPrompt = computed(() => initPrompt.value.trim())
+const toAppId = (id?: number | string) => {
+  if (id === undefined || id === null) return undefined
+  const value = Number(id)
+  return Number.isFinite(value) ? value : undefined
+}
 
 const formatDate = (time?: string) => {
   if (!time) return '-'
@@ -196,7 +204,6 @@ const createAppByPrompt = async () => {
       codeGenType: codeGenType.value,
       modelType: modelType.value,
     })
-    console.log("res.data.data", res.data.data)
     if (res.data.code === 0 && res.data.data) {
       message.success('应用创建成功')
       await router.push({
@@ -217,16 +224,16 @@ const createAppByPrompt = async () => {
 }
 
 const loadMyApps = async (page = 1, pageSize = myPageSize.value) => {
+  if (!isLogin.value) return
   myPageNum.value = page
   myPageSize.value = pageSize
   const res = await listMyAppVoByPage({
     pageNum: myPageNum.value,
     pageSize: myPageSize.value,
     appName: mySearchName.value || undefined,
-    sortField: 'update_time',
+    sortField: 'updateTime',
     sortOrder: 'descend',
   })
-  console.log("我的应用：", res.data.data);
   if (res.data.code === 0 && res.data.data) {
     myApps.value = res.data.data.records ?? []
     myTotal.value = res.data.data.totalRow ?? 0
@@ -234,6 +241,7 @@ const loadMyApps = async (page = 1, pageSize = myPageSize.value) => {
 }
 
 const loadGoodApps = async (page = 1, pageSize = goodPageSize.value) => {
+  if (!isLogin.value) return
   goodPageNum.value = page
   goodPageSize.value = pageSize
   const res = await listGoodAppVoByPage({
@@ -249,7 +257,7 @@ const loadGoodApps = async (page = 1, pageSize = goodPageSize.value) => {
   }
 }
 
-const doDelete = async (id?: string) => {
+const doDelete = async (id?: number) => {
   if (!id) return
   const res = await deleteApp({ id })
   if (res.data.code === 0) {
@@ -260,12 +268,12 @@ const doDelete = async (id?: string) => {
   }
 }
 
-const goChat = (id?: string) => {
+const goChat = (id?: number) => {
   if (!id) return
   router.push(`/app/chat/${id}`)
 }
 
-const goEdit = (id?: string) => {
+const goEdit = (id?: number) => {
   if (!id) return
   router.push(`/app/edit/${id}`)
 }
@@ -280,21 +288,21 @@ onMounted(() => {
 
 <style scoped>
 .home-page {
-  min-height: calc(100vh - 140px);
-  padding: 8px 8px 24px;
+  min-height: calc(100vh - 132px);
+  padding: 24px 10px 34px;
   background: var(--hero-bg);
   color: var(--text-main);
-  border-radius: 12px;
+  border-radius: 20px;
 }
 
 .hero {
   text-align: center;
-  margin: 8px auto 22px;
-  max-width: 1100px;
+  margin: 20px auto 30px;
+  max-width: 860px;
 }
 
 .hero__title {
-  margin-top: 50px;
+  margin-top: 12px;
   font-size: 42px;
   font-weight: 700;
   color: var(--text-main);
@@ -308,84 +316,152 @@ onMounted(() => {
 
 .hero__panel {
   border: 1px solid var(--border-color);
-  border-radius: 20px;
-  padding: 16px;
+  border-radius: 16px;
+  padding: 14px;
   background: var(--bg-card);
   backdrop-filter: blur(10px);
 }
 
 .hero__actions {
-  margin-top: 14px;
+  margin-top: 10px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
 }
 
-.section-card {
-  max-width: 1200px;
-  margin: 0 auto 18px;
+.generate-fab {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  border: 1px solid var(--border-color) !important;
+  background: rgba(127, 127, 127, 0.16) !important;
+  color: var(--text-main) !important;
+  box-shadow: none !important;
+}
+
+.generate-fab:hover,
+.generate-fab:focus {
+  background: rgba(127, 127, 127, 0.24) !important;
+}
+
+.hero__tags {
+  margin-top: 12px;
+}
+
+.showcase {
+  max-width: 1260px;
+  margin: 0 auto;
   border: 1px solid var(--border-color);
-  border-radius: 18px;
-  padding: 18px;
+  border-radius: 24px;
+  padding: 20px;
   background: var(--bg-card);
 }
 
-.section-card__head {
+.showcase-block + .showcase-block {
+  margin-top: 24px;
+}
+
+.showcase-block__head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
-.section-card__head h2 {
+.showcase-block h2 {
   margin: 0;
-  color: var(--text-main);
+  font-size: 28px;
+  line-height: 1;
 }
 
-.app-card {
-  height: 100%;
-  border-radius: 14px;
-  background: transparent;
+.showcase-block--tip {
+  padding: 8px 0;
+}
+
+.my-work-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+.my-work-card {
   border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(127, 127, 127, 0.04);
 }
 
-:deep(.app-card .ant-card-body) {
-  padding: 14px;
+.my-work-card__cover {
+  height: 130px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(22, 119, 255, 0.32), rgba(17, 171, 132, 0.2));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
 }
 
-.app-card__cover {
-  height: 140px;
+.my-work-card__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.my-work-card__title {
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.my-work-card__meta {
+  color: var(--text-sub);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.my-work-card__ops {
+  margin-top: 6px;
+}
+
+.square-tabs {
+  margin-bottom: 12px;
+}
+
+.square-card {
   border-radius: 12px;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  cursor: pointer;
+  height: 100%;
+}
+
+.square-card__cover {
+  height: 120px;
   overflow: hidden;
   background: linear-gradient(135deg, rgba(22, 119, 255, 0.35), rgba(17, 171, 132, 0.22));
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-main);
-  font-weight: 600;
 }
 
-.app-card__cover img {
+.square-card__cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.app-card__meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
+.square-card__desc {
+  color: var(--text-sub);
+  font-size: 12px;
 }
 
-.app-card__ops {
-  margin-top: 8px;
-}
-
-.section-card__pagination {
-  margin-top: 16px;
+.showcase__pagination {
+  margin-top: 14px;
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
 }
 
 @media (max-width: 768px) {
@@ -398,10 +474,15 @@ onMounted(() => {
     align-items: stretch;
   }
 
-  .section-card__head {
+  .showcase-block__head {
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
+  }
+
+  .showcase {
+    padding: 14px;
+    border-radius: 16px;
   }
 }
 </style>
