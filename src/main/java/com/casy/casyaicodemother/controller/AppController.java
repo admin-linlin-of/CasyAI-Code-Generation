@@ -11,10 +11,7 @@ import com.casy.casyaicodemother.constant.UserConstant;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.exception.ThrowUtils;
-import com.casy.casyaicodemother.model.dto.app.AppAddRequest;
-import com.casy.casyaicodemother.model.dto.app.AppAdminUpdateRequest;
-import com.casy.casyaicodemother.model.dto.app.AppQueryRequest;
-import com.casy.casyaicodemother.model.dto.app.AppUpdateRequest;
+import com.casy.casyaicodemother.model.dto.app.*;
 import com.casy.casyaicodemother.model.entity.App;
 import com.casy.casyaicodemother.model.entity.User;
 import com.casy.casyaicodemother.model.vo.app.AppVO;
@@ -27,6 +24,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.Map;
 
@@ -186,6 +184,11 @@ public class AppController {
 
     /**
      * 应用聊天生成代码（流式 SSE）
+     * 1. 前端使用 EventSource 对接目前的接口时，会出现空格丢失问题，将内容包装成JSON对象
+     * 2. 发送结束事件
+     * 在 SSE 中，当服务器关闭连接时，会触发客户端的 onclose 事件，这是前端判断流结束的标准方式。
+     * 但是，onclose事件会在连接正常结束（服务器主动关闭）和异常中断（如网络问题）时都触发，前端就很难区分到底后端是正常响应了所有数据、还是异常中断了。
+     * 因此，我们最好在后端添加一个明确的 done 事件，这样可以更清晰地区分流的正常结束和异常中断。
      *
      * @param appId     应用 ID
      * @param message   用户消息
@@ -202,12 +205,35 @@ public class AppController {
         //前端使用 EventSource 对接目前的接口时，会出现空格丢失问题。
         return appService.chatToGenCode(appId, message, modelType, loginUser)
                 .map(chunk -> {
-                    // 将内容包装成JSON对象
+                    // 前端使用 EventSource 对接目前的接口时，会出现空格丢失问题，将内容包装成JSON对象
                     Map<String, String> wrapper = Map.of("c", chunk);
                     String jsonData = JSONUtil.toJsonStr(wrapper);
                     return ServerSentEvent.<String>builder()
                             .data(jsonData)
                             .build();
-                });
+                })
+                .concatWith(Mono.just(
+                        ServerSentEvent.<String>builder()
+                                .event("done").data("").build()
+                ));
     }
+
+    /**
+     * 应用部署
+     *
+     * @param appDeployRequest 部署请求
+     * @return 部署 URL
+     */
+    @PostMapping("/deploy")
+    public BaseResponse<String> deployApp(@RequestBody AppDeployRequest appDeployRequest) {
+        ThrowUtils.throwIf(appDeployRequest == null, ErrorCode.PARAMS_ERROR);
+        Long appId = appDeployRequest.getAppId();
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        // 获取当前登录用户
+        User loginUser = userService.getLoginUser();
+        // 调用服务部署应用
+        String deployUrl = appService.deployApp(appId, loginUser);
+        return ResultUtils.success(deployUrl);
+    }
+
 }

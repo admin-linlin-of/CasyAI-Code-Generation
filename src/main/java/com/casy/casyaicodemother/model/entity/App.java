@@ -12,7 +12,6 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.sql.Timestamp;
 import java.time.LocalDateTime;
 
 /**
@@ -72,7 +71,7 @@ public class App implements Serializable {
      * 部署时间
      */
     @Column("deployed_time")
-    private Timestamp deployedTime;
+    private LocalDateTime deployedTime;
 
     /**
      * 优先级
