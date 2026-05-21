@@ -1,1 +1,0 @@
-document.getElementById('loginForm').addEventListener('submit',function(e){e.preventDefault();const u=document.getElementById('username').value.trim();const p=document.getElementById('password').value.trim();const msg=document.getElementById('msg');if(!u||!p){msg.textContent='请填写完整信息';msg.style.color='#e74c3c';return}msg.textContent='登录成功，欢迎 '+u+'！';msg.style.color='#2ecc71';});

@@ -196,6 +196,7 @@ const createAppByPrompt = async () => {
       codeGenType: codeGenType.value,
       modelType: modelType.value,
     })
+    console.log("res.data.data", res.data.data)
     if (res.data.code === 0 && res.data.data) {
       message.success('应用创建成功')
       await router.push({
@@ -222,9 +223,10 @@ const loadMyApps = async (page = 1, pageSize = myPageSize.value) => {
     pageNum: myPageNum.value,
     pageSize: myPageSize.value,
     appName: mySearchName.value || undefined,
-    sortField: 'updateTime',
+    sortField: 'update_time',
     sortOrder: 'descend',
   })
+  console.log("我的应用：", res.data.data);
   if (res.data.code === 0 && res.data.data) {
     myApps.value = res.data.data.records ?? []
     myTotal.value = res.data.data.totalRow ?? 0
@@ -247,7 +249,7 @@ const loadGoodApps = async (page = 1, pageSize = goodPageSize.value) => {
   }
 }
 
-const doDelete = async (id?: number) => {
+const doDelete = async (id?: string) => {
   if (!id) return
   const res = await deleteApp({ id })
   if (res.data.code === 0) {
@@ -258,12 +260,12 @@ const doDelete = async (id?: number) => {
   }
 }
 
-const goChat = (id?: number) => {
+const goChat = (id?: string) => {
   if (!id) return
   router.push(`/app/chat/${id}`)
 }
 
-const goEdit = (id?: number) => {
+const goEdit = (id?: string) => {
   if (!id) return
   router.push(`/app/edit/${id}`)
 }

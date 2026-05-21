@@ -88,6 +88,7 @@ public class AiCodeGeneratorFacade {
             // 流式返回完成后保存代码
             try {
                 String completeCode = codeBuilder.toString();
+                log.info("AI最终的响应：{}", completeCode);
                 // 使用执行器解析代码
                 Object parsedResult = CodeParserExecutor.executeParser(codeGenType, completeCode);
                 // 使用执行器保存代码
