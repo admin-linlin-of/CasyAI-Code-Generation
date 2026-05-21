@@ -3,7 +3,7 @@ import Home from '@/views/Home.vue'
 import Login from '@/views/user/Login.vue'
 import UserManager from '../views/user/UserManager.vue'
 import Register from '@/views/user/Register.vue'
-import ACCESS_ENUM from '@/constant/constant.ts'
+import ROLE_ENUM from '@/constant/constant.ts'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -12,6 +12,7 @@ const router = createRouter({
       path: '/',
       name: '主页',
       component: Home,
+      // 无 meta.roles：登录即可访问
     },
     {
       path: '/user/login',
@@ -28,7 +29,8 @@ const router = createRouter({
       name: '用户管理',
       component: UserManager,
       meta: {
-        access: ACCESS_ENUM.ADMIN,
+        // 方案 A：页面级用 roles 控制，对应后端 @SaCheckRole("admin")
+        roles: [ROLE_ENUM.ADMIN],
       },
     },
   ],

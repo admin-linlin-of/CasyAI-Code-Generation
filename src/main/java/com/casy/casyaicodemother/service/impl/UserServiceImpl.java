@@ -1,6 +1,5 @@
 package com.casy.casyaicodemother.service.impl;
 
-import cn.dev33.satoken.session.SaSession;
 import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
@@ -105,29 +104,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public User getLoginUser() {
-        // 先判断是否已登录
-        if( StpUtil.isLogin() ) {
-            QueryWrapper queryWrapper = new QueryWrapper();
-            SaSession session = StpUtil.getSession();
-            queryWrapper.eq("id", session.get("id"));
-            User user = this.mapper.selectOneByQuery(queryWrapper);
-            if (user == null) {
-                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "用户不存在");
-            }
-            return user;
-        } else {
-            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "未登录，请先登录");
-        }
+        // login 时 StpUtil.login(userId) 已将 userId 作为 loginId，无需再从 session 取
+        long userId = StpUtil.getLoginIdAsLong();
+        User user = getById(userId);
+        ThrowUtils.throwIf(user == null, ErrorCode.NOT_LOGIN_ERROR, "登录已失效，请重新登录");
+        return user;
     }
 
     @Override
     public void userLogout(HttpServletRequest request) {
-        // 先判断是否已登录
-        if( StpUtil.isLogin() ) {
-            StpUtil.logout();
-        } else {
-            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "未登录，请先登录");
-        }
+        StpUtil.checkLogin();
+        StpUtil.logout();
     }
 
     //获取脱敏后的单个用户信息、获取脱敏后的用户列表

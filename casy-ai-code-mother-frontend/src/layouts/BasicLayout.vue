@@ -17,6 +17,7 @@ import GlobalFooter from '@/components/GlobalFooter.vue'
 import GlobalHeader from '@/components/GlobalHeader.vue'
 import { useLoginUserStore } from '@/stores/loginUser.ts'
 import router from '@/router'
+import { canAccessRoute } from '@/utils/access'
 
 type MenuItemConfig = {
   key: string
@@ -31,18 +32,16 @@ const originItems = [
 ]
 const loginUserStore = useLoginUserStore()
 
+// 菜单过滤逻辑与路由守卫一致，复用 canAccessRoute，避免两处维护不同规则
 const filterMenus = (menus: MenuItemConfig[]) => {
-  const permissions = loginUserStore.loginUser.permissions
+  const loginUser = loginUserStore.loginUser
   return menus.filter((menu) => {
     const menuPath = menu.path
     if (!menuPath) return true
-    const access = router.getRoutes().find((r) => r.path === menuPath)?.meta
-      .access as string | undefined
-    if (!permissions) {
-      return false
-    }
-    if (!access || permissions[0] === '*') return true
-    return permissions.indexOf(access) !== -1
+    const routeMeta = router.getRoutes().find((r) => r.path === menuPath)?.meta
+    if (!routeMeta) return true
+    if (!loginUser.id) return false
+    return canAccessRoute(routeMeta, loginUser)
   })
 }
 

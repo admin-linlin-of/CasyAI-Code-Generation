@@ -87,9 +87,8 @@ const onMenuClick: MenuProps['onClick'] = (info) => {
 const doLogout = async () => {
   const res = await userLogout()
   if (res.data.code === 0) {
-    loginUserStore.setLoginUser({
-      userName: '未登录',
-    })
+    // 清空 id，使路由守卫判定为未登录
+    loginUserStore.resetLoginUser()
     message.success('退出登录成功')
     await router.push('/user/login')
   } else {

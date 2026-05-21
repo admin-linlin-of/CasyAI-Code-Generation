@@ -3,7 +3,6 @@ package com.casy.casyaicodemother.controller;
 import cn.dev33.satoken.annotation.SaCheckLogin;
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import cn.dev33.satoken.annotation.SaCheckRole;
-import cn.dev33.satoken.session.SaSession;
 import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.bean.BeanUtil;
 import com.casy.casyaicodemother.common.BaseResponse;
@@ -61,11 +60,9 @@ public class UserController {
         String userAccount = userLoginRequest.getUserAccount();
         String userPassword = userLoginRequest.getUserPassword();
         LoginUserVO loginUserVO = userService.userLogin(userAccount, userPassword);
+        // loginId 即 userId，getLoginUser 通过 StpUtil.getLoginIdAsLong() 获取
         StpUtil.login(loginUserVO.getId());
-        // 获取当前会话的 Account-Session
-        SaSession session = StpUtil.getSession();
-        // 从 Account-Session 写入数据
-        session.set("id", loginUserVO.getId());
+        // permissions 来自 Sa-Token，供前端按钮/接口级鉴权；userRole 来自数据库，供页面级鉴权
         loginUserVO.setPermissions(StpUtil.getPermissionList());
         return ResultUtils.success(loginUserVO);
     }
@@ -75,8 +72,10 @@ public class UserController {
     @GetMapping("/get/login")
     public BaseResponse<LoginUserVO> getLoginUser() {
         User loginUser = userService.getLoginUser();
-        loginUser.setPermissions(StpUtil.getPermissionList());
-        return ResultUtils.success(userService.getLoginUserVO(loginUser));
+        LoginUserVO loginUserVO = userService.getLoginUserVO(loginUser);
+        // 权限直接写入 VO，避免污染 User 实体
+        loginUserVO.setPermissions(StpUtil.getPermissionList());
+        return ResultUtils.success(loginUserVO);
     }
 
     @SaCheckLogin

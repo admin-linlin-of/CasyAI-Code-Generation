@@ -1,10 +1,10 @@
 /**
- * 权限定义
+ * 用户角色枚举，与后端 UserConstant.ADMIN_ROLE / DEFAULT_ROLE 保持一致
+ * 前端路由 meta.roles 和后端 @SaCheckRole 均使用这些值
  */
-const ACCESS_ENUM = {
-  NOT_LOGIN: "notLogin",
-  USER: "user",
-  ADMIN: "admin",
-};
+const ROLE_ENUM = {
+  USER: 'user',
+  ADMIN: 'admin',
+}
 
-export default ACCESS_ENUM;
+export default ROLE_ENUM

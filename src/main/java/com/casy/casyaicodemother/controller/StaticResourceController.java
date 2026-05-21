@@ -36,6 +36,8 @@ public class StaticResourceController {
             HttpServletRequest request) {
         try {
             // 获取资源路径
+            // PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE 是 Spring 在 /{deployKey}/** 匹配后写入的、落在该模式内的路径。
+            // 比如，访问 http://localhost:8124/api/static/123/index.html，则 PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE 为 /index.html
             String resourcePath = (String) request.getAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE);
             resourcePath = resourcePath.substring(("/static/" + deployKey).length());
             // 如果是目录访问（不带斜杠），重定向到带斜杠的URL
