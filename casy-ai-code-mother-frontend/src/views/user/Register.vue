@@ -1,6 +1,6 @@
 <template>
   <div id="userRegisterPage">
-    <h2 class="title">鱼皮 AI 应用生成 - 用户注册</h2>
+    <h2 class="title">Casy AI 应用生成 - 用户注册</h2>
     <div class="desc">不写一行代码，生成完整应用</div>
     <a-form :model="formState" name="basic" autocomplete="off" @finish="handleSubmit">
       <a-form-item name="userAccount" :rules="[{ required: true, message: '请输入账号' }]">
@@ -85,6 +85,7 @@ const handleSubmit = async (values: API.UserRegisterRequest) => {
 
 <style scoped>
 #userRegisterPage {
+  padding-top: 60px;
   max-width: 360px;
   margin: 0 auto;
 }
@@ -92,17 +93,18 @@ const handleSubmit = async (values: API.UserRegisterRequest) => {
 .title {
   text-align: center;
   margin-bottom: 16px;
+  color: var(--text-main);
 }
 
 .desc {
   text-align: center;
-  color: #bbb;
+  color: var(--text-sub);
   margin-bottom: 16px;
 }
 
 .tips {
   margin-bottom: 16px;
-  color: #bbb;
+  color: var(--text-sub);
   font-size: 13px;
   text-align: right;
 }

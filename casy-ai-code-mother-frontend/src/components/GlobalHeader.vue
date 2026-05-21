@@ -16,6 +16,9 @@
     </div>
 
     <div class="global-header__right">
+      <a-button class="theme-btn" @click="themeStore.toggleTheme">
+        {{ themeStore.isDark ? '浅色' : '深色' }}
+      </a-button>
       <div v-if="loginUserStore.loginUser.id">
         <a-dropdown>
           <a-space>
@@ -54,8 +57,10 @@ const props = defineProps<{
 
 import { useLoginUserStore } from '@/stores/loginUser.ts'
 import { userLogout } from '@/api/userController.ts'
+import { useThemeStore } from '@/stores/theme'
 
 const loginUserStore = useLoginUserStore()
+const themeStore = useThemeStore()
 loginUserStore.fetchLoginUser()
 
 const title = computed(() => props.title ?? 'Casy AI Code Mother')
@@ -103,8 +108,10 @@ const doLogout = async () => {
   align-items: center;
   justify-content: space-between;
   padding-inline: 16px;
-  background: #fff;
-  border-bottom: 1px solid rgba(5, 5, 5, 0.06);
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-color);
+  backdrop-filter: blur(8px);
+  color: var(--text-main);
 }
 
 .global-header__left {
@@ -149,6 +156,10 @@ const doLogout = async () => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.theme-btn {
+  min-width: 64px;
 }
 
 @media (max-width: 768px) {

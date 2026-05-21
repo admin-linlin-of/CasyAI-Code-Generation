@@ -6,5 +6,7 @@ import 'vue-router'
 declare module 'vue-router' {
   interface RouteMeta {
     roles?: string[]
+    hideFooter?: boolean
+    noPadding?: boolean
   }
 }

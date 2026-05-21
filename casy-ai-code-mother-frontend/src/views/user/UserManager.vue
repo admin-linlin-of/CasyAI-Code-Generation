@@ -141,7 +141,7 @@ const doSearch = () => {
 }
 
 // 删除数据
-const doDelete = async (id: string) => {
+const doDelete = async (id: number) => {
   if (!id) {
     return
   }
@@ -160,3 +160,19 @@ onMounted(() => {
   fetchData()
 })
 </script>
+
+<style scoped>
+#userManagePage {
+  padding: 14px;
+}
+
+:deep(.ant-form) {
+  margin-bottom: 10px;
+}
+
+:deep(.ant-table-wrapper) {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+}
+</style>

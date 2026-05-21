@@ -3,6 +3,9 @@ import Home from '@/views/Home.vue'
 import Login from '@/views/user/Login.vue'
 import UserManager from '../views/user/UserManager.vue'
 import Register from '@/views/user/Register.vue'
+import AppChat from '@/views/app/AppChat.vue'
+import AppManage from '@/views/app/AppManage.vue'
+import AppEdit from '@/views/app/AppEdit.vue'
 import ROLE_ENUM from '@/constant/constant.ts'
 
 const router = createRouter({
@@ -29,9 +32,32 @@ const router = createRouter({
       name: '用户管理',
       component: UserManager,
       meta: {
-        // 方案 A：页面级用 roles 控制，对应后端 @SaCheckRole("admin")
         roles: [ROLE_ENUM.ADMIN],
       },
+    },
+    {
+      path: '/app/chat/:id',
+      name: '应用生成对话',
+      component: AppChat,
+      props: true,
+      meta: {
+        hideFooter: true,
+        noPadding: true,
+      },
+    },
+    {
+      path: '/app/manage',
+      name: '应用管理',
+      component: AppManage,
+      meta: {
+        roles: [ROLE_ENUM.ADMIN],
+      },
+    },
+    {
+      path: '/app/edit/:id',
+      name: '应用编辑',
+      component: AppEdit,
+      props: true,
     },
   ],
 })

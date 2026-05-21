@@ -18,9 +18,11 @@
   align-items: center;
   justify-content: center;
   padding: 0 16px;
-  background: #fff;
-  border-top: 1px solid rgba(5, 5, 5, 0.06);
+  background: var(--bg-footer);
+  border-top: 1px solid var(--border-color);
   z-index: 10;
+  color: var(--text-sub);
+  backdrop-filter: blur(8px);
 }
 </style>
 
