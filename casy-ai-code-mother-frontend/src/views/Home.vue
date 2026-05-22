@@ -9,7 +9,7 @@
           :maxlength="500"
           :rows="4"
           placeholder="例如：做一个个人博客，包含首页、文章列表和文章详情页"
-          show-count
+          style="border: none; box-shadow: none"
         />
         <div class="hero__actions">
           <a-space>
@@ -32,10 +32,14 @@
         </div>
       </div>
       <div class="hero__tags">
-        <a-tag>波普风电商页面</a-tag>
-        <a-tag>企业网站</a-tag>
-        <a-tag>电商运营后台</a-tag>
-        <a-tag>暗黑话题社区</a-tag>
+        <a-tag
+          v-for="tag in quickTags"
+          :key="tag"
+          class="hero__tag--clickable"
+          @click="handleTagClick(tag)"
+        >
+          {{ tag }}
+        </a-tag>
       </div>
     </section>
 
@@ -167,6 +171,8 @@ const modelTypeOptions = [
   { value: 'gpt-5.5', label: 'GPT 5.5' },
 ]
 
+const quickTags = ['波普风电商页面', '企业网站', '电商运营后台', '暗黑话题社区']
+
 const myApps = ref<API.AppVO[]>([])
 const myTotal = ref(0)
 const myPageNum = ref(1)
@@ -189,6 +195,11 @@ const toAppId = (id?: number | string) => {
 const formatDate = (time?: string) => {
   if (!time) return '-'
   return dayjs(time).format('YYYY-MM-DD HH:mm')
+}
+
+const handleTagClick = (tag: string) => {
+  initPrompt.value = tag
+  createAppByPrompt()
 }
 
 const createAppByPrompt = async () => {
@@ -347,6 +358,16 @@ onMounted(() => {
 
 .hero__tags {
   margin-top: 12px;
+}
+
+.hero__tag--clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.hero__tag--clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .showcase {

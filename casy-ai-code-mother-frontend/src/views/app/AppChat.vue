@@ -19,7 +19,15 @@
               msg.role === 'user' ? 'message-item--user' : 'message-item--ai',
             ]"
           >
-            <div class="message-item__content">{{ msg.content }}</div>
+            <div class="message-item__content">
+              <!-- AI 消息：Markdown + 高亮 + 打字机；用户消息：纯文本 -->
+              <AiMarkdownMessage
+                v-if="msg.role === 'ai'"
+                :content="msg.content"
+                :streaming="msg.streaming"
+              />
+              <template v-else>{{ msg.content }}</template>
+            </div>
           </div>
           <a-empty v-if="messages.length === 0" description="发送消息开始生成" />
         </div>
@@ -61,10 +69,13 @@ import { useRoute } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { deployApp, getAppVoById } from '@/api/appController'
 import request from '@/axios/request'
+import AiMarkdownMessage from '@/components/AiMarkdownMessage.vue'
 
 type ChatMessage = {
   role: 'user' | 'ai'
   content: string
+  /** true 表示 SSE 进行中，AiMarkdownMessage 启用打字机与加载动画 */
+  streaming?: boolean
 }
 
 const route = useRoute()
@@ -118,10 +129,11 @@ const fetchAppInfo = async () => {
   message.error(res.data.message || '获取应用信息失败')
 }
 
+/** 通过 EventSource 接收生成流，data 为 {"c":"片段"}，done 事件表示结束 */
 const startStream = (messageText: string) => {
   generating.value = true
   showPreview.value = false
-  const aiMsg: ChatMessage = { role: 'ai', content: '' }
+  const aiMsg: ChatMessage = { role: 'ai', content: '', streaming: true }
   messages.value.push(aiMsg)
   const baseURL = request.defaults.baseURL ?? ''
   const url = new URL('app/chat/gen/code', baseURL.endsWith('/') ? baseURL : `${baseURL}/`)
@@ -134,6 +146,7 @@ const startStream = (messageText: string) => {
   eventSource.onmessage = (event) => {
     if (finished) return
     try {
+      // 后端包装为 JSON，避免 EventSource 丢空格
       const data = JSON.parse(event.data) as { c?: string }
       aiMsg.content += data.c ?? ''
     } catch {
@@ -145,6 +158,8 @@ const startStream = (messageText: string) => {
   eventSource.addEventListener('done', () => {
     if (finished) return
     finished = true
+    // 关闭打字机，展示完整内容并刷新预览
+    aiMsg.streaming = false
     generating.value = false
     showPreview.value = true
     closeEventSource()
@@ -154,7 +169,7 @@ const startStream = (messageText: string) => {
   eventSource.onerror = () => {
     closeEventSource()
     if (!finished) {
-      // 检查是否是正常的连接关闭
+      aiMsg.streaming = false
       generating.value = false
       message.error('生成中断，请重试')
     }
@@ -280,9 +295,12 @@ onBeforeUnmount(() => {
   max-width: 88%;
   padding: 10px 12px;
   border-radius: 12px;
-  white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.6;
+}
+
+.message-item--user .message-item__content {
+  white-space: pre-wrap;
 }
 
 .message-item--ai .message-item__content {
