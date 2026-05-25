@@ -2,6 +2,7 @@ package com.casy.casyaicodemother.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
 import cn.dev33.satoken.annotation.SaCheckRole;
+import cn.dev33.satoken.annotation.SaIgnore;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.casy.casyaicodemother.common.BaseResponse;
@@ -130,12 +131,11 @@ public class AppController {
      * @param appQueryRequest 分页及查询条件
      * @return 应用 VO 分页结果
      */
-    @SaCheckLogin
+    @SaIgnore
     @PostMapping("/list/good/page/vo")
     public BaseResponse<Page<AppVO>> listGoodAppVOByPage(@RequestBody AppQueryRequest appQueryRequest) {
         ThrowUtils.throwIf(appQueryRequest == null, ErrorCode.PARAMS_ERROR);
-        User loginUser = userService.getLoginUser();
-        Page<AppVO> appVOPage = appService.listGoodAppVOByPage(appQueryRequest, loginUser);
+        Page<AppVO> appVOPage = appService.listGoodAppVOByPage(appQueryRequest);
         return ResultUtils.success(appVOPage);
     }
 

@@ -63,16 +63,18 @@
             <div class="my-work-card__cover" @click="goChat(toAppId(app.id))">
               <img v-if="app.cover" :src="app.cover" alt="cover" />
               <span v-else>{{ app.appName || '未命名应用' }}</span>
+              <div class="card-hover-mask">
+                <a-button
+                  class="card-hover-button"
+                  size="large"
+                  @click.stop="goChat(toAppId(app.id))"
+                >
+                  查看对话
+                </a-button>
+              </div>
             </div>
             <div class="my-work-card__title">{{ app.appName || '未命名应用' }}</div>
             <div class="my-work-card__meta">{{ formatDate(app.updateTime) }}</div>
-            <div class="my-work-card__ops">
-              <a-button type="link" @click="goChat(toAppId(app.id))">继续对话</a-button>
-              <a-button type="link" @click="goEdit(toAppId(app.id))">编辑</a-button>
-              <a-popconfirm title="确认删除该应用？" @confirm="doDelete(toAppId(app.id))">
-                <a-button danger type="link">删除</a-button>
-              </a-popconfirm>
-            </div>
           </div>
         </div>
         <a-empty v-if="myApps.length === 0" description="还没有创建应用" />
@@ -80,18 +82,13 @@
           <a-pagination
             :current="myPageNum"
             :page-size="myPageSize"
-            :page-size-options="['6', '9', '12', '20']"
+            :page-size-options="['8', '12', '20']"
             :total="myTotal"
-            show-size-changer
+            size="small"
             @change="loadMyApps"
           />
         </div>
       </div>
-      <div v-else class="showcase-block showcase-block--tip">
-        <h2>我的作品</h2>
-        <a-empty description="登录后可查看和管理你的应用" />
-      </div>
-
       <div class="showcase-block">
         <div class="showcase-block__head">
           <h2>精选案例</h2>
@@ -113,23 +110,34 @@
           <a-tag>博客</a-tag>
           <a-tag>管理后台</a-tag>
         </div>
-        <a-row :gutter="[14, 14]">
-          <a-col v-for="app in goodApps" :key="app.id" :lg="6" :md="8" :sm="12" :xs="24">
-            <a-card :bordered="false" class="square-card" @click="goChat(toAppId(app.id))">
-              <template #cover>
-                <div class="square-card__cover">
-                  <img v-if="app.cover" :src="app.cover" alt="cover" />
-                  <span v-else>{{ app.appName || '未命名应用' }}</span>
-                </div>
-              </template>
-              <a-card-meta :title="app.appName || '未命名应用'">
-                <template #description>
-                  <div class="square-card__desc">{{ app.user?.userName || 'NoCode 官方' }}</div>
-                </template>
-              </a-card-meta>
-            </a-card>
-          </a-col>
-        </a-row>
+        <div class="my-work-list">
+          <div
+            v-for="app in goodApps"
+            :key="app.id"
+            class="square-card"
+            @click="goChat(toAppId(app.id))"
+          >
+            <div class="square-card__cover">
+              <img v-if="app.cover" :src="app.cover" alt="cover" />
+              <span v-else>{{ app.appName || '未命名应用' }}</span>
+              <div class="card-hover-mask">
+                <a-button
+                  class="card-hover-button"
+                  size="large"
+                  @click.stop="goChat(toAppId(app.id))"
+                >
+                  预览
+                </a-button>
+              </div>
+            </div>
+            <div class="square-card__body">
+              <div class="square-card__title">{{ app.appName || '未命名应用' }}</div>
+              <div class="square-card__desc">
+                {{ app.user?.userName || 'NoCode 官方' }} {{ formatDate(app.updateTime) }}
+              </div>
+            </div>
+          </div>
+        </div>
         <a-empty v-if="goodApps.length === 0" description="暂无精选应用" />
         <div class="showcase__pagination">
           <a-pagination
@@ -137,7 +145,7 @@
             :page-size="goodPageSize"
             :page-size-options="['8', '12', '20']"
             :total="goodTotal"
-            show-size-changer
+            size="small"
             @change="loadGoodApps"
           />
         </div>
@@ -151,7 +159,7 @@ import { computed, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import { useRouter } from 'vue-router'
-import { addApp, deleteApp, listGoodAppVoByPage, listMyAppVoByPage } from '@/api/appController'
+import { addApp, listGoodAppVoByPage, listMyAppVoByPage } from '@/api/appController'
 import { useLoginUserStore } from '@/stores/loginUser'
 
 const router = useRouter()
@@ -176,7 +184,7 @@ const quickTags = ['波普风电商页面', '企业网站', '电商运营后台'
 const myApps = ref<API.AppVO[]>([])
 const myTotal = ref(0)
 const myPageNum = ref(1)
-const myPageSize = ref(6)
+const myPageSize = ref(8)
 const mySearchName = ref('')
 
 const goodApps = ref<API.AppVO[]>([])
@@ -242,7 +250,7 @@ const loadMyApps = async (page = 1, pageSize = myPageSize.value) => {
     pageNum: myPageNum.value,
     pageSize: myPageSize.value,
     appName: mySearchName.value || undefined,
-    sortField: 'updateTime',
+    sortField: 'update_time',
     sortOrder: 'descend',
   })
   if (res.data.code === 0 && res.data.data) {
@@ -252,7 +260,6 @@ const loadMyApps = async (page = 1, pageSize = myPageSize.value) => {
 }
 
 const loadGoodApps = async (page = 1, pageSize = goodPageSize.value) => {
-  if (!isLogin.value) return
   goodPageNum.value = page
   goodPageSize.value = pageSize
   const res = await listGoodAppVoByPage({
@@ -267,32 +274,18 @@ const loadGoodApps = async (page = 1, pageSize = goodPageSize.value) => {
     goodTotal.value = res.data.data.totalRow ?? 0
   }
 }
-
-const doDelete = async (id?: number) => {
-  if (!id) return
-  const res = await deleteApp({ id })
-  if (res.data.code === 0) {
-    message.success('删除成功')
-    await loadMyApps(myPageNum.value, myPageSize.value)
-  } else {
-    message.error(res.data.message || '删除失败')
-  }
-}
-
 const goChat = (id?: number) => {
   if (!id) return
   router.push(`/app/chat/${id}`)
 }
-
-const goEdit = (id?: number) => {
-  if (!id) return
-  router.push(`/app/edit/${id}`)
-}
-
-onMounted(() => {
+onMounted(async () => {
+  await loginUserStore.fetchLoginUser()
+  console.log("isLogin.value: ", isLogin.value);
+  console.log("loginUserStore.loginUser.id: ", loginUserStore.loginUser.id);
   if (isLogin.value) {
-    loadMyApps()
-    loadGoodApps()
+    await Promise.all([loadMyApps(), loadGoodApps()])
+  } else {
+    await loadGoodApps()
   }
 })
 </script>
@@ -300,7 +293,7 @@ onMounted(() => {
 <style scoped>
 .home-page {
   min-height: calc(100vh - 132px);
-  padding: 24px 10px 34px;
+  padding: 24px 10px 88px;
   background: var(--hero-bg);
   color: var(--text-main);
   border-radius: 20px;
@@ -372,7 +365,7 @@ onMounted(() => {
 
 .showcase {
   max-width: 1260px;
-  margin: 0 auto;
+  margin: 0 auto 24px;
   border: 1px solid var(--border-color);
   border-radius: 24px;
   padding: 20px;
@@ -402,20 +395,20 @@ onMounted(() => {
 
 .my-work-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
 }
 
 .my-work-card {
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  padding: 10px;
-  background: rgba(127, 127, 127, 0.04);
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
 }
 
 .my-work-card__cover {
-  height: 130px;
-  border-radius: 10px;
+  position: relative;
+  height: 180px;
+  border-radius: 8px;
   overflow: hidden;
   background: linear-gradient(135deg, rgba(22, 119, 255, 0.32), rgba(17, 171, 132, 0.2));
   display: flex;
@@ -428,22 +421,54 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 0.25s ease;
 }
 
 .my-work-card__title {
-  margin-top: 8px;
-  font-size: 14px;
-  font-weight: 600;
+  margin-top: 12px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-main);
 }
 
 .my-work-card__meta {
   color: var(--text-sub);
-  font-size: 12px;
+  font-size: 13px;
   margin-top: 4px;
 }
 
-.my-work-card__ops {
-  margin-top: 6px;
+.my-work-card:hover .my-work-card__cover img,
+.square-card:hover .square-card__cover img {
+  transform: scale(1.04);
+}
+
+.card-hover-mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px 10px;
+  background: rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.my-work-card__cover:hover .card-hover-mask,
+.square-card__cover:hover .card-hover-mask {
+  opacity: 1;
+}
+
+.card-hover-button {
+  width: min(300px, calc(100% - 12px));
+  height: 42px;
+  border: none;
+  border-radius: 8px;
+  color: #1f2937;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
 }
 
 .square-tabs {
@@ -451,15 +476,16 @@ onMounted(() => {
 }
 
 .square-card {
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  overflow: hidden;
+  border-radius: 10px;
   cursor: pointer;
   height: 100%;
+  background: transparent;
 }
 
 .square-card__cover {
-  height: 120px;
+  position: relative;
+  height: 180px;
+  border-radius: 8px;
   overflow: hidden;
   background: linear-gradient(135deg, rgba(22, 119, 255, 0.35), rgba(17, 171, 132, 0.22));
   display: flex;
@@ -472,11 +498,24 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 0.25s ease;
+}
+
+.square-card__body {
+  padding-top: 12px;
+}
+
+.square-card__title {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-main);
 }
 
 .square-card__desc {
   color: var(--text-sub);
-  font-size: 12px;
+  font-size: 13px;
+  margin-top: 4px;
 }
 
 .showcase__pagination {
@@ -504,6 +543,10 @@ onMounted(() => {
   .showcase {
     padding: 14px;
     border-radius: 16px;
+  }
+
+  .my-work-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

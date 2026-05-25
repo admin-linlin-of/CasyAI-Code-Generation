@@ -176,7 +176,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     }
 
     @Override
-    public Page<AppVO> listGoodAppVOByPage(AppQueryRequest appQueryRequest, User loginUser) {
+    public Page<AppVO> listGoodAppVOByPage(AppQueryRequest appQueryRequest) {
         ThrowUtils.throwIf(appQueryRequest == null, ErrorCode.PARAMS_ERROR);
         int pageNum = appQueryRequest.getPageNum();
         ThrowUtils.throwIf(appQueryRequest.getPageSize() > 20, ErrorCode.PARAMS_ERROR, "每页最多查询 20 个应用");
@@ -185,7 +185,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         appQueryRequest.setPriority(AppConstant.GOOD_APP_PRIORITY);
         QueryWrapper queryWrapper = getQueryWrapper(appQueryRequest);
         Page<App> appPage = page(Page.of(pageNum, pageSize), queryWrapper);
-        return toAppVOPage(appPage, pageNum, pageSize, loginUser);
+        return toAppVOPage(appPage, pageNum, pageSize, null);
     }
 
     @Override
@@ -219,7 +219,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 .like("initPrompt", initPrompt, StrUtil.isNotBlank(initPrompt))
                 .eq("codeGenType", codeGenType, StrUtil.isNotBlank(codeGenType))
                 .eq("deployKey", deployKey, StrUtil.isNotBlank(deployKey))
-                .eq("priority", priority, priority != null)
+                .ge("priority", priority, priority != null)
                 .eq("userId", userId)
                 .orderBy(sortField, "ascend".equals(sortOrder));
     }
@@ -310,7 +310,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         Map<Long, UserVO> userVOMap = userService.listByIds(userIds).stream().collect(Collectors.toMap(User::getId, userService::getUserVO));
         appVOPage.setRecords(appPage.getRecords().stream()
                 .map(app -> {
-                    AppVO appVO = getAppVO(app, loginUser);
+                    AppVO appVO = getAppVO(app);
                     UserVO userVO = userVOMap.get(app.getUserId());
                     appVO.setUser(userVO);
                     return appVO;

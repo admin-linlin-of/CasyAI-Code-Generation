@@ -108,10 +108,9 @@ public interface AppService extends IService<App> {
      * 分页查询精选应用列表
      *
      * @param appQueryRequest 分页及查询条件（appName 模糊查询）
-     * @param loginUser       当前登录用户（用于 initPrompt 脱敏）
      * @return 应用 VO 分页结果，每页最多 20 条
      */
-    Page<AppVO> listGoodAppVOByPage(AppQueryRequest appQueryRequest, User loginUser);
+    Page<AppVO> listGoodAppVOByPage(AppQueryRequest appQueryRequest);
 
     /**
      * 管理员分页查询应用列表

@@ -1,9 +1,10 @@
-<template>
+﻿<template>
   <div class="app-chat-page">
     <header class="top-bar">
       <div class="top-bar__name">{{ appInfo?.appName || `应用 #${appId}` }}</div>
       <a-space>
         <a-select v-model:value="modelType" :options="modelTypeOptions" style="width: 180px" />
+        <a-button @click="openDetailModal">详情</a-button>
         <a-button :loading="deploying" type="primary" @click="doDeploy">部署</a-button>
       </a-space>
     </header>
@@ -60,14 +61,52 @@
         </div>
       </section>
     </div>
+    <a-modal v-model:open="detailVisible" title="应用详情" :footer="null" width="560px">
+      <div class="detail-modal">
+        <div class="detail-row">
+          <span class="detail-label">创建者：</span>
+          <span>{{ appInfo?.user?.userName || appInfo?.user?.userAccount || appInfo?.userId || '-' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">创建时间：</span>
+          <span>{{ appInfo?.createTime || '-' }}</span>
+        </div>
+        <a-form layout="vertical" class="detail-form" @finish="doUpdateAppName">
+          <a-form-item label="应用名称" required>
+            <a-input v-model:value="detailForm.appName" :maxlength="40" show-count />
+          </a-form-item>
+          <a-space>
+            <a-button type="primary" :loading="updating" @click="doUpdateAppName">修改</a-button>
+            <a-button danger :loading="deleting" @click="confirmDeleteApp">删除</a-button>
+          </a-space>
+        </a-form>
+      </div>
+    </a-modal>
+
+    <a-modal v-model:open="deploySuccessVisible" title="部署成功" :footer="null" width="640px">
+      <div class="deploy-success">
+        <CheckCircleOutlined class="deploy-success__icon" />
+        <h2>网站部署成功！</h2>
+        <p>你的网站已经成功部署，可以通过以下链接访问：</p>
+        <a-input-group compact class="deploy-success__link">
+          <a-input :value="deployUrl" readonly style="width: calc(100% - 60px)" />
+          <a-button @click="copyDeployUrl">复制</a-button>
+        </a-input-group>
+        <a-space class="deploy-success__ops">
+          <a-button type="primary" @click="openDeployUrl">访问网站</a-button>
+          <a-button @click="deploySuccessVisible = false">关闭</a-button>
+        </a-space>
+      </div>
+    </a-modal>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
-import { deployApp, getAppVoById } from '@/api/appController'
+import { deleteApp, deployApp, getAppVoById, updateApp } from '@/api/appController'
+import { CheckCircleOutlined } from '@ant-design/icons-vue'
 import request from '@/axios/request'
 import AiMarkdownMessage from '@/components/AiMarkdownMessage.vue'
 
@@ -79,6 +118,7 @@ type ChatMessage = {
 }
 
 const route = useRoute()
+const router = useRouter()
 const appId = computed(() => {
   console.log('route.params.id: ', route.params.id)
   const id = route.params.id
@@ -87,6 +127,14 @@ const appId = computed(() => {
 const inputMessage = ref('')
 const generating = ref(false)
 const deploying = ref(false)
+const updating = ref(false)
+const deleting = ref(false)
+const detailVisible = ref(false)
+const deploySuccessVisible = ref(false)
+const deployUrl = ref('')
+const detailForm = reactive({
+  appName: '',
+})
 const modelType = ref(
   typeof route.query.modelType === 'string' ? route.query.modelType : 'deepseek-v4-flash',
 )
@@ -126,7 +174,76 @@ const fetchAppInfo = async () => {
     buildPreviewUrl()
     return
   }
-  message.error(res.data.message || '获取应用信息失败')
+  message.error(res.data.message || '鑾峰彇搴旂敤淇℃伅澶辫触')
+}
+
+const openDetailModal = () => {
+  detailForm.appName = appInfo.value?.appName || ''
+  detailVisible.value = true
+}
+
+const doUpdateAppName = async () => {
+  const appName = detailForm.appName.trim()
+  if (!appName) {
+    message.warning('请输入应用名称')
+    return
+  }
+  updating.value = true
+  try {
+    const res = await updateApp({ id: appId.value, appName })
+    if (res.data.code === 0) {
+      message.success('修改成功')
+      if (appInfo.value) {
+        appInfo.value.appName = appName
+      }
+      detailVisible.value = false
+      return
+    }
+    message.error(res.data.message || '修改失败')
+  } finally {
+    updating.value = false
+  }
+}
+
+const confirmDeleteApp = () => {
+  Modal.confirm({
+    title: '确认删除应用？',
+    content: '删除后不可恢复，是否继续？',
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    async onOk() {
+      deleting.value = true
+      try {
+        const res = await deleteApp({ id: appId.value })
+        if (res.data.code === 0) {
+          message.success('删除成功')
+          detailVisible.value = false
+          router.replace('/')
+          return
+        }
+        message.error(res.data.message || '删除失败')
+        return Promise.reject()
+      } finally {
+        deleting.value = false
+      }
+    },
+  })
+}
+
+const copyDeployUrl = async () => {
+  if (!deployUrl.value) return
+  try {
+    await navigator.clipboard.writeText(deployUrl.value)
+    message.success('链接已复制')
+  } catch {
+    message.warning('复制失败，请手动复制')
+  }
+}
+
+const openDeployUrl = () => {
+  if (!deployUrl.value) return
+  window.open(deployUrl.value, '_blank', 'noopener,noreferrer')
 }
 
 /** 通过 EventSource 接收生成流，data 为 {"c":"片段"}，done 事件表示结束 */
@@ -200,10 +317,8 @@ const doDeploy = async () => {
   try {
     const res = await deployApp({ appId: appId.value })
     if (res.data.code === 0 && res.data.data) {
-      Modal.success({
-        title: '部署成功',
-        content: res.data.data,
-      })
+      deployUrl.value = res.data.data
+      deploySuccessVisible.value = true
       return
     }
     message.error(res.data.message || '部署失败')
@@ -348,6 +463,56 @@ onBeforeUnmount(() => {
   height: 100%;
   border: none;
   background: #fff;
+}
+
+.detail-modal {
+  padding-top: 4px;
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  color: var(--text-main);
+}
+
+.detail-label {
+  min-width: 72px;
+  color: var(--text-secondary);
+}
+
+.detail-form {
+  margin-top: 18px;
+}
+
+.deploy-success {
+  text-align: center;
+  padding: 18px 28px 8px;
+}
+
+.deploy-success__icon {
+  color: #52c41a;
+  font-size: 56px;
+  margin-bottom: 12px;
+}
+
+.deploy-success h2 {
+  margin: 0 0 14px;
+}
+
+.deploy-success p {
+  margin-bottom: 20px;
+  color: var(--text-secondary);
+}
+
+.deploy-success__link {
+  margin-bottom: 24px;
+  display:flex;
+}
+
+.deploy-success__ops {
+  justify-content: center;
 }
 
 @media (max-width: 1200px) {
