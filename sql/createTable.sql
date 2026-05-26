@@ -103,3 +103,14 @@ COMMENT ON COLUMN t_app.edit_time IS '编辑时间';
 COMMENT ON COLUMN t_app.create_time IS '创建时间';
 COMMENT ON COLUMN t_app.update_time IS '更新时间';
 COMMENT ON COLUMN t_app.is_delete IS '是否删除';
+
+
+-- 1. 添加字段（jsonb 类型，默认空数组，非空约束）
+ALTER TABLE "t_app"
+    ADD COLUMN IF NOT EXISTS app_types jsonb NOT NULL DEFAULT '[]'::jsonb;
+
+-- 2. 添加字段注释（说明用途）
+COMMENT ON COLUMN "t_app".app_types IS '应用类型数组，JSON格式，每个元素为字符串类型的应用类型标识';
+
+-- 创建 GIN 索引，支持 jsonb 数组的包含查询
+CREATE INDEX idx_app_apptypes ON "t_app" USING GIN (app_types);

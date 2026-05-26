@@ -4,6 +4,7 @@ import com.mybatisflex.annotation.Column;
 import com.mybatisflex.annotation.Id;
 import com.mybatisflex.annotation.KeyType;
 import com.mybatisflex.annotation.Table;
+import com.casy.casyaicodemother.handler.JsonbTypeHandler;
 import com.mybatisflex.core.keygen.KeyGenerators;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -13,6 +14,7 @@ import lombok.NoArgsConstructor;
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 应用 实体类。
@@ -60,6 +62,12 @@ public class App implements Serializable {
      */
     @Column("code_gen_type")
     private String codeGenType;
+
+    /**
+     * 应用类型数组
+     */
+    @Column(value = "app_types", typeHandler = JsonbTypeHandler.class)
+    private List<String> appTypes;
 
     /**
      * 部署标识

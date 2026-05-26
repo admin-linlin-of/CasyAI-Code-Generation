@@ -15,6 +15,20 @@
           <a-input v-model:value="formState.appName" :maxlength="40" show-count />
         </a-form-item>
 
+        <a-form-item label="应用类型" name="appTypes">
+          <a-select
+            v-model:value="formState.appTypes"
+            mode="multiple"
+            :options="APP_TYPE_OPTIONS"
+            placeholder="选择应用类型"
+            style="width: 100%"
+          >
+            <template #tagRender="{ label, closable, onClose }">
+              <a-tag :closable="closable" color="blue" @close="onClose">{{ label }}</a-tag>
+            </template>
+          </a-select>
+        </a-form-item>
+
         <template v-if="isAdmin">
           <a-form-item label="封面地址" name="cover">
             <a-input v-model:value="formState.cover" />
@@ -26,6 +40,7 @@
 
         <a-form-item :wrapper-col="{ offset: 4, span: 12 }">
           <a-space>
+            <a-button v-if="isAdmin" @click="goManage">返回</a-button>
             <a-button type="primary" html-type="submit" :loading="submitting">保存</a-button>
             <a-button @click="goChat">查看应用</a-button>
           </a-space>
@@ -39,6 +54,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import { APP_TYPE_OPTIONS } from '@/constant/appType'
 import ROLE_ENUM from '@/constant/constant'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { getAppVoById, updateApp, updateAppByAdmin } from '@/api/appController'
@@ -57,6 +73,7 @@ const formState = reactive<API.AppAdminUpdateRequest>({
   appName: '',
   cover: '',
   priority: 0,
+  appTypes: [],
 })
 const ownerId = ref<number>()
 
@@ -73,6 +90,7 @@ const fetchData = async () => {
     formState.appName = app.appName || ''
     formState.cover = app.cover || ''
     formState.priority = app.priority ?? 0
+    formState.appTypes = app.appTypes ? [...app.appTypes] : []
     ownerId.value = app.userId
     if (!isAdmin.value && ownerId.value !== loginUserStore.loginUser.id) {
       message.error('无权编辑该应用')
@@ -92,6 +110,7 @@ const submitForm = async () => {
         appName: formState.appName?.trim(),
         cover: formState.cover?.trim(),
         priority: formState.priority,
+        appTypes: formState.appTypes,
       })
       if (res.data.code === 0) {
         message.success('保存成功')
@@ -103,6 +122,7 @@ const submitForm = async () => {
     const res = await updateApp({
       id: appId.value,
       appName: formState.appName?.trim(),
+      appTypes: formState.appTypes,
     })
     if (res.data.code === 0) {
       message.success('保存成功')
@@ -116,6 +136,10 @@ const submitForm = async () => {
 
 const goChat = () => {
   router.push(`/app/chat/${appId.value}`)
+}
+
+const goManage = () => {
+  router.push('/app/manage')
 }
 
 onMounted(() => {

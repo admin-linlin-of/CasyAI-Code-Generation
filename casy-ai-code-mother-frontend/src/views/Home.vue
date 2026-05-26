@@ -35,7 +35,7 @@
         <a-tag
           v-for="tag in quickTags"
           :key="tag"
-          class="hero__tag--clickable"
+          class="home-tag hero__tag--clickable"
           @click="handleTagClick(tag)"
         >
           {{ tag }}
@@ -104,11 +104,11 @@
           </a-space>
         </div>
         <div class="square-tabs">
-          <a-tag color="blue">全部</a-tag>
-          <a-tag>网站</a-tag>
-          <a-tag>工具</a-tag>
-          <a-tag>博客</a-tag>
-          <a-tag>管理后台</a-tag>
+          <a-tag class="home-tag home-tag--active">全部</a-tag>
+          <a-tag class="home-tag">网站</a-tag>
+          <a-tag class="home-tag">工具</a-tag>
+          <a-tag class="home-tag">博客</a-tag>
+          <a-tag class="home-tag">管理后台</a-tag>
         </div>
         <div class="my-work-list">
           <div
@@ -351,16 +351,35 @@ onMounted(async () => {
 
 .hero__tags {
   margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+:deep(.ant-tag.home-tag) {
+  margin-inline-end: 0;
+  background: var(--tag-bg) !important;
+  border-color: var(--tag-border) !important;
+  color: var(--tag-text) !important;
+  cursor: default;
+  transition: all 0.2s ease;
+}
+
+:deep(.ant-tag.home-tag--active) {
+  background: var(--tag-bg-active) !important;
+  border-color: var(--tag-bg-active) !important;
+  color: var(--tag-text-active) !important;
 }
 
 .hero__tag--clickable {
   cursor: pointer;
-  transition: all 0.2s ease;
 }
 
 .hero__tag--clickable:hover {
   transform: translateY(-2px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border-color: var(--tag-bg-active);
 }
 
 .showcase {
@@ -473,6 +492,13 @@ onMounted(async () => {
 
 .square-tabs {
   margin-bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.square-tabs :deep(.home-tag) {
+  margin-inline-end: 0;
 }
 
 .square-card {

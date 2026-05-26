@@ -4,6 +4,7 @@ import lombok.Data;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * 用户创建应‍用
@@ -19,6 +20,11 @@ public class AppAddRequest implements Serializable {
     private String initPrompt;
 
     private String codeGenType;
+
+    /**
+     * 应用类型数组
+     */
+    private List<String> appTypes;
 
     /**
      * 模型类型

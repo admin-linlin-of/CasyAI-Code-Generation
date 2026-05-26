@@ -16,13 +16,18 @@
     </div>
 
     <div class="global-header__right">
-      <a-button class="theme-btn" @click="themeStore.toggleTheme">
-        {{ themeStore.isDark ? '浅色' : '深色' }}
+      <a-button class="theme-btn" type="text" @click="themeStore.toggleTheme">
+        <SunOutlined v-if="themeStore.isDark" />
+        <MoonOutlined v-else />
       </a-button>
       <div v-if="loginUserStore.loginUser.id">
         <a-dropdown>
           <a-space>
-            <a-avatar :src="loginUserStore.loginUser.userAvatar" />
+            <ExternalAvatar
+              :src="loginUserStore.loginUser.userAvatar"
+              :fallback="loginUserStore.loginUser.userName"
+              :size="32"
+            />
             {{ loginUserStore.loginUser.userName ?? '无名' }}
           </a-space>
           <template #overlay>
@@ -46,8 +51,9 @@
 import { type MenuProps, message } from 'ant-design-vue'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { LogoutOutlined } from '@ant-design/icons-vue'
+import { LogoutOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons-vue'
 import defaultLogoUrl from '@/assets/logo.png?url'
+import ExternalAvatar from '@/components/ExternalAvatar.vue'
 
 const props = defineProps<{
   menuItems?: MenuProps['items']
@@ -159,7 +165,14 @@ const doLogout = async () => {
 }
 
 .theme-btn {
-  min-width: 64px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--text-main);
 }
 
 @media (max-width: 768px) {

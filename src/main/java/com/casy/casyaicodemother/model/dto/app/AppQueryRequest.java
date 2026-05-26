@@ -6,6 +6,7 @@ import lombok.EqualsAndHashCode;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.List;
 
 @EqualsAndHashCode(callSuper = true)
 @Data
@@ -35,6 +36,11 @@ public class AppQueryRequest extends PageRequest implements Serializable {
      * 代码生成类型（枚举）
      */
     private String codeGenType;
+
+    /**
+     * 应用类型数组（包含查询）
+     */
+    private List<String> appTypes;
 
     /**
      * 部署标识

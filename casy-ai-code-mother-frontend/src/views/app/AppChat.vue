@@ -71,12 +71,21 @@
           <span class="detail-label">创建时间：</span>
           <span>{{ appInfo?.createTime || '-' }}</span>
         </div>
-        <a-form layout="vertical" class="detail-form" @finish="doUpdateAppName">
+        <a-form layout="vertical" class="detail-form" @finish="doUpdateApp">
           <a-form-item label="应用名称" required>
             <a-input v-model:value="detailForm.appName" :maxlength="40" show-count />
           </a-form-item>
+          <a-form-item label="应用类型">
+            <a-select
+              v-model:value="detailForm.appTypes"
+              mode="multiple"
+              :options="APP_TYPE_OPTIONS"
+              placeholder="选择应用类型"
+              style="width: 100%"
+            />
+          </a-form-item>
           <a-space>
-            <a-button type="primary" :loading="updating" @click="doUpdateAppName">修改</a-button>
+            <a-button type="primary" :loading="updating" @click="doUpdateApp">修改</a-button>
             <a-button danger :loading="deleting" @click="confirmDeleteApp">删除</a-button>
           </a-space>
         </a-form>
@@ -109,6 +118,7 @@ import { deleteApp, deployApp, getAppVoById, updateApp } from '@/api/appControll
 import { CheckCircleOutlined } from '@ant-design/icons-vue'
 import request from '@/axios/request'
 import AiMarkdownMessage from '@/components/AiMarkdownMessage.vue'
+import { APP_TYPE_OPTIONS } from '@/constant/appType'
 
 type ChatMessage = {
   role: 'user' | 'ai'
@@ -134,6 +144,7 @@ const deploySuccessVisible = ref(false)
 const deployUrl = ref('')
 const detailForm = reactive({
   appName: '',
+  appTypes: [] as string[],
 })
 const modelType = ref(
   typeof route.query.modelType === 'string' ? route.query.modelType : 'deepseek-v4-flash',
@@ -179,10 +190,11 @@ const fetchAppInfo = async () => {
 
 const openDetailModal = () => {
   detailForm.appName = appInfo.value?.appName || ''
+  detailForm.appTypes = appInfo.value?.appTypes ? [...appInfo.value.appTypes] : []
   detailVisible.value = true
 }
 
-const doUpdateAppName = async () => {
+const doUpdateApp = async () => {
   const appName = detailForm.appName.trim()
   if (!appName) {
     message.warning('请输入应用名称')
@@ -190,11 +202,16 @@ const doUpdateAppName = async () => {
   }
   updating.value = true
   try {
-    const res = await updateApp({ id: appId.value, appName })
+    const res = await updateApp({
+      id: appId.value,
+      appName,
+      appTypes: detailForm.appTypes,
+    })
     if (res.data.code === 0) {
       message.success('修改成功')
       if (appInfo.value) {
         appInfo.value.appName = appName
+        appInfo.value.appTypes = [...detailForm.appTypes]
       }
       detailVisible.value = false
       return

@@ -7,4 +7,6 @@ const ROLE_ENUM = {
   ADMIN: 'admin',
 }
 
+export const APP_FEATURED_PRIORITY = 99
+
 export default ROLE_ENUM

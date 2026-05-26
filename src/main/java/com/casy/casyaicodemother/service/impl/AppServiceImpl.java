@@ -5,6 +5,7 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.constant.UserConstant;
 import com.casy.casyaicodemother.core.AiCodeGeneratorFacade;
@@ -18,6 +19,7 @@ import com.casy.casyaicodemother.model.dto.app.AppQueryRequest;
 import com.casy.casyaicodemother.model.dto.app.AppUpdateRequest;
 import com.casy.casyaicodemother.model.entity.App;
 import com.casy.casyaicodemother.model.entity.User;
+import com.casy.casyaicodemother.model.enums.AppTypeEnum;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import com.casy.casyaicodemother.model.vo.app.AppVO;
@@ -74,6 +76,13 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             appName = initPrompt.substring(0, Math.min(initPrompt.length(), 12));
         }
         app.setAppName(appName);
+        List<String> appTypes = appAddRequest.getAppTypes();
+        if (CollUtil.isNotEmpty(appTypes)) {
+            validateAppTypes(appTypes);
+            app.setAppTypes(appTypes);
+        } else {
+            app.setAppTypes(new ArrayList<>());
+        }
         boolean result = save(app);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         // TODO 需要添加版本表的记录，包括模型类型，注意添加事务日志
@@ -89,6 +98,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         App app = new App();
         app.setId(appUpdateRequest.getId());
         app.setAppName(appUpdateRequest.getAppName());
+        if (appUpdateRequest.getAppTypes() != null) {
+            validateAppTypes(appUpdateRequest.getAppTypes());
+            app.setAppTypes(appUpdateRequest.getAppTypes());
+        }
         // 设置编辑时间
         app.setEditTime(LocalDateTime.now());
         return updateById(app);
@@ -98,6 +111,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     public boolean updateAppByAdmin(AppAdminUpdateRequest appAdminUpdateRequest) {
         ThrowUtils.throwIf(appAdminUpdateRequest == null || appAdminUpdateRequest.getId() == null, ErrorCode.PARAMS_ERROR);
         getAppById(appAdminUpdateRequest.getId());
+        if (appAdminUpdateRequest.getAppTypes() != null) {
+            validateAppTypes(appAdminUpdateRequest.getAppTypes());
+        }
         App app = new App();
         BeanUtil.copyProperties(appAdminUpdateRequest, app);
         return updateById(app);
@@ -207,6 +223,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         String cover = appQueryRequest.getCover();
         String initPrompt = appQueryRequest.getInitPrompt();
         String codeGenType = appQueryRequest.getCodeGenType();
+        List<String> appTypes = appQueryRequest.getAppTypes();
         String deployKey = appQueryRequest.getDeployKey();
         Integer priority = appQueryRequest.getPriority();
         Long userId = appQueryRequest.getUserId();
@@ -214,13 +231,16 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         String sortOrder = appQueryRequest.getSortOrder();
         return QueryWrapper.create()
                 .eq("id", id)
-                .like("appName", appName, StrUtil.isNotBlank(appName))
+                .like("app_name", appName, StrUtil.isNotBlank(appName))
                 .like("cover", cover, StrUtil.isNotBlank(cover))
-                .like("initPrompt", initPrompt, StrUtil.isNotBlank(initPrompt))
-                .eq("codeGenType", codeGenType, StrUtil.isNotBlank(codeGenType))
-                .eq("deployKey", deployKey, StrUtil.isNotBlank(deployKey))
+                .like("init_prompt", initPrompt, StrUtil.isNotBlank(initPrompt))
+                .eq("code_gen_type", codeGenType, StrUtil.isNotBlank(codeGenType))
+                // WHERE (app_types::jsonb @> '["website"]'::jsonb)
+                // @> 表示：左边 jsonb 必须包含右边 jsonb 的所有元素。
+                .and(q -> q.and("app_types::jsonb @> ?::jsonb", JSONUtil.toJsonStr(appTypes)), CollUtil.isNotEmpty(appTypes))
+                .eq("deploy_key", deployKey, StrUtil.isNotBlank(deployKey))
                 .ge("priority", priority, priority != null)
-                .eq("userId", userId)
+                .eq("user_id", userId)
                 .orderBy(sortField, "ascend".equals(sortOrder));
     }
 
@@ -317,6 +337,20 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 })
                 .collect(Collectors.toList()));
         return appVOPage;
+    }
+
+    /**
+     * 校验应用类型是否合法
+     */
+    private void validateAppTypes(List<String> appTypes) {
+        if (CollUtil.isEmpty(appTypes)) {
+            return;
+        }
+        for (String appType : appTypes) {
+            ThrowUtils.throwIf(StrUtil.isBlank(appType), ErrorCode.PARAMS_ERROR, "应用类型不能为空");
+            ThrowUtils.throwIf(AppTypeEnum.getEnumByValue(appType) == null,
+                    ErrorCode.PARAMS_ERROR, "不存在应用类型");
+        }
     }
 
     /**

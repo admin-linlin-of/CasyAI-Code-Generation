@@ -6,6 +6,11 @@
   --text-main: #0f172a;
   --text-sub: #6b7280;
   --border-color: rgba(15, 23, 42, 0.12);
+  --tag-bg: rgba(22, 119, 255, 0.08);
+  --tag-border: rgba(22, 119, 255, 0.28);
+  --tag-text: #1e3a5f;
+  --tag-bg-active: #1677ff;
+  --tag-text-active: #ffffff;
   --hero-bg:
     radial-gradient(circle at 20% 10%, rgba(34, 197, 94, 0.12), transparent 35%),
     radial-gradient(circle at 80% 0, rgba(22, 119, 255, 0.16), transparent 35%),
@@ -24,6 +29,11 @@ html[data-theme='dark'] {
   --control-bg-hover: rgba(22, 41, 76, 0.96);
   --control-border: rgba(96, 129, 198, 0.42);
   --control-placeholder: rgba(156, 177, 220, 0.72);
+  --tag-bg: rgba(96, 129, 255, 0.2);
+  --tag-border: rgba(120, 150, 255, 0.5);
+  --tag-text: #e8eeff;
+  --tag-bg-active: #1677ff;
+  --tag-text-active: #ffffff;
   --hero-bg:
     radial-gradient(circle at 20% 10%, rgba(74, 199, 255, 0.28), transparent 32%),
     radial-gradient(circle at 80% 0, rgba(145, 94, 255, 0.22), transparent 28%),

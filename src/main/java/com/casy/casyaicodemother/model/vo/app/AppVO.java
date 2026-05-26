@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 用户查看应用详情
@@ -36,6 +37,11 @@ public class AppVO implements Serializable {
      * 代码生成类型（枚举）
      */
     private String codeGenType;
+
+    /**
+     * 应用类型数组
+     */
+    private List<String> appTypes;
 
     /**
      * 部署标识

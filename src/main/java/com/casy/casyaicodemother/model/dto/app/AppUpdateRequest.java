@@ -4,6 +4,7 @@ import lombok.Data;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.List;
 
 @Data
 public class AppUpdateRequest implements Serializable {
@@ -17,6 +18,11 @@ public class AppUpdateRequest implements Serializable {
      * 应用名称
      */
     private String appName;
+
+    /**
+     * 应用类型数组
+     */
+    private List<String> appTypes;
 
     @Serial
     private static final long serialVersionUID = 1L;

@@ -19,6 +19,15 @@
             ]"
           />
         </a-form-item>
+        <a-form-item label="应用类型">
+          <a-select
+            v-model:value="searchParams.appTypes"
+            allow-clear
+            mode="multiple"
+            style="width: 200px"
+            :options="APP_TYPE_OPTIONS"
+          />
+        </a-form-item>
         <a-form-item label="优先级">
           <a-input-number v-model:value="searchParams.priority" style="width: 120px" />
         </a-form-item>
@@ -27,8 +36,8 @@
         </a-form-item>
         <a-form-item>
           <a-space>
-            <a-button html-type="submit" type="primary">查询</a-button>
-            <a-button @click="resetSearch">重置</a-button>
+            <a-button html-type="submit" type="primary" :loading="loading">查询</a-button>
+            <a-button :disabled="loading" @click="resetSearch">重置</a-button>
           </a-space>
         </a-form-item>
       </a-form>
@@ -39,6 +48,7 @@
         row-key="id"
         :columns="columns"
         :data-source="data"
+        :loading="loading"
         :pagination="pagination"
         @change="doTableChange"
       >
@@ -46,6 +56,20 @@
           <template v-if="column.dataIndex === 'cover'">
             <a-image v-if="record.cover" :src="record.cover" :width="120" />
             <span v-else>-</span>
+          </template>
+          <template v-else-if="column.dataIndex === 'codeGenType'">
+            <span v-if="!record.codeGenType">-</span>
+            <a-tag v-else color="green">
+              {{ CODE_GEN_TYPE_LABEL_MAP[record.codeGenType] || record.codeGenType }}
+            </a-tag>
+          </template>
+          <template v-else-if="column.dataIndex === 'appTypes'">
+            <span v-if="!record.appTypes?.length">-</span>
+            <a-space v-else wrap :size="4">
+              <a-tag v-for="type in record.appTypes" :key="type" color="blue">
+                {{ APP_TYPE_LABEL_MAP[type] || type }}
+              </a-tag>
+            </a-space>
           </template>
           <template v-else-if="column.dataIndex === 'createTime' || column.dataIndex === 'updateTime'">
             {{ formatDate(record[column.dataIndex]) }}
@@ -56,7 +80,9 @@
               <a-popconfirm title="确认删除该应用？" @confirm="doDelete(record.id)">
                 <a-button type="link" danger>删除</a-button>
               </a-popconfirm>
-              <a-button type="link" @click="markGood(record.id)">精选</a-button>
+              <a-button type="link" @click="toggleFeatured(record)">
+                {{ isFeatured(record.priority) ? '取消精选' : '精选' }}
+              </a-button>
             </a-space>
           </template>
         </template>
@@ -71,6 +97,13 @@ import dayjs from 'dayjs'
 import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import { deleteApp, listAppVoByPage, updateAppByAdmin } from '@/api/appController'
+import { APP_TYPE_LABEL_MAP, APP_TYPE_OPTIONS } from '@/constant/appType'
+import { APP_FEATURED_PRIORITY } from '@/constant/constant'
+
+const CODE_GEN_TYPE_LABEL_MAP: Record<string, string> = {
+  multi_file: '多文件模式',
+  html: 'HTML 模式',
+}
 
 const router = useRouter()
 const columns = [
@@ -78,6 +111,7 @@ const columns = [
   { title: '应用名', dataIndex: 'appName' },
   { title: '封面', dataIndex: 'cover' },
   { title: '生成类型', dataIndex: 'codeGenType' },
+  { title: '应用类型', dataIndex: 'appTypes' },
   { title: '优先级', dataIndex: 'priority' },
   { title: '用户ID', dataIndex: 'userId' },
   { title: '部署Key', dataIndex: 'deployKey' },
@@ -88,6 +122,7 @@ const columns = [
 
 const data = ref<API.AppVO[]>([])
 const total = ref(0)
+const loading = ref(false)
 const searchParams = reactive<API.AppQueryRequest>({
   pageNum: 1,
   pageSize: 10,
@@ -109,13 +144,18 @@ const formatDate = (date?: string) => {
 }
 
 const fetchData = async () => {
-  const res = await listAppVoByPage({ ...searchParams })
-  if (res.data.code === 0 && res.data.data) {
-    data.value = res.data.data.records ?? []
-    total.value = res.data.data.totalRow ?? 0
-    return
+  loading.value = true
+  try {
+    const res = await listAppVoByPage({ ...searchParams })
+    if (res.data.code === 0 && res.data.data) {
+      data.value = res.data.data.records ?? []
+      total.value = res.data.data.totalRow ?? 0
+      return
+    }
+    message.error(res.data.message || '获取数据失败')
+  } finally {
+    loading.value = false
   }
-  message.error(res.data.message || '获取数据失败')
 }
 
 const doSearch = () => {
@@ -127,6 +167,7 @@ const resetSearch = () => {
   searchParams.id = undefined
   searchParams.appName = undefined
   searchParams.codeGenType = undefined
+  searchParams.appTypes = undefined
   searchParams.priority = undefined
   searchParams.userId = undefined
   searchParams.pageNum = 1
@@ -156,11 +197,17 @@ const goEdit = (id?: string) => {
   router.push(`/app/edit/${id}?admin=1`)
 }
 
-const markGood = async (id?: string) => {
-  if (!id) return
-  const res = await updateAppByAdmin({ id, priority: 99 })
+const isFeatured = (priority?: number) => priority === APP_FEATURED_PRIORITY
+
+const toggleFeatured = async (record: API.AppVO) => {
+  if (!record.id) return
+  const featured = isFeatured(record.priority)
+  const res = await updateAppByAdmin({
+    id: record.id,
+    priority: featured ? 0 : APP_FEATURED_PRIORITY,
+  })
   if (res.data.code === 0) {
-    message.success('已设为精选')
+    message.success(featured ? '已取消精选' : '已设为精选')
     fetchData()
     return
   }
