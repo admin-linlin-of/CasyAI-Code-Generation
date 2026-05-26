@@ -230,3 +230,9 @@ html[data-theme='dark'] .ant-table-wrapper .ant-table-filter-trigger {
 html[data-theme='dark'] .ant-table-wrapper .ant-table-pagination.ant-pagination {
   margin-right: 8px;
 }
+
+/* 关闭 View Transition 默认的淡入淡出，改由 JS 控制圆形 clip-path 扩散 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}

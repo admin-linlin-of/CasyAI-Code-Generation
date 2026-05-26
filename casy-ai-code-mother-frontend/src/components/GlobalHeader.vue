@@ -16,10 +16,21 @@
     </div>
 
     <div class="global-header__right">
-      <a-button class="theme-btn" type="text" @click="themeStore.toggleTheme">
-        <SunOutlined v-if="themeStore.isDark" />
-        <MoonOutlined v-else />
-      </a-button>
+      <!-- 浅色：月亮 + 黑底；深色：太阳 + 白底 -->
+      <a-tooltip :title="themeStore.isDark ? '切换到浅色模式' : '切换到深色模式'">
+        <a-button
+          class="theme-btn"
+
+          type="text"
+          @click="onToggleTheme"
+        >
+          <img
+            :src="icon"
+            alt="theme"
+            class="theme-btn__icon"
+          />
+        </a-button>
+      </a-tooltip>
       <div v-if="loginUserStore.loginUser.id">
         <a-dropdown>
           <a-space>
@@ -51,8 +62,10 @@
 import { type MenuProps, message } from 'ant-design-vue'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { LogoutOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons-vue'
+import { LogoutOutlined } from '@ant-design/icons-vue'
 import defaultLogoUrl from '@/assets/logo.png?url'
+import sunIcon from '@/assets/太阳.svg?url'
+import moonIcon from '@/assets/月亮.svg?url'
 import ExternalAvatar from '@/components/ExternalAvatar.vue'
 
 const props = defineProps<{
@@ -68,6 +81,8 @@ import { useThemeStore } from '@/stores/theme'
 const loginUserStore = useLoginUserStore()
 const themeStore = useThemeStore()
 loginUserStore.fetchLoginUser()
+
+const icon = computed(() => (themeStore.isDark.value ? moonIcon : sunIcon))
 
 const title = computed(() => props.title ?? 'Casy AI Code Mother')
 const logoSrc = computed(() => props.logoSrc ?? defaultLogoUrl)
@@ -92,6 +107,11 @@ const onMenuClick: MenuProps['onClick'] = (info) => {
     (i) => i && typeof i === 'object' && String((i as any).key) === key,
   ) as any
   if (item?.path) router.push(item.path)
+}
+
+// 把点击事件交给 themeStore，用于 View Transition 圆形扩散动画的圆心
+const onToggleTheme = (event: MouseEvent) => {
+  themeStore.toggleTheme(event)
 }
 
 // 用户注销
@@ -171,8 +191,23 @@ const doLogout = async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  color: var(--text-main);
+  border-radius: 50%;
+  border: none;
+}
+
+.theme-btn--light {
+  background: #000;
+}
+
+.theme-btn--dark {
+  background: #fff;
+}
+
+.theme-btn__icon {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  display: block;
 }
 
 @media (max-width: 768px) {
