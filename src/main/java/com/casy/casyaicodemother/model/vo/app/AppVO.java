@@ -59,6 +59,11 @@ public class AppVO implements Serializable {
     private Integer priority;
 
     /**
+     * 是否公布 0-不公布 1-公布
+     */
+    private Integer isPublish;
+
+    /**
      * 创建用户id
      */
     private Long userId;

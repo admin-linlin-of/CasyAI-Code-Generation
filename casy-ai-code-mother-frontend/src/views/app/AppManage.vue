@@ -34,6 +34,17 @@
         <a-form-item label="用户ID">
           <a-input-number v-model:value="searchParams.userId" :min="1" style="width: 140px" />
         </a-form-item>
+        <a-form-item label="是否公布">
+          <a-select
+            v-model:value="searchParams.isPublish"
+            allow-clear
+            style="width: 120px"
+            :options="[
+              { value: 0, label: '不公布' },
+              { value: 1, label: '公布' },
+            ]"
+          />
+        </a-form-item>
         <a-form-item>
           <a-space>
             <a-button html-type="submit" type="primary" :loading="loading">查询</a-button>
@@ -71,6 +82,11 @@
               </a-tag>
             </a-space>
           </template>
+          <template v-else-if="column.dataIndex === 'isPublish'">
+            <a-tag :color="record.isPublish === 1 ? 'green' : 'default'">
+              {{ record.isPublish === 1 ? '公布' : '不公布' }}
+            </a-tag>
+          </template>
           <template v-else-if="column.dataIndex === 'createTime' || column.dataIndex === 'updateTime'">
             {{ formatDate(record[column.dataIndex]) }}
           </template>
@@ -82,6 +98,9 @@
               </a-popconfirm>
               <a-button type="link" @click="toggleFeatured(record)">
                 {{ isFeatured(record.priority) ? '取消精选' : '精选' }}
+              </a-button>
+              <a-button type="link" @click="togglePublish(record)">
+                {{ isPublished(record.isPublish) ? '取消公布' : '公布' }}
               </a-button>
             </a-space>
           </template>
@@ -98,7 +117,7 @@ import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import { deleteApp, listAppVoByPage, updateAppByAdmin } from '@/api/appController'
 import { APP_TYPE_LABEL_MAP, APP_TYPE_OPTIONS } from '@/constant/appType'
-import { APP_FEATURED_PRIORITY } from '@/constant/constant'
+import { APP_FEATURED_PRIORITY, APP_NOT_PUBLISH, APP_PUBLISHED } from '@/constant/constant'
 
 const CODE_GEN_TYPE_LABEL_MAP: Record<string, string> = {
   multi_file: '多文件模式',
@@ -113,6 +132,7 @@ const columns = [
   { title: '生成类型', dataIndex: 'codeGenType' },
   { title: '应用类型', dataIndex: 'appTypes' },
   { title: '优先级', dataIndex: 'priority' },
+  { title: '是否公布', dataIndex: 'isPublish' },
   { title: '用户ID', dataIndex: 'userId' },
   { title: '部署Key', dataIndex: 'deployKey' },
   { title: '创建时间', dataIndex: 'createTime' },
@@ -170,6 +190,7 @@ const resetSearch = () => {
   searchParams.appTypes = undefined
   searchParams.priority = undefined
   searchParams.userId = undefined
+  searchParams.isPublish = undefined
   searchParams.pageNum = 1
   searchParams.pageSize = 10
   fetchData()
@@ -198,6 +219,7 @@ const goEdit = (id?: string) => {
 }
 
 const isFeatured = (priority?: number) => priority === APP_FEATURED_PRIORITY
+const isPublished = (isPublish?: number) => isPublish === APP_PUBLISHED
 
 const toggleFeatured = async (record: API.AppVO) => {
   if (!record.id) return
@@ -208,6 +230,21 @@ const toggleFeatured = async (record: API.AppVO) => {
   })
   if (res.data.code === 0) {
     message.success(featured ? '已取消精选' : '已设为精选')
+    fetchData()
+    return
+  }
+  message.error(res.data.message || '操作失败')
+}
+
+const togglePublish = async (record: API.AppVO) => {
+  if (!record.id) return
+  const published = isPublished(record.isPublish)
+  const res = await updateAppByAdmin({
+    id: record.id,
+    isPublish: published ? APP_NOT_PUBLISH : APP_PUBLISHED,
+  })
+  if (res.data.code === 0) {
+    message.success(published ? '已取消公布' : '已设为公布')
     fetchData()
     return
   }

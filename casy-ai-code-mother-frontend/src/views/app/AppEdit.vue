@@ -29,6 +29,14 @@
           </a-select>
         </a-form-item>
 
+        <a-form-item label="是否公布" name="isPublish">
+          <a-switch
+            v-model:checked="isPublished"
+            checked-children="公布"
+            un-checked-children="不公布"
+          />
+        </a-form-item>
+
         <template v-if="isAdmin">
           <a-form-item label="封面地址" name="cover">
             <a-input v-model:value="formState.cover" />
@@ -55,7 +63,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { APP_TYPE_OPTIONS } from '@/constant/appType'
-import ROLE_ENUM from '@/constant/constant'
+import ROLE_ENUM, { APP_PUBLISHED, APP_NOT_PUBLISH } from '@/constant/constant'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { getAppVoById, updateApp, updateAppByAdmin } from '@/api/appController'
 
@@ -74,6 +82,14 @@ const formState = reactive<API.AppAdminUpdateRequest>({
   cover: '',
   priority: 0,
   appTypes: [],
+  isPublish: APP_NOT_PUBLISH,
+})
+
+const isPublished = computed({
+  get: () => formState.isPublish === APP_PUBLISHED,
+  set: (checked: boolean) => {
+    formState.isPublish = checked ? APP_PUBLISHED : APP_NOT_PUBLISH
+  },
 })
 const ownerId = ref<number>()
 
@@ -91,6 +107,7 @@ const fetchData = async () => {
     formState.cover = app.cover || ''
     formState.priority = app.priority ?? 0
     formState.appTypes = app.appTypes ? [...app.appTypes] : []
+    formState.isPublish = app.isPublish ?? APP_NOT_PUBLISH
     ownerId.value = app.userId
     if (!isAdmin.value && ownerId.value !== loginUserStore.loginUser.id) {
       message.error('无权编辑该应用')
@@ -111,6 +128,7 @@ const submitForm = async () => {
         cover: formState.cover?.trim(),
         priority: formState.priority,
         appTypes: formState.appTypes,
+        isPublish: formState.isPublish,
       })
       if (res.data.code === 0) {
         message.success('保存成功')
@@ -123,6 +141,7 @@ const submitForm = async () => {
       id: appId.value,
       appName: formState.appName?.trim(),
       appTypes: formState.appTypes,
+      isPublish: formState.isPublish,
     })
     if (res.data.code === 0) {
       message.success('保存成功')

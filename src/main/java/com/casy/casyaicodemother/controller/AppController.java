@@ -59,7 +59,7 @@ public class AppController {
     }
 
     /**
-     * 根据 id 修改自己的应用（仅支持修改应用名称，并且用户只能更新自己的应用名称）
+     * 根据 id 修改自己的应用（支持修改应用名称、类型、是否公布）
      *
      * @param appUpdateRequest 更新应用请求
      * @return 是否更新成功
@@ -140,7 +140,7 @@ public class AppController {
     }
 
     /**
-     * 管理员根据 id 更新任意应用（支持更新应用名称、封面、优先级）
+     * 管理员根据 id 更新任意应用（支持更新应用名称、封面、优先级、是否公布）
      *
      * @param appAdminUpdateRequest 管理员更新请求
      * @return 是否更新成功

@@ -13,6 +13,16 @@ public interface AppConstant {
     Integer DEFAULT_APP_PRIORITY = 0;
 
     /**
+     * 应用不公布
+     */
+    Integer APP_NOT_PUBLISH = 0;
+
+    /**
+     * 应用已公布
+     */
+    Integer APP_PUBLISHED = 1;
+
+    /**
      * 用户分页查询最大条数
      */
     int MAX_PAGE_SIZE = 20;

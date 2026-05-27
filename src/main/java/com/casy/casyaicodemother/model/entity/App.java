@@ -88,6 +88,12 @@ public class App implements Serializable {
     private Integer priority;
 
     /**
+     * 是否公布 0-不公布 1-公布
+     */
+    @Column("is_publish")
+    private Integer isPublish;
+
+    /**
      * 创建用户id
      */
     @Column("user_id")

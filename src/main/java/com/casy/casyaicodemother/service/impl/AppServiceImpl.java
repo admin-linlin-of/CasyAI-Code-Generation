@@ -35,10 +35,7 @@ import reactor.core.publisher.Flux;
 
 import java.io.File;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -70,6 +67,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         app.setCodeGenType(codeGenType);
         app.setUserId(loginUser.getId());
         app.setPriority(0);
+        app.setIsPublish(AppConstant.APP_NOT_PUBLISH);
         String appName = appAddRequest.getAppName();
         if (StrUtil.isBlank(appName)) {
             // 应用名称暂时为 initPrompt 前 12 位
@@ -102,7 +100,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             validateAppTypes(appUpdateRequest.getAppTypes());
             app.setAppTypes(appUpdateRequest.getAppTypes());
         }
-        // 设置编辑时间
+        if (appUpdateRequest.getIsPublish() != null) {
+            validateIsPublish(appUpdateRequest.getIsPublish());
+            app.setIsPublish(appUpdateRequest.getIsPublish());
+        }
         app.setEditTime(LocalDateTime.now());
         return updateById(app);
     }
@@ -113,6 +114,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         getAppById(appAdminUpdateRequest.getId());
         if (appAdminUpdateRequest.getAppTypes() != null) {
             validateAppTypes(appAdminUpdateRequest.getAppTypes());
+        }
+        if (appAdminUpdateRequest.getIsPublish() != null) {
+            validateIsPublish(appAdminUpdateRequest.getIsPublish());
         }
         App app = new App();
         BeanUtil.copyProperties(appAdminUpdateRequest, app);
@@ -166,11 +170,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             return new ArrayList<>();
         }
         // 批量获取用户信息，避免 N+1 查询问题
-        Set<Long> userIds = appList.stream()
-                .map(App::getUserId)
-                .collect(Collectors.toSet());
-        Map<Long, UserVO> userVOMap = userService.listByIds(userIds).stream()
-                .collect(Collectors.toMap(User::getId, userService::getUserVO));
+        Map<Long, UserVO> userVOMap = buildUserVOMap(appList.stream().map(App::getUserId).collect(Collectors.toSet()));
         return appList.stream().map(app -> {
             AppVO appVO = getAppVO(app);
             UserVO userVO = userVOMap.get(app.getUserId());
@@ -186,6 +186,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         ThrowUtils.throwIf(appQueryRequest.getPageSize() > 20, ErrorCode.PARAMS_ERROR, "每页最多查询 20 个应用");
         int pageSize = Math.min(appQueryRequest.getPageSize(), AppConstant.MAX_PAGE_SIZE);
         // 只查询当前用户的应用
+        appQueryRequest.setUserId(loginUser.getId());
         QueryWrapper queryWrapper = getQueryWrapper(appQueryRequest);
         Page<App> appPage = page(Page.of(pageNum, pageSize), queryWrapper);
         return toAppVOPage(appPage, pageNum, pageSize, loginUser);
@@ -227,6 +228,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         String deployKey = appQueryRequest.getDeployKey();
         Integer priority = appQueryRequest.getPriority();
         Long userId = appQueryRequest.getUserId();
+        Integer isPublish = appQueryRequest.getIsPublish();
         String sortField = appQueryRequest.getSortField();
         String sortOrder = appQueryRequest.getSortOrder();
         return QueryWrapper.create()
@@ -241,6 +243,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 .eq("deploy_key", deployKey, StrUtil.isNotBlank(deployKey))
                 .ge("priority", priority, priority != null)
                 .eq("user_id", userId)
+                .eq("is_publish", isPublish, isPublish != null)
                 .orderBy(sortField, "ascend".equals(sortOrder));
     }
 
@@ -322,12 +325,12 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      */
     private Page<AppVO> toAppVOPage(Page<App> appPage, int pageNum, int pageSize, User loginUser) {
         Page<AppVO> appVOPage = new Page<>(pageNum, pageSize, appPage.getTotalRow());
-
+        if (CollUtil.isEmpty(appPage.getRecords())) {
+            return appVOPage;
+        }
         // 批量获取用户信息，避免一个一个的查
-        Set<Long> userIds = appPage.getRecords().stream()
-                .map(App::getUserId)
-                .collect(Collectors.toSet());
-        Map<Long, UserVO> userVOMap = userService.listByIds(userIds).stream().collect(Collectors.toMap(User::getId, userService::getUserVO));
+        Map<Long, UserVO> userVOMap = buildUserVOMap(
+                appPage.getRecords().stream().map(App::getUserId).collect(Collectors.toSet()));
         appVOPage.setRecords(appPage.getRecords().stream()
                 .map(app -> {
                     AppVO appVO = getAppVO(app);
@@ -337,6 +340,24 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 })
                 .collect(Collectors.toList()));
         return appVOPage;
+    }
+
+    private Map<Long, UserVO> buildUserVOMap(Set<Long> userIds) {
+        if (CollUtil.isEmpty(userIds)) {
+            return Collections.emptyMap();
+        }
+        userIds.removeIf(Objects::isNull);
+        if (CollUtil.isEmpty(userIds)) {
+            return Collections.emptyMap();
+        }
+        return userService.listByIds(userIds).stream()
+                .collect(Collectors.toMap(User::getId, userService::getUserVO));
+    }
+
+    private void validateIsPublish(Integer isPublish) {
+        ThrowUtils.throwIf(!AppConstant.APP_NOT_PUBLISH.equals(isPublish)
+                        && !AppConstant.APP_PUBLISHED.equals(isPublish),
+                ErrorCode.PARAMS_ERROR, "是否公布参数无效");
     }
 
     /**

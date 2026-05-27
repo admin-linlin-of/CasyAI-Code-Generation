@@ -29,7 +29,7 @@ public interface AppService extends IService<App> {
     long createApp(AppAddRequest appAddRequest, User loginUser);
 
     /**
-     * 用户更新自己的应用（仅应用名称）
+     * 用户更新自己的应用（应用名称、类型、是否公布）
      *
      * @param appUpdateRequest 更新请求
      * @param loginUser        当前登录用户
@@ -38,7 +38,7 @@ public interface AppService extends IService<App> {
     boolean updateApp(AppUpdateRequest appUpdateRequest, User loginUser);
 
     /**
-     * 管理员更新任意应用（名称、封面、优先级）
+     * 管理员更新任意应用（名称、封面、优先级、是否公布）
      *
      * @param appAdminUpdateRequest 管理员更新请求
      * @return 是否更新成功

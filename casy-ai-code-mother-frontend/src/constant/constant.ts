@@ -8,5 +8,7 @@ const ROLE_ENUM = {
 }
 
 export const APP_FEATURED_PRIORITY = 99
+export const APP_NOT_PUBLISH = 0
+export const APP_PUBLISHED = 1
 
 export default ROLE_ENUM

@@ -108,6 +108,13 @@
               style="width: 100%"
             />
           </a-form-item>
+          <a-form-item label="是否公布">
+            <a-switch
+              v-model:checked="detailPublished"
+              checked-children="公布"
+              un-checked-children="不公布"
+            />
+          </a-form-item>
           <a-space>
             <a-button type="primary" :loading="updating" @click="doUpdateApp">修改</a-button>
             <a-button danger :loading="deleting" @click="confirmDeleteApp">删除</a-button>
@@ -144,6 +151,7 @@ import request from '@/axios/request'
 import AiMarkdownMessage from '@/components/AiMarkdownMessage.vue'
 import CodeWorkspace from '@/components/CodeWorkspace.vue'
 import { APP_TYPE_OPTIONS } from '@/constant/appType'
+import { APP_NOT_PUBLISH, APP_PUBLISHED } from '@/constant/constant'
 import {
   fetchSavedVirtualFiles,
   hasVirtualFileContent,
@@ -176,6 +184,14 @@ const deployUrl = ref('')
 const detailForm = reactive({
   appName: '',
   appTypes: [] as string[],
+  isPublish: APP_NOT_PUBLISH,
+})
+
+const detailPublished = computed({
+  get: () => detailForm.isPublish === APP_PUBLISHED,
+  set: (checked: boolean) => {
+    detailForm.isPublish = checked ? APP_PUBLISHED : APP_NOT_PUBLISH
+  },
 })
 const modelType = ref(
   typeof route.query.modelType === 'string' ? route.query.modelType : 'deepseek-v4-flash',
@@ -263,6 +279,7 @@ const fetchAppInfo = async () => {
 const openDetailModal = () => {
   detailForm.appName = appInfo.value?.appName || ''
   detailForm.appTypes = appInfo.value?.appTypes ? [...appInfo.value.appTypes] : []
+  detailForm.isPublish = appInfo.value?.isPublish ?? APP_NOT_PUBLISH
   detailVisible.value = true
 }
 
@@ -278,12 +295,14 @@ const doUpdateApp = async () => {
       id: appId.value,
       appName,
       appTypes: detailForm.appTypes,
+      isPublish: detailForm.isPublish,
     })
     if (res.data.code === 0) {
       message.success('修改成功')
       if (appInfo.value) {
         appInfo.value.appName = appName
         appInfo.value.appTypes = [...detailForm.appTypes]
+        appInfo.value.isPublish = detailForm.isPublish
       }
       detailVisible.value = false
       return
