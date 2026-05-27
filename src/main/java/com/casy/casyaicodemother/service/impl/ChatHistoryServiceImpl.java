@@ -5,7 +5,6 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.casy.casyaicodemother.constant.ChatHistoryConstant;
 import com.casy.casyaicodemother.constant.UserConstant;
-import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.exception.ThrowUtils;
 import com.casy.casyaicodemother.mapper.AppMapper;
@@ -72,7 +71,7 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         checkChatHistoryViewAuth(app, loginUser);
         int pageNum = chatHistoryQueryRequest.getPageNum();
         ThrowUtils.throwIf(chatHistoryQueryRequest.getPageSize() > ChatHistoryConstant.MAX_PAGE_SIZE,
-                ErrorCode.PARAMS_ERROR, "每页最多查询 20 条对话");
+                ErrorCode.PARAMS_ERROR, "每页最多查询 50 条对话");
         int pageSize = chatHistoryQueryRequest.getPageSize() <= 0
                 ? ChatHistoryConstant.DEFAULT_PAGE_SIZE
                 : Math.min(chatHistoryQueryRequest.getPageSize(), ChatHistoryConstant.MAX_PAGE_SIZE);
@@ -83,6 +82,7 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
             chatHistoryQueryRequest.setSortOrder("descend");
         }
         Page<ChatHistory> chatHistoryPage = page(Page.of(pageNum, pageSize), getQueryWrapper(chatHistoryQueryRequest));
+        // pageNum 的值应为1
         return toChatHistoryVOPage(chatHistoryPage, pageNum, pageSize, false);
     }
 
@@ -114,6 +114,13 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         return chatHistoryVO;
     }
 
+    /**
+     * dto -> vo
+     *
+     * @param chatHistoryList 消息记录
+     * @param includeAppInfo 是否包含应用信息
+     * @return voList
+     */
     @Override
     public List<ChatHistoryVO> getChatHistoryVOList(List<ChatHistory> chatHistoryList, boolean includeAppInfo) {
         if (CollUtil.isEmpty(chatHistoryList)) {
@@ -134,33 +141,66 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         }).collect(Collectors.toList());
     }
 
+    /**
+     * 获取查询包装类
+     *
+     * @param chatHistoryQueryRequest 消息查询对象
+     * @return 查询的对象
+     */
     @Override
     public QueryWrapper getQueryWrapper(ChatHistoryQueryRequest chatHistoryQueryRequest) {
+        QueryWrapper queryWrapper = QueryWrapper.create();
         if (chatHistoryQueryRequest == null) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
+            return queryWrapper;
         }
         Long id = chatHistoryQueryRequest.getId();
+        String message = chatHistoryQueryRequest.getMessage();
+        String messageType = chatHistoryQueryRequest.getMessageType();
         Long appId = chatHistoryQueryRequest.getAppId();
         Long userId = chatHistoryQueryRequest.getUserId();
-        String messageType = chatHistoryQueryRequest.getMessageType();
+        LocalDateTime lastCreateTime = chatHistoryQueryRequest.getLastCreateTime();
         String sortField = chatHistoryQueryRequest.getSortField();
         String sortOrder = chatHistoryQueryRequest.getSortOrder();
         if (StrUtil.isNotBlank(messageType)) {
             ThrowUtils.throwIf(MessageTypeEnum.getEnumByValue(messageType) == null,
                     ErrorCode.PARAMS_ERROR, "消息类型无效");
         }
-        return QueryWrapper.create()
-                .eq("id", id)
-                .eq("app_id", appId)
-                .eq("user_id", userId)
-                .eq("message_type", messageType, StrUtil.isNotBlank(messageType))
-                .orderBy(sortField, "ascend".equals(sortOrder));
+        // 拼接查询条件
+        queryWrapper.eq(ChatHistory::getId, id)
+                .like(ChatHistory::getMessage, message)
+                .eq(ChatHistory::getMessageType, messageType)
+                .eq(ChatHistory::getAppId, appId)
+                .eq(ChatHistory::getUserId, userId);
+
+        // 游标查询逻辑 - 只使用 create_time 作为游标
+        if (lastCreateTime != null) {
+            queryWrapper.lt(ChatHistory::getCreateTime, lastCreateTime);
+        }
+        // 排序
+        if (StrUtil.isNotBlank(sortField)) {
+            queryWrapper.orderBy(sortField, "ascend".equals(sortOrder));
+        } else {
+            // 默认按创建时间降序排列
+            queryWrapper.orderBy(ChatHistory::getCreateTime, false);
+        }
+        return queryWrapper;
     }
 
+    /**
+     * 添加对话消息
+     *
+     * @param appId 应用id
+     * @param message 消息内容
+     * @param messageType 消息类型
+     * @param loginUser 登录用户
+     * @param parentId 父消息id，如果当前消息是AI消息或错误消息时其parentId为用户的消息ID
+     * @return 消息的ID
+     */
     private long saveMessage(Long appId, String message, String messageType, User loginUser, Long parentId) {
-        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR);
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID不能为空");
         ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "消息内容不能为空");
-        ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR);
+        ThrowUtils.throwIf(StrUtil.isBlank(messageType), ErrorCode.PARAMS_ERROR, "消息类型不能为空");
+        ThrowUtils.throwIf(loginUser == null || loginUser.getId() == null || loginUser.getId() <= 0, ErrorCode.PARAMS_ERROR, "用户ID不能为空");
         ChatHistory chatHistory = ChatHistory.builder()
                 .message(message)
                 .messageType(messageType)
@@ -173,6 +213,12 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         return chatHistory.getId();
     }
 
+    /**
+     * 校验用户是否有权限查看对话历史
+     *
+     * @param app 应用
+     * @param loginUser 用户
+     */
     private void checkChatHistoryViewAuth(App app, User loginUser) {
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR);
         if (UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole())) {

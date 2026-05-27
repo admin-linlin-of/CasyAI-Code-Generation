@@ -30,6 +30,7 @@ type MenuItemConfig = {
 const originItems = [
   { key: 'home', label: '首页', path: '/' },
   { key: 'appManage', label: '应用管理', path: '/app/manage' },
+  { key: 'chatHistoryManage', label: '对话管理', path: '/chatHistory/manage' },
   { key: 'userManage', label: '用户管理', path: '/user/userManage' },
 ]
 const loginUserStore = useLoginUserStore()

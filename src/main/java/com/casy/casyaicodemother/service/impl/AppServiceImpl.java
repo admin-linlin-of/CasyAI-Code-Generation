@@ -32,6 +32,7 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
@@ -130,6 +131,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean deleteApp(long id, User loginUser) {
         App app = getAppById(id);
         checkAppAuth(app, loginUser, "");
@@ -139,6 +141,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean deleteAppByAdmin(long id) {
         App app = getAppById(id);
         deleteAppFiles(app);
@@ -278,11 +281,15 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (modelTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的AI模型");
         }
+        // 5. 通过校验后，添加用户消息到对话历史
         long userMessageId = chatHistoryService.saveUserMessage(appId, message, loginUser);
         StringBuilder aiResponseBuilder = new StringBuilder();
         return aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, modelTypeEnum, appId)
+                // 收集AI响应
                 .doOnNext(aiResponseBuilder::append)
+                // 6. 添加AI消息到对话历史
                 .doOnComplete(() -> chatHistoryService.saveAiMessage(appId, userMessageId, aiResponseBuilder.toString(), loginUser))
+                // 7. 添加AI异常消息到对话历史
                 .doOnError(error -> chatHistoryService.saveErrorMessage(appId, userMessageId, error.getMessage(), loginUser));
     }
 

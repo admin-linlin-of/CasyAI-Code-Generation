@@ -12,9 +12,14 @@
     <div class="core-layout">
       <section class="chat-panel">
         <div ref="messageRef" class="message-list">
+          <div v-if="historyHasMore" class="load-more">
+            <a-button :loading="loadingMoreHistory" type="link" @click="loadMoreHistory">
+              加载更多
+            </a-button>
+          </div>
           <div
             v-for="(msg, index) in messages"
-            :key="`${msg.role}-${index}`"
+            :key="msg.id ? `h-${msg.id}` : `${msg.role}-${index}`"
             :class="[
               'message-item',
               msg.role === 'user' ? 'message-item--user' : 'message-item--ai',
@@ -146,6 +151,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { deleteApp, deployApp, getAppVoById, updateApp } from '@/api/appController'
+import { listAppChatHistoryByPage } from '@/api/chatHistoryController'
+import { useLoginUserStore } from '@/stores/loginUser'
 import { CheckCircleOutlined } from '@ant-design/icons-vue'
 import request from '@/axios/request'
 import AiMarkdownMessage from '@/components/AiMarkdownMessage.vue'
@@ -160,19 +167,23 @@ import {
 } from '@/utils/virtualFiles'
 
 type ChatMessage = {
+  id?: number
   role: 'user' | 'ai'
   content: string
-  /** true 表示 SSE 进行中，AiMarkdownMessage 启用打字机与加载动画 */
+  createTime?: string
   streaming?: boolean
 }
 
+const HISTORY_PAGE_SIZE = 10
+
 const route = useRoute()
 const router = useRouter()
+const loginUserStore = useLoginUserStore()
 const appId = computed(() => {
-  console.log('route.params.id: ', route.params.id)
   const id = route.params.id
   return (Array.isArray(id) ? String(id[0]) : String(id)) ?? ''
 })
+const appIdNumber = computed(() => Number(appId.value))
 const inputMessage = ref('')
 const generating = ref(false)
 const deploying = ref(false)
@@ -206,7 +217,17 @@ const messages = ref<ChatMessage[]>([])
 const previewUrl = ref('')
 const showPreview = ref(false)
 const messageRef = ref<HTMLElement>()
+const loadingHistory = ref(false)
+const loadingMoreHistory = ref(false)
+const historyHasMore = ref(false)
+const historyCursor = ref<string>()
 let eventSource: EventSource | null = null
+
+const isOwnApp = computed(() => {
+  const loginUserId = loginUserStore.loginUser.id
+  const ownerId = appInfo.value?.userId
+  return loginUserId != null && ownerId != null && loginUserId === ownerId
+})
 
 /** 右侧面板视图：code = Monaco 代码，preview = iframe 预览 */
 type RightViewMode = 'code' | 'preview'
@@ -238,14 +259,58 @@ const displayVirtualFiles = computed(() => {
 /** 是否已有可展示的代码（控制 CodeWorkspace 显示） */
 const hasCodeContent = computed(() => hasVirtualFileContent(displayVirtualFiles.value))
 
-/** 从后端已保存的静态资源拉取代码文件 */
 const loadSavedCodeFiles = async () => {
   if (!previewUrl.value) return
   const files = await fetchSavedVirtualFiles(previewUrl.value)
-  if (files.length) {
-    savedVirtualFiles.value = files
-    showPreview.value = true
+  if (files.length) savedVirtualFiles.value = files
+}
+
+const toChatMessage = (item: API.ChatHistoryVO): ChatMessage => ({
+  id: item.id,
+  role: item.messageType === 'user' ? 'user' : 'ai',
+  content: item.message || '',
+  createTime: item.createTime,
+})
+
+const applyHistoryRecords = (records: API.ChatHistoryVO[], prepend: boolean) => {
+  const sorted = [...records].reverse().map(toChatMessage)
+  if (!sorted.length) return
+  messages.value = prepend ? [...sorted, ...messages.value] : sorted
+  historyCursor.value = messages.value[0]?.createTime
+  historyHasMore.value = records.length >= HISTORY_PAGE_SIZE
+}
+
+const loadChatHistory = async (lastCreateTime?: string) => {
+  const loadingMore = Boolean(lastCreateTime)
+  if (loadingMore) loadingMoreHistory.value = true
+  else loadingHistory.value = true
+  try {
+    const res = await listAppChatHistoryByPage({
+      appId: appIdNumber.value,
+      pageNum: 1,
+      pageSize: HISTORY_PAGE_SIZE,
+      sortField: 'create_time',
+      sortOrder: 'descend',
+      lastCreateTime,
+    })
+    if (res.data.code === 0 && res.data.data) {
+      applyHistoryRecords(res.data.data.records ?? [], loadingMore)
+      return
+    }
+    if (!loadingMore) message.error(res.data.message || '获取对话历史失败')
+  } finally {
+    if (loadingMore) loadingMoreHistory.value = false
+    else loadingHistory.value = false
   }
+}
+
+const loadMoreHistory = async () => {
+  if (!historyHasMore.value || loadingMoreHistory.value || !historyCursor.value) return
+  const el = messageRef.value
+  const prevHeight = el?.scrollHeight ?? 0
+  await loadChatHistory(historyCursor.value)
+  await nextTick()
+  if (el) el.scrollTop = el.scrollHeight - prevHeight
 }
 
 const buildPreviewUrl = () => {
@@ -270,10 +335,9 @@ const fetchAppInfo = async () => {
   if (res.data.code === 0 && res.data.data) {
     appInfo.value = res.data.data
     buildPreviewUrl()
-    await loadSavedCodeFiles()
     return
   }
-  message.error(res.data.message || '鑾峰彇搴旂敤淇℃伅澶辫触')
+  message.error(res.data.message || '获取应用信息失败')
 }
 
 const openDetailModal = () => {
@@ -441,7 +505,18 @@ const doDeploy = async () => {
 
 onMounted(async () => {
   await fetchAppInfo()
-  if (route.query.autoStart === '1') {
+  await loadChatHistory()
+  if (messages.value.length > 0) {
+    showPreview.value = true
+    rightViewMode.value = 'preview'
+    await loadSavedCodeFiles()
+    await scrollToBottom()
+  }
+  if (
+    route.query.autoStart === '1' &&
+    isOwnApp.value &&
+    messages.value.length === 0
+  ) {
     const initPrompt =
       typeof route.query.initPrompt === 'string' ? route.query.initPrompt.trim() : ''
     if (initPrompt) {
@@ -503,6 +578,11 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow: auto;
   padding: 14px;
+}
+
+.load-more {
+  text-align: center;
+  margin-bottom: 8px;
 }
 
 .message-item {
