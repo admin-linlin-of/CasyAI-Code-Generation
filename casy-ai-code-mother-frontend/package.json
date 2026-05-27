@@ -14,11 +14,13 @@
     "lint": "eslint . --ext .vue,.ts,.tsx --fix"
   },
   "dependencies": {
+    "@monaco-editor/loader": "^1.7.0",
     "ant-design-vue": "^4.2.6",
     "axios": "^1.15.2",
     "dompurify": "^3.4.5",
     "highlight.js": "^11.11.1",
     "markdown-it": "^14.1.1",
+    "monaco-editor": "^0.55.1",
     "pinia": "^3.0.4",
     "vue": "^3.5.31",
     "vue-router": "^5.0.4"

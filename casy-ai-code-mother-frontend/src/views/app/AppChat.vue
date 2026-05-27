@@ -47,16 +47,40 @@
         </div>
       </section>
 
+      <!-- 右侧：代码 / 预览 共用同一区域，通过 Segmented 切换 -->
       <section class="preview-panel">
         <div class="preview-panel__head">
-          <span>网页展示</span>
-          <a v-if="previewUrl" :href="previewUrl" rel="noreferrer" target="_blank">新窗口打开</a>
+          <a-segmented v-model:value="rightViewMode" :options="rightViewOptions" size="small" />
+          <a
+            v-if="rightViewMode === 'preview' && previewUrl && showPreview"
+            :href="previewUrl"
+            rel="noreferrer"
+            target="_blank"
+          >
+            新窗口打开
+          </a>
         </div>
         <div class="preview-panel__body">
-          <iframe v-if="showPreview" :src="previewUrl" title="app-preview" />
+          <!-- 代码模式：Monaco + 文件树 -->
+          <CodeWorkspace
+            v-if="rightViewMode === 'code' && hasCodeContent"
+            :files="displayVirtualFiles"
+            :read-only="generating"
+          />
+          <!-- 预览模式：iframe 展示后端静态资源 -->
+          <iframe
+            v-else-if="rightViewMode === 'preview' && showPreview"
+            :key="previewUrl"
+            :src="previewUrl"
+            title="app-preview"
+          />
           <a-empty
             v-else
-            :description="generating ? '代码生成中，完成后自动展示' : '代码生成完成后展示预览'"
+            :description="
+              generating
+                ? '代码生成中，可切换到代码查看实时输出'
+                : '发送消息开始生成，或切换到预览查看效果'
+            "
           />
         </div>
       </section>
@@ -118,7 +142,14 @@ import { deleteApp, deployApp, getAppVoById, updateApp } from '@/api/appControll
 import { CheckCircleOutlined } from '@ant-design/icons-vue'
 import request from '@/axios/request'
 import AiMarkdownMessage from '@/components/AiMarkdownMessage.vue'
+import CodeWorkspace from '@/components/CodeWorkspace.vue'
 import { APP_TYPE_OPTIONS } from '@/constant/appType'
+import {
+  fetchSavedVirtualFiles,
+  hasVirtualFileContent,
+  parseAiContentToVirtualFiles,
+  type VirtualFile,
+} from '@/utils/virtualFiles'
 
 type ChatMessage = {
   role: 'user' | 'ai'
@@ -161,6 +192,46 @@ const showPreview = ref(false)
 const messageRef = ref<HTMLElement>()
 let eventSource: EventSource | null = null
 
+/** 右侧面板视图：code = Monaco 代码，preview = iframe 预览 */
+type RightViewMode = 'code' | 'preview'
+const rightViewMode = ref<RightViewMode>('preview')
+const rightViewOptions = [
+  { value: 'code', label: '代码' },
+  { value: 'preview', label: '预览' },
+]
+
+/** 从后端静态目录加载的代码（刷新页面或 SSE 解析失败时使用） */
+const savedVirtualFiles = ref<VirtualFile[]>([])
+
+/** 取最后一条 AI 消息的内容，用于解析虚拟文件 */
+const latestAiContent = computed(() => {
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    const msg = messages.value[i]
+    if (msg?.role === 'ai') return msg.content
+  }
+  return ''
+})
+
+/** 优先从 SSE 聊天内容解析，解析不到则用静态目录文件 */
+const displayVirtualFiles = computed(() => {
+  const fromChat = parseAiContentToVirtualFiles(latestAiContent.value)
+  if (hasVirtualFileContent(fromChat)) return fromChat
+  return savedVirtualFiles.value
+})
+
+/** 是否已有可展示的代码（控制 CodeWorkspace 显示） */
+const hasCodeContent = computed(() => hasVirtualFileContent(displayVirtualFiles.value))
+
+/** 从后端已保存的静态资源拉取代码文件 */
+const loadSavedCodeFiles = async () => {
+  if (!previewUrl.value) return
+  const files = await fetchSavedVirtualFiles(previewUrl.value)
+  if (files.length) {
+    savedVirtualFiles.value = files
+    showPreview.value = true
+  }
+}
+
 const buildPreviewUrl = () => {
   const codeGenType = appInfo.value?.codeGenType || 'multi_file'
   previewUrl.value = `http://localhost:8124/api/static/${codeGenType}_${appId.value}/`
@@ -183,6 +254,7 @@ const fetchAppInfo = async () => {
   if (res.data.code === 0 && res.data.data) {
     appInfo.value = res.data.data
     buildPreviewUrl()
+    await loadSavedCodeFiles()
     return
   }
   message.error(res.data.message || '鑾峰彇搴旂敤淇℃伅澶辫触')
@@ -267,6 +339,8 @@ const openDeployUrl = () => {
 const startStream = (messageText: string) => {
   generating.value = true
   showPreview.value = false
+  // 开始生成时自动切到代码视图，实时看 Monaco 流式输出
+  rightViewMode.value = 'code'
   const aiMsg: ChatMessage = { role: 'ai', content: '', streaming: true }
   messages.value.push(aiMsg)
   const baseURL = request.defaults.baseURL ?? ''
@@ -289,15 +363,17 @@ const startStream = (messageText: string) => {
     scrollToBottom()
   }
 
-  eventSource.addEventListener('done', () => {
+  eventSource.addEventListener('done', async () => {
     if (finished) return
     finished = true
-    // 关闭打字机，展示完整内容并刷新预览
+    // 关闭打字机，刷新预览并自动切到预览视图
     aiMsg.streaming = false
     generating.value = false
     showPreview.value = true
+    rightViewMode.value = 'preview'
     closeEventSource()
     buildPreviewUrl()
+    await loadSavedCodeFiles()
   })
 
   eventSource.onerror = () => {
@@ -467,12 +543,15 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   border-bottom: 1px solid var(--border-color);
 }
 
 .preview-panel__body {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .preview-panel__body iframe {

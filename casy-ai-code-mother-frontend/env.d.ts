@@ -46,3 +46,8 @@ interface ViewTransition {
 interface Document {
   startViewTransition?: (callback: () => void | Promise<void>) => ViewTransition
 }
+
+declare module '*?worker' {
+  const workerConstructor: new () => Worker
+  export default workerConstructor
+}

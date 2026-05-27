@@ -114,3 +114,14 @@ COMMENT ON COLUMN "t_app".app_types IS '应用类型数组，JSON格式，每个
 
 -- 创建 GIN 索引，支持 jsonb 数组的包含查询
 CREATE INDEX idx_app_apptypes ON "t_app" USING GIN (app_types);
+
+
+-- 1. 添加字段
+ALTER TABLE "t_app"
+    ADD COLUMN IF NOT EXISTS is_publish SMALLINT NOT NULL DEFAULT 0;
+
+-- 2. 添加字段注释（说明用途）
+COMMENT ON COLUMN "t_app".is_publish IS '是否公布应用，0不公布，1公布';
+
+-- 创建 is_publish 的索引
+CREATE INDEX IF NOT EXISTS idx_app_is_publish ON t_app (is_publish);
