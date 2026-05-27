@@ -38,6 +38,8 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static com.casy.casyaicodemother.constant.AppConstant.APP_PUBLISHED;
+
 /**
  * 应用 服务层实现。
  */
@@ -127,13 +129,14 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     public boolean deleteApp(long id, User loginUser) {
         App app = getAppById(id);
         checkAppAuth(app, loginUser, "");
+        deleteAppFiles(app);
         return removeById(id);
     }
 
     @Override
     public boolean deleteAppByAdmin(long id) {
-        // 查询数据库是否存在
-        getAppById(id);
+        App app = getAppById(id);
+        deleteAppFiles(app);
         return removeById(id);
     }
 
@@ -200,6 +203,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         int pageSize = Math.min(appQueryRequest.getPageSize(), AppConstant.MAX_PAGE_SIZE);
         // 只查询精选的应用
         appQueryRequest.setPriority(AppConstant.GOOD_APP_PRIORITY);
+        // 应用必须公布
+        appQueryRequest.setIsPublish(APP_PUBLISHED);
         QueryWrapper queryWrapper = getQueryWrapper(appQueryRequest);
         Page<App> appPage = page(Page.of(pageNum, pageSize), queryWrapper);
         return toAppVOPage(appPage, pageNum, pageSize, null);
@@ -356,7 +361,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     private void validateIsPublish(Integer isPublish) {
         ThrowUtils.throwIf(!AppConstant.APP_NOT_PUBLISH.equals(isPublish)
-                        && !AppConstant.APP_PUBLISHED.equals(isPublish),
+                        && !APP_PUBLISHED.equals(isPublish),
                 ErrorCode.PARAMS_ERROR, "是否公布参数无效");
     }
 
@@ -380,6 +385,19 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      * @param app       应用实体
      * @param loginUser 当前登录用户
      */
+    private void deleteAppFiles(App app) {
+        String codeGenType = app.getCodeGenType();
+        if (StrUtil.isNotBlank(codeGenType)) {
+            String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + codeGenType + "_" + app.getId();
+            FileUtil.del(sourceDirPath);
+        }
+        String deployKey = app.getDeployKey();
+        if (StrUtil.isNotBlank(deployKey)) {
+            String deployDirPath = AppConstant.CODE_DEPLOY_ROOT_DIR + File.separator + deployKey;
+            FileUtil.del(deployDirPath);
+        }
+    }
+
     private void checkAppAuth(App app, User loginUser, String message) {
         if (StrUtil.isBlank(message)) {
             message = "无权访问该应用";
