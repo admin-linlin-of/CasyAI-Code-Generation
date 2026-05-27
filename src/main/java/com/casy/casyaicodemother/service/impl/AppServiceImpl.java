@@ -25,6 +25,7 @@ import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import com.casy.casyaicodemother.model.vo.app.AppVO;
 import com.casy.casyaicodemother.model.vo.user.UserVO;
 import com.casy.casyaicodemother.service.AppService;
+import com.casy.casyaicodemother.service.ChatHistoryService;
 import com.casy.casyaicodemother.service.UserService;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
@@ -51,6 +52,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Resource
     private AiCodeGeneratorFacade aiCodeGeneratorFacade;
+
+    @Resource
+    private ChatHistoryService chatHistoryService;
 
     @Override
     public long createApp(AppAddRequest appAddRequest, User loginUser) {
@@ -130,6 +134,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         App app = getAppById(id);
         checkAppAuth(app, loginUser, "");
         deleteAppFiles(app);
+        chatHistoryService.deleteByAppId(id);
         return removeById(id);
     }
 
@@ -137,6 +142,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     public boolean deleteAppByAdmin(long id) {
         App app = getAppById(id);
         deleteAppFiles(app);
+        chatHistoryService.deleteByAppId(id);
         return removeById(id);
     }
 
@@ -272,8 +278,12 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (modelTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的AI模型");
         }
-        // 5. 调用 AI 生成代码
-        return aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, modelTypeEnum, appId);
+        long userMessageId = chatHistoryService.saveUserMessage(appId, message, loginUser);
+        StringBuilder aiResponseBuilder = new StringBuilder();
+        return aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, modelTypeEnum, appId)
+                .doOnNext(aiResponseBuilder::append)
+                .doOnComplete(() -> chatHistoryService.saveAiMessage(appId, userMessageId, aiResponseBuilder.toString(), loginUser))
+                .doOnError(error -> chatHistoryService.saveErrorMessage(appId, userMessageId, error.getMessage(), loginUser));
     }
 
     @Override

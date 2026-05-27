@@ -125,3 +125,47 @@ COMMENT ON COLUMN "t_app".is_publish IS '是否公布应用，0不公布，1公�
 
 -- 创建 is_publish 的索引
 CREATE INDEX IF NOT EXISTS idx_app_is_publish ON t_app (is_publish);
+
+-- 对话历史表
+CREATE TABLE t_chat_history
+(
+    id           BIGSERIAL PRIMARY KEY,
+    message      TEXT         NOT NULL,
+    message_type VARCHAR(32)  NOT NULL,
+    app_id       BIGINT       NOT NULL,
+    user_id      BIGINT       NOT NULL,
+    parent_id    BIGINT           NULL,
+    create_time  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_delete    SMALLINT     NOT NULL DEFAULT 0
+);
+
+CREATE INDEX idx_app_id ON t_chat_history (app_id);
+CREATE INDEX idx_create_time ON t_chat_history (create_time);
+CREATE INDEX idx_app_id_create_time ON t_chat_history (app_id, create_time);
+
+CREATE OR REPLACE FUNCTION update_t_chat_history_update_time()
+    RETURNS TRIGGER AS $$
+BEGIN
+    NEW.update_time = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_t_chat_history_update_time
+    BEFORE UPDATE ON t_chat_history
+    FOR EACH ROW
+EXECUTE FUNCTION update_t_chat_history_update_time();
+
+COMMENT ON TABLE t_chat_history IS '对话历史';
+COMMENT ON COLUMN t_chat_history.id IS 'id';
+COMMENT ON COLUMN t_chat_history.message IS '消息';
+COMMENT ON COLUMN t_chat_history.message_type IS 'user/ai';
+COMMENT ON COLUMN t_chat_history.app_id IS '应用id';
+COMMENT ON COLUMN t_chat_history.user_id IS '创建用户id';
+COMMENT ON COLUMN t_chat_history.create_time IS '创建时间';
+COMMENT ON COLUMN t_chat_history.update_time IS '更新时间';
+COMMENT ON COLUMN t_chat_history.is_delete IS '是否删除';
+-- TODO 可以按需添加 parentId 字段，将 AI 消息和对应的用户提示词进行关联，便于生成失败时的重试、或者用户手动重新生成,我不太理解这个意思，不过应该是涉及重试的逻辑，之后在实现
+COMMENT ON COLUMN t_chat_history.parent_id IS '父消息id';
+-- TODO 如果需要保存每个版本的代码文件，还可以添加 fileList 字段，结构为 JSON 数组格式，这样每条消息就对应一个代码版本。这样肯定不行，我准备采用一个版本表，然后在目录中再加一层目录 v1.v2.v3...
