@@ -383,7 +383,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      * 校验当前用户是否为应用创建者
      *
      * @param app       应用实体
-     * @param loginUser 当前登录用户
      */
     private void deleteAppFiles(App app) {
         String codeGenType = app.getCodeGenType();

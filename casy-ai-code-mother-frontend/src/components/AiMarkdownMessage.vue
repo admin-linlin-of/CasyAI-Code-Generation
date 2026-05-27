@@ -67,6 +67,7 @@ const tick = () => {
     return
   }
   displayLen.value = Math.min(target, displayLen.value + CHARS_PER_FRAME)
+  // 浏览器大约 每秒 60 次（每屏刷新一次）会执行你注册的回调。requestAnimationFrame(tick) 的意思是：下一帧刷新屏幕之前，请执行一次 tick 函数。
   rafId = requestAnimationFrame(tick)
 }
 
