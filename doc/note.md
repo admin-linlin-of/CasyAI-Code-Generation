@@ -137,3 +137,21 @@
 
 版本控制，代码区别想要添加这些功能需要了解完成对话记忆之后在实现
 
+
+## 坑
+### AI响应的内容为JSON格式
+1. **response-format: json_object**
+强制模型只返回合法 JSON 对象（对应 OpenAI 的 response_format: { type: "json_object" }）。输出必须是 JSON，不能是普通文本或 Markdown。
+
+2. **strict-json-schema: true** 开启 Structured Outputs 的严格 JSON Schema 模式。配合 AiServices 使用时，LangChain4j 会根据返回类型（如 HtmlCodeResult、MultiFileCodeResult）及其 @Description 注解自动生成 Schema，
+  并要求模型严格按 Schema 输出：字段名、类型、必填项都要匹配，不能多字段、不能漏字段。
+
+总结：response-format: json_object 是模型级全局配置，流式（Flux<String>）也会被强制输出 JSON，和你 prompt 里的 Markdown 代码块冲突，注释掉即可。 
+strict-json-schema: true 只作用于 AiServices 返回 POJO 的方法（generateHtmlCode、generateMultiFileCode），LangChain4j 会按请求单独走 json_schema，不依赖 json_object，可以保留。
+如果你只用流式、不用那两个结构化方法，两个都可以注释，strict-json-schema 对流式本来就没影响
+
+### redis保留对话记时报错 
+报错：RuntimeException
+redis.clients.jedis.exceptions.JedisDataException: ERR unknown command 'JSON.GET', with args beginning with: 
+
+原因：RedisChatMemoryStore 用的是 RedisJSON 命令（JSON.GET / JSON.SET），你本地是普通 Redis，没装 RedisJSON 模块。

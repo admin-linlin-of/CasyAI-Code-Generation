@@ -1,32 +1,115 @@
 package com.casy.casyaicodemother.ai;
 
+import com.casy.casyaicodemother.service.ChatHistoryService;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import dev.langchain4j.community.store.memory.chat.redis.RedisChatMemoryStore;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.service.AiServices;
+import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Component;
 
-@Configuration
+import java.time.Duration;
+
+@Component
+@Slf4j
 public class AiCodeGeneratorServiceFactory {
 
-    @Bean
-    public AiCodeGeneratorService aiCodeGeneratorService(
-            @Qualifier("openAiChatModel") ChatModel chatModel,
-            @Qualifier("openAiStreamingChatModel") StreamingChatModel streamingChatModel) {
+    @Resource
+    private RedisChatMemoryStore redisChatMemoryStore;
+
+    @Resource
+    private ChatHistoryService chatHistoryService;
+
+    @Resource
+    @Qualifier("openAiChatModel")
+    ChatModel openAiChatModel;
+
+    @Resource
+    @Qualifier("openAiStreamingChatModel")
+    StreamingChatModel openAiStreamingChatModel;
+
+    @Resource
+    @Qualifier("gptChatModel")
+    ChatModel gptChatModel;
+
+    @Resource
+    @Qualifier("gptStreamingChatModel")
+    StreamingChatModel gptStreamingChatModel;
+
+    /**
+     * 利用 Caffeine 缓存来存储，之后相同 appId 就能直接获取到 AI 服务实例，避免重复构造
+     * 缓存策略：
+     * - 最大缓存 1000 个实例
+     * - 写入后 30 分钟过期
+     * - 访问后 10 分钟过期
+     */
+    private final Cache<Long, AiCodeGeneratorService> serviceCache = Caffeine.newBuilder()
+            .maximumSize(1000)
+            .expireAfterWrite(Duration.ofMinutes(30))
+            .expireAfterAccess(Duration.ofMinutes(10))
+            .removalListener((key, value, cause) -> {
+                log.info("AI 服务实例被移除，appId: {}, 原因: {}", key, cause);
+            })
+            .build();
+
+    /**
+     * 根据 appId 获取服务（带缓存）
+     */
+    public AiCodeGeneratorService getDeepSeekCodeGeneratorService(long appId) {
+        return serviceCache.get(appId, this::createDeepSeekCodeGeneratorService);
+    }
+
+    public AiCodeGeneratorService createDeepSeekCodeGeneratorService(Long appId) {
+        // 根据 appId 构建独立的对话记忆
+        MessageWindowChatMemory chatMemory = MessageWindowChatMemory
+                .builder()
+                .id(appId)
+                .chatMemoryStore(redisChatMemoryStore)
+                .maxMessages(20)
+                .build();
+        // 从数据库加载历史对话到记忆中
+        chatHistoryService.loadChatHistoryToMemory(appId, chatMemory, 20);
         return AiServices.builder(AiCodeGeneratorService.class)
-                .chatModel(chatModel)
-                .streamingChatModel(streamingChatModel)
+                .chatModel(openAiChatModel)
+                .streamingChatModel(openAiStreamingChatModel)
+                .chatMemory(chatMemory)
                 .build();
     }
 
-    @Bean
-    public AiCodeGeneratorService gptAiCodeGeneratorService(
-            @Qualifier("gptChatModel") ChatModel chatModel,
-            @Qualifier("gptStreamingChatModel") StreamingChatModel streamingChatModel) {
-        return AiServices.builder(AiCodeGeneratorService.class)
-                .chatModel(chatModel)
-                .streamingChatModel(streamingChatModel)
+    /**
+     * 根据 appId 获取服务（带缓存）
+     */
+    public AiCodeGeneratorService getGptCodeGeneratorService(long appId) {
+        return serviceCache.get(appId, this::createGptCodeGeneratorService);
+    }
+
+    public AiCodeGeneratorService createGptCodeGeneratorService(Long appId) {
+        // 根据 appId 构建独立的对话记忆
+        MessageWindowChatMemory chatMemory = MessageWindowChatMemory
+                .builder()
+                .id(appId)
+                .chatMemoryStore(redisChatMemoryStore)
+                .maxMessages(20)
                 .build();
+        chatHistoryService.loadChatHistoryToMemory(appId, chatMemory, 20);
+        return AiServices.builder(AiCodeGeneratorService.class)
+                .chatModel(gptChatModel)
+                .streamingChatModel(gptStreamingChatModel)
+                .chatMemory(chatMemory)
+                .build();
+    }
+
+    /**
+     * 默认提供一个 Bean，兼容旧代码
+     */
+    @Bean
+    public AiCodeGeneratorService aiCodeGeneratorService() {
+        return getDeepSeekCodeGeneratorService(0L);
     }
 }

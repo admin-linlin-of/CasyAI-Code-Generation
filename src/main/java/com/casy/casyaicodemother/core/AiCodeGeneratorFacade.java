@@ -9,6 +9,7 @@ import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -18,6 +19,9 @@ import java.io.File;
 @Service
 @Slf4j
 public class AiCodeGeneratorFacade {
+
+    @Resource
+    private ChatModelExecutor chatModelExecutor;
 
     /**
      * 统一入口：根据类型生成并保存代码
@@ -32,11 +36,11 @@ public class AiCodeGeneratorFacade {
         }
         return switch(codeGenTypeEnum) {
             case HTML -> {
-                HtmlCodeResult htmlCodeResult = ChatModelExecutor.executeParser(modelTypeEnum).generateHtmlCode(userMessage);
+                HtmlCodeResult htmlCodeResult = chatModelExecutor.executeParser(modelTypeEnum, appId).generateHtmlCode(userMessage);
                 yield CodeFileSaverExecutor.executeSaver(htmlCodeResult, CodeGenTypeEnum.HTML, appId);
             }
             case MULTI_FILE -> {
-                MultiFileCodeResult multiFileCodeResult = ChatModelExecutor.executeParser(modelTypeEnum).generateMultiFileCode(userMessage);
+                MultiFileCodeResult multiFileCodeResult = chatModelExecutor.executeParser(modelTypeEnum, appId).generateMultiFileCode(userMessage);
                 yield CodeFileSaverExecutor.executeSaver(multiFileCodeResult, CodeGenTypeEnum.MULTI_FILE, appId);
             }
             default -> {
@@ -59,11 +63,11 @@ public class AiCodeGeneratorFacade {
         }
         return switch(codeGenTypeEnum) {
             case HTML -> {
-                Flux<String> stringFlux = ChatModelExecutor.executeParser(modelTypeEnum).generateHtmlCodeStream(userMessage);
+                Flux<String> stringFlux = chatModelExecutor.executeParser(modelTypeEnum, appId).generateHtmlCodeStream(userMessage);
                 yield processCodeStream(stringFlux, CodeGenTypeEnum.HTML, appId);
             }
             case MULTI_FILE -> {
-                Flux<String> stringFlux = ChatModelExecutor.executeParser(modelTypeEnum).generateMultiFileCodeStream(userMessage);
+                Flux<String> stringFlux = chatModelExecutor.executeParser(modelTypeEnum, appId).generateMultiFileCodeStream(userMessage);
                 yield processCodeStream(stringFlux, CodeGenTypeEnum.MULTI_FILE, appId);
             }
             default -> {

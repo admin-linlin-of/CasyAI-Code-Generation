@@ -7,10 +7,21 @@ import com.casy.casyaicodemother.model.vo.chathistory.ChatHistoryVO;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.service.IService;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 
 import java.util.List;
 
 public interface ChatHistoryService extends IService<ChatHistory> {
+
+    /**
+     * 加载记忆到缓存
+     *
+     * @param appId 应用ID
+     * @param chatMemory 会话记忆对象
+     * @param maxCount 最大记忆数
+     * @return 记忆加载到缓存的数量
+     */
+    int loadChatHistoryToMemory(Long appId, MessageWindowChatMemory chatMemory, int maxCount);
 
     /**
      * 保存用户消息

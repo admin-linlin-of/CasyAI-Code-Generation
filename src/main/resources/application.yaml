@@ -10,6 +10,13 @@ spring:
   mvc:
     async:
       request-timeout: 600000
+  # redis
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      ttl: 3600 # key 过期时间（单位：秒）
   # context.initializer.classes 在 Spring Boot 3.4+ 已失效，请用 META-INF/spring.factories 或 main 中 addInitializers
   # 数据源配置
   datasource:

@@ -4,5 +4,5 @@ import com.casy.casyaicodemother.ai.AiCodeGeneratorService;
 
 public interface ChatModel {
 
-    AiCodeGeneratorService getAiService();
+    AiCodeGeneratorService getAiService(Long appId);
 }

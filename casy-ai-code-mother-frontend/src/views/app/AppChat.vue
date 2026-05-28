@@ -272,6 +272,7 @@ const toChatMessage = (item: API.ChatHistoryVO): ChatMessage => ({
 })
 
 const applyHistoryRecords = (records: API.ChatHistoryVO[], prepend: boolean) => {
+  // 关键：反转让老消息在前
   const sorted = [...records].reverse().map(toChatMessage)
   if (!sorted.length) return
   messages.value = prepend ? [...sorted, ...messages.value] : sorted
