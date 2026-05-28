@@ -1,11 +1,22 @@
 import axios from 'axios'
 import { message } from 'ant-design-vue'
 import { API_BASE_URL } from '@/config'
+import { parseJsonWithLongIds } from '@/utils/parseJson'
 
 const myAxios = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000,
   withCredentials: true,
+  transformResponse: [
+    (data) => {
+      if (typeof data !== 'string' || !data) return data
+      try {
+        return parseJsonWithLongIds(data)
+      } catch {
+        return JSON.parse(data)
+      }
+    },
+  ],
 })
 
 /**

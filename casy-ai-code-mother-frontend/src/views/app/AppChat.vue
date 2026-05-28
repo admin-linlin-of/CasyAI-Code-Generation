@@ -183,7 +183,6 @@ const appId = computed(() => {
   const id = route.params.id
   return (Array.isArray(id) ? String(id[0]) : String(id)) ?? ''
 })
-const appIdNumber = computed(() => Number(appId.value))
 const inputMessage = ref('')
 const generating = ref(false)
 const deploying = ref(false)
@@ -286,7 +285,7 @@ const loadChatHistory = async (lastCreateTime?: string) => {
   else loadingHistory.value = true
   try {
     const res = await listAppChatHistoryByPage({
-      appId: appIdNumber.value,
+      appId: appId.value,
       pageNum: 1,
       pageSize: HISTORY_PAGE_SIZE,
       sortField: 'create_time',

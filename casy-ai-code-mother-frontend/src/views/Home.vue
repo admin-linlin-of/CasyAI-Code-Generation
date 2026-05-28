@@ -194,10 +194,9 @@ const goodPageSize = ref(8)
 const goodSearchName = ref('')
 
 const trimmedPrompt = computed(() => initPrompt.value.trim())
-const toAppId = (id?: number | string) => {
-  if (id === undefined || id === null) return undefined
-  const value = Number(id)
-  return Number.isFinite(value) ? value : undefined
+const toAppId = (id?: string) => {
+  if (id === undefined || id === null || id === '') return undefined
+  return String(id)
 }
 
 const formatDate = (time?: string) => {
@@ -274,7 +273,7 @@ const loadGoodApps = async (page = 1, pageSize = goodPageSize.value) => {
     goodTotal.value = res.data.data.totalRow ?? 0
   }
 }
-const goChat = (id?: number) => {
+const goChat = (id?: string) => {
   if (!id) return
   router.push(`/app/chat/${id}`)
 }
