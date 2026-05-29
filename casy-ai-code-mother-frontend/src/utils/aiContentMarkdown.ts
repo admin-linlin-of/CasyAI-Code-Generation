@@ -27,11 +27,14 @@ function codesToMarkdown(codes: CodeFields): string {
   return blocks.join('\n\n')
 }
 
+const MARKDOWN_CODE_FENCE = /```(?:html|css|js|javascript)\b/i
+
 /**
  * 入口：AI 原文 → 展示用 Markdown。
- * 是 JSON / 围栏 / 裸 HTML 则拆成 HTML/CSS/JS 三个代码块；否则原样返回。
+ * 含 Markdown 围栏时保留全文（说明文字、JS 块、设计亮点等）；纯 JSON / 裸 HTML 则拆成代码块。
  */
 export function aiContentToMarkdown(raw: string): string {
+  if (MARKDOWN_CODE_FENCE.test(raw)) return raw
   const codes = extractCodeFields(raw)
   if (hasCodeFields(codes)) return codesToMarkdown(codes)
   return raw

@@ -1,5 +1,6 @@
 package com.casy.casyaicodemother.ai;
 
+import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import com.casy.casyaicodemother.service.ChatHistoryService;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -49,7 +50,7 @@ public class AiCodeGeneratorServiceFactory {
      * - 写入后 30 分钟过期
      * - 访问后 10 分钟过期
      */
-    private final Cache<Long, AiCodeGeneratorService> serviceCache = Caffeine.newBuilder()
+    private final Cache<String, AiCodeGeneratorService> serviceCache = Caffeine.newBuilder()
             .maximumSize(1000)
             .expireAfterWrite(Duration.ofMinutes(30))
             .expireAfterAccess(Duration.ofMinutes(10))
@@ -61,20 +62,20 @@ public class AiCodeGeneratorServiceFactory {
     /**
      * 根据 appId 获取服务（带缓存）
      */
-    public AiCodeGeneratorService getDeepSeekCodeGeneratorService(long appId) {
-        return serviceCache.get(appId, this::createDeepSeekCodeGeneratorService);
+    public AiCodeGeneratorService getDeepSeekCodeGeneratorService(Long appId) {
+        return serviceCache.get(ModelTypeEnum.DEEPSEEK.getModelName() + appId, this::createDeepSeekCodeGeneratorService);
     }
 
-    public AiCodeGeneratorService createDeepSeekCodeGeneratorService(Long appId) {
+    public AiCodeGeneratorService createDeepSeekCodeGeneratorService(String cacheKey) {
         // 根据 appId 构建独立的对话记忆
         MessageWindowChatMemory chatMemory = MessageWindowChatMemory
                 .builder()
-                .id(appId)
+                .id(cacheKey)
                 .chatMemoryStore(redisChatMemoryStore)
                 .maxMessages(20)
                 .build();
         // 从数据库加载历史对话到记忆中
-        chatHistoryService.loadChatHistoryToMemory(appId, chatMemory, 20);
+        chatHistoryService.loadChatHistoryToMemory(cacheKey, chatMemory, 20);
         return AiServices.builder(AiCodeGeneratorService.class)
                 .chatModel(openAiChatModel)
                 .streamingChatModel(openAiStreamingChatModel)
@@ -85,19 +86,19 @@ public class AiCodeGeneratorServiceFactory {
     /**
      * 根据 appId 获取服务（带缓存）
      */
-    public AiCodeGeneratorService getGptCodeGeneratorService(long appId) {
-        return serviceCache.get(appId, this::createGptCodeGeneratorService);
+    public AiCodeGeneratorService getGptCodeGeneratorService(Long appId) {
+        return serviceCache.get(ModelTypeEnum.GPT.getModelName() + appId, this::createGptCodeGeneratorService);
     }
 
-    public AiCodeGeneratorService createGptCodeGeneratorService(Long appId) {
+    public AiCodeGeneratorService createGptCodeGeneratorService(String cacheKey) {
         // 根据 appId 构建独立的对话记忆
         MessageWindowChatMemory chatMemory = MessageWindowChatMemory
                 .builder()
-                .id(appId)
+                .id(cacheKey)
                 .chatMemoryStore(redisChatMemoryStore)
                 .maxMessages(20)
                 .build();
-        chatHistoryService.loadChatHistoryToMemory(appId, chatMemory, 20);
+        chatHistoryService.loadChatHistoryToMemory(cacheKey, chatMemory, 20);
         return AiServices.builder(AiCodeGeneratorService.class)
                 .chatModel(gptChatModel)
                 .streamingChatModel(gptStreamingChatModel)
