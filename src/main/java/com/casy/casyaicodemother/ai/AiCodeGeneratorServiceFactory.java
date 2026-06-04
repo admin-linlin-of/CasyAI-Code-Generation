@@ -60,22 +60,24 @@ public class AiCodeGeneratorServiceFactory {
             .build();
 
     /**
-     * 根据 appId 获取服务（带缓存）
+     * 根据 modeType + appId 获取DeepSeek服务（带缓存）
+     * 记忆 ID 只用 appId，不要带模型名，这样切换模型就不会丢失记忆
+     * 本地缓存会存在不同模型的service
      */
     public AiCodeGeneratorService getDeepSeekCodeGeneratorService(Long appId) {
-        return serviceCache.get(ModelTypeEnum.DEEPSEEK.getModelName() + appId, this::createDeepSeekCodeGeneratorService);
+        return serviceCache.get(getCacheKey(ModelTypeEnum.DEEPSEEK, appId), this::createDeepSeekCodeGeneratorService);
     }
 
     public AiCodeGeneratorService createDeepSeekCodeGeneratorService(String cacheKey) {
         // 根据 appId 构建独立的对话记忆
         MessageWindowChatMemory chatMemory = MessageWindowChatMemory
                 .builder()
-                .id(cacheKey)
+                .id(getAppId(cacheKey))
                 .chatMemoryStore(redisChatMemoryStore)
                 .maxMessages(20)
                 .build();
         // 从数据库加载历史对话到记忆中
-        chatHistoryService.loadChatHistoryToMemory(cacheKey, chatMemory, 20);
+        chatHistoryService.loadChatHistoryToMemory(getAppId(cacheKey), chatMemory, 20);
         return AiServices.builder(AiCodeGeneratorService.class)
                 .chatModel(openAiChatModel)
                 .streamingChatModel(openAiStreamingChatModel)
@@ -84,26 +86,34 @@ public class AiCodeGeneratorServiceFactory {
     }
 
     /**
-     * 根据 appId 获取服务（带缓存）
+     * 根据 appId 获取GPT服务（带缓存）
      */
     public AiCodeGeneratorService getGptCodeGeneratorService(Long appId) {
-        return serviceCache.get(ModelTypeEnum.GPT.getModelName() + appId, this::createGptCodeGeneratorService);
+        return serviceCache.get(getCacheKey(ModelTypeEnum.GPT, appId), this::createGptCodeGeneratorService);
     }
 
     public AiCodeGeneratorService createGptCodeGeneratorService(String cacheKey) {
         // 根据 appId 构建独立的对话记忆
         MessageWindowChatMemory chatMemory = MessageWindowChatMemory
                 .builder()
-                .id(cacheKey)
+                .id(getAppId(cacheKey))
                 .chatMemoryStore(redisChatMemoryStore)
                 .maxMessages(20)
                 .build();
-        chatHistoryService.loadChatHistoryToMemory(cacheKey, chatMemory, 20);
+        chatHistoryService.loadChatHistoryToMemory(getAppId(cacheKey), chatMemory, 20);
         return AiServices.builder(AiCodeGeneratorService.class)
                 .chatModel(gptChatModel)
                 .streamingChatModel(gptStreamingChatModel)
                 .chatMemory(chatMemory)
                 .build();
+    }
+
+    private String getCacheKey(ModelTypeEnum modelTypeEnum, Long appId) {
+        return String.format("%s_%s", modelTypeEnum.getModelName(), appId);
+    }
+
+    private Long getAppId(String cacheKey) {
+        return Long.valueOf(cacheKey.split("_")[1]);
     }
 
     /**

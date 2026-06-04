@@ -43,6 +43,7 @@ public class UserController {
      * @param userRegisterRequest 用户注册请求
      * @return 注册结果
      */
+    @Operation(summary = "用户注册")
     @PostMapping("register")
     public BaseResponse<Long> userRegister(@RequestBody UserRegisterRequest userRegisterRequest) {
         ThrowUtils.throwIf(userRegisterRequest == null, ErrorCode.PARAMS_ERROR);
@@ -54,6 +55,7 @@ public class UserController {
     }
 
     // 测试登录，浏览器访问： http://localhost:8124/user/doLogin?username=zhang&password=123456
+    @Operation(summary = "用户登录")
     @PostMapping("login")
     public BaseResponse<LoginUserVO> login(@RequestBody UserLoginRequest userLoginRequest) {
         ThrowUtils.throwIf(userLoginRequest == null, ErrorCode.PARAMS_ERROR);
@@ -69,6 +71,7 @@ public class UserController {
 
     @SaCheckLogin
     @SaCheckPermission("user.get")
+    @Operation(summary = "获取当前登录用户")
     @GetMapping("/get/login")
     public BaseResponse<LoginUserVO> getLoginUser() {
         User loginUser = userService.getLoginUser();
@@ -79,6 +82,7 @@ public class UserController {
     }
 
     @SaCheckLogin
+    @Operation(summary = "用户退出登录")
     @PostMapping("/logout")
     public BaseResponse<Boolean> userLogout(HttpServletRequest request) {
         ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
@@ -93,6 +97,7 @@ public class UserController {
      * @return {@code true} 保存成功，{@code false} 保存失败
      */
     @SaCheckPermission("user.add")
+    @Operation(summary = "保存用户")
     @PostMapping("save")
     public boolean save(@RequestBody User user) {
         return userService.save(user);
@@ -105,6 +110,7 @@ public class UserController {
      * @return {@code true} 删除成功，{@code false} 删除失败
      */
     @SaCheckPermission("user.remove")
+    @Operation(summary = "根据主键删除用户")
     @DeleteMapping("remove/{id}")
     public boolean remove(@PathVariable Long id) {
         return userService.removeById(id);
@@ -117,6 +123,7 @@ public class UserController {
      * @return {@code true} 更新成功，{@code false} 更新失败
      */
     @SaCheckPermission("user.update")
+    @Operation(summary = "根据主键更新用户")
     @PutMapping("update")
     public boolean update(@RequestBody User user) {
         return userService.updateById(user);
@@ -128,6 +135,7 @@ public class UserController {
      * @return 所有数据
      */
     @SaCheckPermission("user.list")
+    @Operation(summary = "查询所有用户")
     @GetMapping("list")
     public List<User> list() {
         return userService.list();
@@ -140,6 +148,7 @@ public class UserController {
      * @return 用户详情
      */
     @SaCheckPermission("user.getInfo")
+    @Operation(summary = "根据主键获取用户")
     @GetMapping("getInfo/{id}")
     public User getInfo(@PathVariable Long id) {
         return userService.getById(id);
@@ -152,6 +161,7 @@ public class UserController {
      * @return 分页对象
      */
     @SaCheckPermission("user.page")
+    @Operation(summary = "分页查询用户")
     @GetMapping("page")
     public Page<User> page(Page<User> page) {
         return userService.page(page);
@@ -160,6 +170,7 @@ public class UserController {
     /**
      * 创建用户
      */
+    @Operation(summary = "创建用户")
     @PostMapping("/add")
     @SaCheckRole(UserConstant.ADMIN_ROLE)
     public BaseResponse<Long> addUser(@RequestBody UserAddRequest userAddRequest) {
@@ -178,6 +189,7 @@ public class UserController {
     /**
      * 根据 id 获取用户（仅管理员）
      */
+    @Operation(summary = "根据id获取用户")
     @GetMapping("/get")
     @SaCheckRole(UserConstant.ADMIN_ROLE)
     public BaseResponse<User> getUserById(long id) {
@@ -190,6 +202,7 @@ public class UserController {
     /**
      * 根据 id 获取包装类
      */
+    @Operation(summary = "根据id获取用户VO")
     @GetMapping("/get/vo")
     public BaseResponse<UserVO> getUserVOById(long id) {
         BaseResponse<User> response = getUserById(id);
@@ -211,6 +224,7 @@ public class UserController {
     /**
      * 更新用户
      */
+    @Operation(summary = "更新用户")
     @PostMapping("/update")
     @SaCheckRole(UserConstant.ADMIN_ROLE)
     public BaseResponse<Boolean> updateUser(@RequestBody UserUpdateRequest userUpdateRequest) {
@@ -229,6 +243,7 @@ public class UserController {
      *
      * @param userQueryRequest 查询请求参数
      */
+    @Operation(summary = "分页获取用户列表")
     @PostMapping("/list/page/vo")
     @SaCheckRole(UserConstant.ADMIN_ROLE)
     public BaseResponse<Page<UserVO>> listUserVOByPage(@RequestBody UserQueryRequest userQueryRequest) {

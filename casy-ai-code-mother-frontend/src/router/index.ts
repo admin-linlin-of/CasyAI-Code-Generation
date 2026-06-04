@@ -7,6 +7,7 @@ import AppChat from '@/views/app/AppChat.vue'
 import AppManage from '@/views/app/AppManage.vue'
 import AppEdit from '@/views/app/AppEdit.vue'
 import ChatHistoryManage from '@/views/app/ChatHistoryManage.vue'
+import VersionManage from '@/views/app/VersionManage.vue'
 import ROLE_ENUM from '@/constant/constant.ts'
 
 const router = createRouter({
@@ -58,6 +59,14 @@ const router = createRouter({
       path: '/chatHistory/manage',
       name: '对话管理',
       component: ChatHistoryManage,
+      meta: {
+        roles: [ROLE_ENUM.ADMIN],
+      },
+    },
+    {
+      path: '/appVersion/manage',
+      name: '版本管理',
+      component: VersionManage,
       meta: {
         roles: [ROLE_ENUM.ADMIN],
       },

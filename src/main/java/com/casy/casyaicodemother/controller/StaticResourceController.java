@@ -1,6 +1,7 @@
 package com.casy.casyaicodemother.controller;
 
 import com.casy.casyaicodemother.constant.AppConstant;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -30,6 +31,7 @@ public class StaticResourceController {
      * 提供静态资源访问，支持目录重定向
      * 访问格式：http://localhost:8124/api/static/{deployKey}[/{fileName}]
      */
+    @Operation(summary = "访问静态资源")
     @GetMapping("/{deployKey}/**")
     public ResponseEntity<Resource> serveStaticResource(
             @PathVariable String deployKey,

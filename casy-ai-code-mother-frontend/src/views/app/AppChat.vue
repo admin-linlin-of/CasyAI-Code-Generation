@@ -89,6 +89,26 @@
           />
         </div>
       </section>
+
+      <aside class="version-panel">
+        <div class="version-panel__list">
+          <div
+            v-for="version in versionList"
+            :key="version.id"
+            :class="[
+              'version-item',
+              { 'version-item--active': selectedVersionCodeDir === version.codeDir },
+            ]"
+            @click="selectVersion(version)"
+          >
+            <span class="version-item__label">{{ version.codeDir }}</span>
+            <div class="version-item__thumb">
+              <iframe :src="getVersionPreviewUrl(version)" tabindex="-1" title="version-preview" />
+            </div>
+          </div>
+        </div>
+        <span class="version-panel__title">版本列表</span>
+      </aside>
     </div>
     <a-modal v-model:open="detailVisible" title="应用详情" :footer="null" width="560px">
       <div class="detail-modal">
@@ -151,10 +171,12 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { deleteApp, deployApp, getAppVoById, updateApp } from '@/api/appController'
+import { getAppVersionsByAppId } from '@/api/appVersionController'
 import { listAppChatHistoryByPage } from '@/api/chatHistoryController'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { CheckCircleOutlined } from '@ant-design/icons-vue'
 import request from '@/axios/request'
+import { API_BASE_URL } from '@/config'
 import AiMarkdownMessage from '@/components/AiMarkdownMessage.vue'
 import CodeWorkspace from '@/components/CodeWorkspace.vue'
 import { APP_TYPE_OPTIONS } from '@/constant/appType'
@@ -221,6 +243,9 @@ const loadingMoreHistory = ref(false)
 const historyHasMore = ref(false)
 const historyCursor = ref<string>()
 let eventSource: EventSource | null = null
+
+const versionList = ref<API.AppVersion[]>([])
+const selectedVersionCodeDir = ref('')
 
 const isOwnApp = computed(() => {
   const loginUserId = loginUserStore.loginUser.id
@@ -313,9 +338,43 @@ const loadMoreHistory = async () => {
   if (el) el.scrollTop = el.scrollHeight - prevHeight
 }
 
-const buildPreviewUrl = () => {
+const buildPreviewUrl = (codeDir?: string) => {
   const codeGenType = appInfo.value?.codeGenType || 'multi_file'
-  previewUrl.value = `http://localhost:8124/api/static/${codeGenType}_${appId.value}/`
+  const dir = codeDir || selectedVersionCodeDir.value
+  const deployKey = dir ? `${codeGenType}_${appId.value}_${dir}` : `${codeGenType}_${appId.value}`
+  previewUrl.value = `${API_BASE_URL}/static/${deployKey}/`
+}
+
+const getVersionPreviewUrl = (version: API.AppVersion) => {
+  const codeGenType = appInfo.value?.codeGenType || 'multi_file'
+  return `${API_BASE_URL}/static/${codeGenType}_${appId.value}_${version.codeDir}/`
+}
+
+const loadVersions = async () => {
+  try {
+    const res = await getAppVersionsByAppId({ appid: appId.value })
+    const list = Array.isArray(res.data) ? res.data : []
+    versionList.value = list
+    if (list.length) {
+      const latest = list[0]
+      if (!selectedVersionCodeDir.value || !list.some((v) => v.codeDir === selectedVersionCodeDir.value)) {
+        selectedVersionCodeDir.value = latest.codeDir || ''
+      }
+      buildPreviewUrl(selectedVersionCodeDir.value)
+    }
+  } catch {
+    versionList.value = []
+  }
+}
+
+const selectVersion = async (version: API.AppVersion) => {
+  if (!version.codeDir || selectedVersionCodeDir.value === version.codeDir) return
+  selectedVersionCodeDir.value = version.codeDir
+  buildPreviewUrl(version.codeDir)
+  savedVirtualFiles.value = []
+  if (showPreview.value) {
+    await loadSavedCodeFiles()
+  }
 }
 
 const scrollToBottom = async () => {
@@ -449,13 +508,12 @@ const startStream = (messageText: string) => {
   eventSource.addEventListener('done', async () => {
     if (finished) return
     finished = true
-    // 关闭打字机，刷新预览并自动切到预览视图
     aiMsg.streaming = false
     generating.value = false
     showPreview.value = true
     rightViewMode.value = 'preview'
     closeEventSource()
-    buildPreviewUrl()
+    await loadVersions()
     await loadSavedCodeFiles()
   })
 
@@ -505,6 +563,7 @@ const doDeploy = async () => {
 
 onMounted(async () => {
   await fetchAppInfo()
+  await loadVersions()
   await loadChatHistory()
   if (messages.value.length > 0) {
     showPreview.value = true
@@ -556,7 +615,7 @@ onBeforeUnmount(() => {
 .core-layout {
   height: calc(100vh - 120px);
   display: grid;
-  grid-template-columns: 40% 60%;
+  grid-template-columns: minmax(280px, 38%) 1fr 72px;
   gap: 12px;
   padding: 12px;
 }
@@ -660,6 +719,74 @@ onBeforeUnmount(() => {
   background: #fff;
 }
 
+.version-panel {
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  min-height: 0;
+  display: flex;
+  flex-direction: row-reverse;
+  overflow: hidden;
+}
+
+.version-panel__title {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 12px;
+  color: var(--text-secondary);
+  letter-spacing: 4px;
+  padding: 10px 6px;
+  border-left: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.version-panel__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.version-item {
+  cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.version-item--active {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.35);
+}
+
+.version-item__label {
+  display: block;
+  font-size: 11px;
+  text-align: center;
+  padding: 4px 0;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.version-item__thumb {
+  width: 100%;
+  height: 52px;
+  overflow: hidden;
+  background: #fff;
+  pointer-events: none;
+}
+
+.version-item__thumb iframe {
+  width: 400%;
+  height: 400%;
+  border: none;
+  transform: scale(0.25);
+  transform-origin: top left;
+}
+
 .detail-modal {
   padding-top: 4px;
 }
@@ -717,8 +844,32 @@ onBeforeUnmount(() => {
   }
 
   .chat-panel,
-  .preview-panel {
+  .preview-panel,
+  .version-panel {
     min-height: 420px;
+  }
+
+  .version-panel {
+    flex-direction: column;
+  }
+
+  .version-panel__title {
+    writing-mode: horizontal-tb;
+    letter-spacing: 0;
+    padding: 8px 12px;
+    border-left: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .version-panel__list {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .version-item {
+    min-width: 88px;
+    flex-shrink: 0;
   }
 }
 </style>

@@ -2,7 +2,7 @@
 /* eslint-disable */
 import request from '@/axios/request'
 
-/** 此处后端没有提供注释 POST /app/add */
+/** 创建应用 POST /app/add */
 export async function addApp(body: API.AppAddRequest, options?: { [key: string]: any }) {
   return request<API.BaseResponseLong>('/app/add', {
     method: 'POST',
@@ -14,7 +14,7 @@ export async function addApp(body: API.AppAddRequest, options?: { [key: string]:
   })
 }
 
-/** 此处后端没有提供注释 POST /app/admin/update */
+/** 管理员更新应用 POST /app/admin/update */
 export async function updateAppByAdmin(
   body: API.AppAdminUpdateRequest,
   options?: { [key: string]: any }
@@ -29,7 +29,7 @@ export async function updateAppByAdmin(
   })
 }
 
-/** 此处后端没有提供注释 GET /app/chat/gen/code */
+/** 应用聊天生成代码 GET /app/chat/gen/code */
 export async function chatToGenCode(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.chatToGenCodeParams,
@@ -44,7 +44,7 @@ export async function chatToGenCode(
   })
 }
 
-/** 此处后端没有提供注释 POST /app/delete */
+/** 删除应用 POST /app/delete */
 export async function deleteApp(body: API.DeleteRequest, options?: { [key: string]: any }) {
   return request<API.BaseResponseBoolean>('/app/delete', {
     method: 'POST',
@@ -56,7 +56,7 @@ export async function deleteApp(body: API.DeleteRequest, options?: { [key: strin
   })
 }
 
-/** 此处后端没有提供注释 POST /app/deploy */
+/** 应用部署 POST /app/deploy */
 export async function deployApp(body: API.AppDeployRequest, options?: { [key: string]: any }) {
   return request<API.BaseResponseString>('/app/deploy', {
     method: 'POST',
@@ -68,7 +68,7 @@ export async function deployApp(body: API.AppDeployRequest, options?: { [key: st
   })
 }
 
-/** 此处后端没有提供注释 GET /app/get */
+/** 管理员查看应用详情 GET /app/get */
 export async function getAppById(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.getAppByIdParams,
@@ -83,7 +83,7 @@ export async function getAppById(
   })
 }
 
-/** 此处后端没有提供注释 GET /app/get/vo */
+/** 查看应用详情 GET /app/get/vo */
 export async function getAppVoById(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.getAppVOByIdParams,
@@ -98,7 +98,7 @@ export async function getAppVoById(
   })
 }
 
-/** 此处后端没有提供注释 POST /app/list/good/page/vo */
+/** 分页查询精选应用 POST /app/list/good/page/vo */
 export async function listGoodAppVoByPage(
   body: API.AppQueryRequest,
   options?: { [key: string]: any }
@@ -113,7 +113,7 @@ export async function listGoodAppVoByPage(
   })
 }
 
-/** 此处后端没有提供注释 POST /app/list/my/page/vo */
+/** 分页查询自己的应用 POST /app/list/my/page/vo */
 export async function listMyAppVoByPage(
   body: API.AppQueryRequest,
   options?: { [key: string]: any }
@@ -128,7 +128,7 @@ export async function listMyAppVoByPage(
   })
 }
 
-/** 此处后端没有提供注释 POST /app/list/page/vo */
+/** 管理员分页查询应用 POST /app/list/page/vo */
 export async function listAppVoByPage(body: API.AppQueryRequest, options?: { [key: string]: any }) {
   return request<API.BaseResponsePageAppVO>('/app/list/page/vo', {
     method: 'POST',
@@ -140,7 +140,7 @@ export async function listAppVoByPage(body: API.AppQueryRequest, options?: { [ke
   })
 }
 
-/** 此处后端没有提供注释 POST /app/update */
+/** 更新应用 POST /app/update */
 export async function updateApp(body: API.AppUpdateRequest, options?: { [key: string]: any }) {
   return request<API.BaseResponseBoolean>('/app/update', {
     method: 'POST',

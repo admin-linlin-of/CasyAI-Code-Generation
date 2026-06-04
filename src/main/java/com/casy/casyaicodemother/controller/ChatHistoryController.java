@@ -13,6 +13,7 @@ import com.casy.casyaicodemother.model.vo.chathistory.ChatHistoryVO;
 import com.casy.casyaicodemother.service.ChatHistoryService;
 import com.casy.casyaicodemother.service.UserService;
 import com.mybatisflex.core.paginate.Page;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -29,6 +30,7 @@ public class ChatHistoryController {
     @Resource
     private UserService userService;
 
+    @Operation(summary = "分页查询应用对话历史")
     @SaCheckLogin
     @PostMapping("/list/app/page/vo")
     public BaseResponse<Page<ChatHistoryVO>> listAppChatHistoryByPage(@RequestBody ChatHistoryQueryRequest chatHistoryQueryRequest) {
@@ -38,6 +40,7 @@ public class ChatHistoryController {
         return ResultUtils.success(chatHistoryVOPage);
     }
 
+    @Operation(summary = "管理员分页查询对话历史")
     @SaCheckRole(UserConstant.ADMIN_ROLE)
     @PostMapping("/list/page/vo")
     public BaseResponse<Page<ChatHistoryVO>> listChatHistoryByPage(@RequestBody ChatHistoryQueryRequest chatHistoryQueryRequest) {

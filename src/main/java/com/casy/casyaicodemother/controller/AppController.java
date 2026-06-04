@@ -19,6 +19,7 @@ import com.casy.casyaicodemother.model.vo.app.AppVO;
 import com.casy.casyaicodemother.service.AppService;
 import com.casy.casyaicodemother.service.UserService;
 import com.mybatisflex.core.paginate.Page;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -49,6 +50,7 @@ public class AppController {
      * @param appAddRequest 创建应用请求
      * @return 新应用 id
      */
+    @Operation(summary = "创建应用")
     @SaCheckLogin
     @PostMapping("/add")
     public BaseResponse<Long> addApp(@RequestBody AppAddRequest appAddRequest) {
@@ -64,6 +66,7 @@ public class AppController {
      * @param appUpdateRequest 更新应用请求
      * @return 是否更新成功
      */
+    @Operation(summary = "更新应用")
     @SaCheckLogin
     @PostMapping("/update")
     public BaseResponse<Boolean> updateApp(@RequestBody AppUpdateRequest appUpdateRequest) {
@@ -79,6 +82,7 @@ public class AppController {
      * @param deleteRequest 删除请求（含应用 id）
      * @return 是否删除成功
      */
+    @Operation(summary = "删除应用")
     @SaCheckLogin
     @PostMapping("/delete")
     public BaseResponse<Boolean> deleteApp(@RequestBody DeleteRequest deleteRequest) {
@@ -101,6 +105,7 @@ public class AppController {
      * @param id 应用 id
      * @return 应用详情 VO
      */
+    @Operation(summary = "查看应用详情")
     @SaCheckLogin
     @GetMapping("/get/vo")
     public BaseResponse<AppVO> getAppVOById(long id) {
@@ -116,6 +121,7 @@ public class AppController {
      * @param appQueryRequest 分页及查询条件
      * @return 应用 VO 分页结果
      */
+    @Operation(summary = "分页查询自己的应用")
     @SaCheckLogin
     @PostMapping("/list/my/page/vo")
     public BaseResponse<Page<AppVO>> listMyAppVOByPage(@RequestBody AppQueryRequest appQueryRequest) {
@@ -131,6 +137,7 @@ public class AppController {
      * @param appQueryRequest 分页及查询条件
      * @return 应用 VO 分页结果
      */
+    @Operation(summary = "分页查询精选应用")
     @SaIgnore
     @PostMapping("/list/good/page/vo")
     public BaseResponse<Page<AppVO>> listGoodAppVOByPage(@RequestBody AppQueryRequest appQueryRequest) {
@@ -145,6 +152,7 @@ public class AppController {
      * @param appAdminUpdateRequest 管理员更新请求
      * @return 是否更新成功
      */
+    @Operation(summary = "管理员更新应用")
     @PostMapping("/admin/update")
     @SaCheckRole(UserConstant.ADMIN_ROLE)
     public BaseResponse<Boolean> updateAppByAdmin(@RequestBody AppAdminUpdateRequest appAdminUpdateRequest) {
@@ -159,6 +167,7 @@ public class AppController {
      * @param appQueryRequest 分页及查询条件
      * @return 应用 VO 分页结果
      */
+    @Operation(summary = "管理员分页查询应用")
     @PostMapping("/list/page/vo")
     @SaCheckRole(UserConstant.ADMIN_ROLE)
     public BaseResponse<Page<AppVO>> listAppVOByPage(@RequestBody AppQueryRequest appQueryRequest) {
@@ -174,6 +183,7 @@ public class AppController {
      * @param id 应用 id
      * @return 应用实体
      */
+    @Operation(summary = "管理员查看应用详情")
     @GetMapping("/get")
     @SaCheckRole(UserConstant.ADMIN_ROLE)
     public BaseResponse<App> getAppById(long id) {
@@ -195,6 +205,7 @@ public class AppController {
      * @param modelType 模型类型
      * @return 生成结果流
      */
+    @Operation(summary = "应用聊天生成代码")
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
                                                        @RequestParam String message,
@@ -224,6 +235,7 @@ public class AppController {
      * @param appDeployRequest 部署请求
      * @return 部署 URL
      */
+    @Operation(summary = "应用部署")
     @PostMapping("/deploy")
     public BaseResponse<String> deployApp(@RequestBody AppDeployRequest appDeployRequest) {
         ThrowUtils.throwIf(appDeployRequest == null, ErrorCode.PARAMS_ERROR);

@@ -2,7 +2,7 @@
 /* eslint-disable */
 import request from '@/axios/request'
 
-/** 此处后端没有提供注释 POST /user/add */
+/** 创建用户 POST /user/add */
 export async function addUser(body: API.UserAddRequest, options?: { [key: string]: any }) {
   return request<API.BaseResponseLong>('/user/add', {
     method: 'POST',
@@ -26,7 +26,7 @@ export async function deleteUser(body: API.DeleteRequest, options?: { [key: stri
   })
 }
 
-/** 此处后端没有提供注释 GET /user/get */
+/** 根据id获取用户 GET /user/get */
 export async function getUserById(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.getUserByIdParams,
@@ -41,7 +41,7 @@ export async function getUserById(
   })
 }
 
-/** 此处后端没有提供注释 GET /user/get/login */
+/** 获取当前登录用户 GET /user/get/login */
 export async function getLoginUser(options?: { [key: string]: any }) {
   return request<API.BaseResponseLoginUserVO>('/user/get/login', {
     method: 'GET',
@@ -49,7 +49,7 @@ export async function getLoginUser(options?: { [key: string]: any }) {
   })
 }
 
-/** 此处后端没有提供注释 GET /user/get/vo */
+/** 根据id获取用户VO GET /user/get/vo */
 export async function getUserVoById(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.getUserVOByIdParams,
@@ -64,7 +64,7 @@ export async function getUserVoById(
   })
 }
 
-/** 此处后端没有提供注释 GET /user/getInfo/${param0} */
+/** 根据主键获取用户 GET /user/getInfo/${param0} */
 export async function getInfo(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.getInfoParams,
@@ -78,7 +78,7 @@ export async function getInfo(
   })
 }
 
-/** 此处后端没有提供注释 GET /user/list */
+/** 查询所有用户 GET /user/list */
 export async function list(options?: { [key: string]: any }) {
   return request<API.User[]>('/user/list', {
     method: 'GET',
@@ -86,7 +86,7 @@ export async function list(options?: { [key: string]: any }) {
   })
 }
 
-/** 此处后端没有提供注释 POST /user/list/page/vo */
+/** 分页获取用户列表 POST /user/list/page/vo */
 export async function listUserVoByPage(
   body: API.UserQueryRequest,
   options?: { [key: string]: any }
@@ -101,7 +101,7 @@ export async function listUserVoByPage(
   })
 }
 
-/** 此处后端没有提供注释 POST /user/login */
+/** 用户登录 POST /user/login */
 export async function login(body: API.UserLoginRequest, options?: { [key: string]: any }) {
   return request<API.BaseResponseLoginUserVO>('/user/login', {
     method: 'POST',
@@ -113,7 +113,7 @@ export async function login(body: API.UserLoginRequest, options?: { [key: string
   })
 }
 
-/** 此处后端没有提供注释 POST /user/logout */
+/** 用户退出登录 POST /user/logout */
 export async function userLogout(options?: { [key: string]: any }) {
   return request<API.BaseResponseBoolean>('/user/logout', {
     method: 'POST',
@@ -121,7 +121,7 @@ export async function userLogout(options?: { [key: string]: any }) {
   })
 }
 
-/** 此处后端没有提供注释 GET /user/page */
+/** 分页查询用户 GET /user/page */
 export async function page(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.pageParams,
@@ -138,7 +138,7 @@ export async function page(
   })
 }
 
-/** 此处后端没有提供注释 POST /user/register */
+/** 用户注册 POST /user/register */
 export async function userRegister(
   body: API.UserRegisterRequest,
   options?: { [key: string]: any }
@@ -153,7 +153,7 @@ export async function userRegister(
   })
 }
 
-/** 此处后端没有提供注释 DELETE /user/remove/${param0} */
+/** 根据主键删除用户 DELETE /user/remove/${param0} */
 export async function remove(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.removeParams,
@@ -167,7 +167,7 @@ export async function remove(
   })
 }
 
-/** 此处后端没有提供注释 POST /user/save */
+/** 保存用户 POST /user/save */
 export async function save(body: API.User, options?: { [key: string]: any }) {
   return request<boolean>('/user/save', {
     method: 'POST',
@@ -179,7 +179,7 @@ export async function save(body: API.User, options?: { [key: string]: any }) {
   })
 }
 
-/** 此处后端没有提供注释 PUT /user/update */
+/** 根据主键更新用户 PUT /user/update */
 export async function update(body: API.User, options?: { [key: string]: any }) {
   return request<boolean>('/user/update', {
     method: 'PUT',
@@ -191,7 +191,7 @@ export async function update(body: API.User, options?: { [key: string]: any }) {
   })
 }
 
-/** 此处后端没有提供注释 POST /user/update */
+/** 更新用户 POST /user/update */
 export async function updateUser(body: API.UserUpdateRequest, options?: { [key: string]: any }) {
   return request<API.BaseResponseBoolean>('/user/update', {
     method: 'POST',

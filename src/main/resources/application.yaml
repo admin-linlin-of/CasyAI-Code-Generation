@@ -15,9 +15,17 @@ spring:
     redis:
       host: 47.95.204.8
       port: 16379
-      user: default
+      username: default   # ACL 用户名，Spring Boot 用 username 不是 user
       password: YourStrongPassword123!
-      ttl: 3600 # key 过期时间（单位：秒）
+      database: 1         # Sa-Token 建议单独库，和业务 key 隔离
+      timeout: 10s
+      ttl: 3600           # 你 LangChain 自定义字段，保留
+      lettuce:
+        pool:
+          max-active: 200
+          max-wait: -1ms
+          max-idle: 10
+          min-idle: 0
   # context.initializer.classes 在 Spring Boot 3.4+ 已失效，请用 META-INF/spring.factories 或 main 中 addInitializers
   # 数据源配置
   datasource:

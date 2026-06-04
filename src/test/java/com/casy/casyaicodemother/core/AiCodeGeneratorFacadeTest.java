@@ -28,7 +28,7 @@ class AiCodeGeneratorFacadeTest {
     @Test
     void generateAndSaveCodeStream() {
 
-        Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream("帮我实现一个简单的登录页，代码不要超过100行", CodeGenTypeEnum.HTML, ModelTypeEnum.GPT, 1L);
+        Flux<String> stringFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream("帮我实现一个简单的登录页，代码不要超过100行", CodeGenTypeEnum.HTML, ModelTypeEnum.GPT, 1L, 1L);
         List<String> result = stringFlux.collectList().block();
         assertNotNull(result);
     }

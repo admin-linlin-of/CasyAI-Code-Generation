@@ -1,5 +1,6 @@
 package com.casy.casyaicodemother.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.annotation.Resource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,6 +13,7 @@ public class DbTestController {
     private JdbcTemplate jdbcTemplate;
 
     // 测试接口
+    @Operation(summary = "测试PostgreSQL连接")
     @GetMapping("/test-postgres")
     public String testConnection() {
         // 查询 PostgreSQL 系统表数量

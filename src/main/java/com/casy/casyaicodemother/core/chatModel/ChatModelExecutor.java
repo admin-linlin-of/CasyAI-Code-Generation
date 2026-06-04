@@ -5,9 +5,7 @@ import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.exception.ThrowUtils;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
-import org.springframework.stereotype.Component;
 
-@Component
 public class ChatModelExecutor {
 
     private static final DeepSeekChatModel deepSeekChatModel = new DeepSeekChatModel();

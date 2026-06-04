@@ -2,7 +2,7 @@
 /* eslint-disable */
 import request from '@/axios/request'
 
-/** 此处后端没有提供注释 POST /chatHistory/list/app/page/vo */
+/** 分页查询应用对话历史 POST /chatHistory/list/app/page/vo */
 export async function listAppChatHistoryByPage(
   body: API.ChatHistoryQueryRequest,
   options?: { [key: string]: any }
@@ -17,7 +17,7 @@ export async function listAppChatHistoryByPage(
   })
 }
 
-/** 此处后端没有提供注释 POST /chatHistory/list/page/vo */
+/** 管理员分页查询对话历史 POST /chatHistory/list/page/vo */
 export async function listChatHistoryByPage(
   body: API.ChatHistoryQueryRequest,
   options?: { [key: string]: any }

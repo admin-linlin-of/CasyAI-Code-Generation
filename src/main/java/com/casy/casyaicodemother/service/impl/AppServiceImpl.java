@@ -90,7 +90,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         }
         boolean result = save(app);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
-        // TODO 需要添加版本表的记录，包括模型类型，注意添加事务日志
         return app.getId();
     }
 
@@ -284,7 +283,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 5. 通过校验后，添加用户消息到对话历史
         long userMessageId = chatHistoryService.saveUserMessage(appId, message, loginUser);
         StringBuilder aiResponseBuilder = new StringBuilder();
-        return aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, modelTypeEnum, appId)
+        return aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, modelTypeEnum, appId, userMessageId)
                 // 收集AI响应
                 .doOnNext(aiResponseBuilder::append)
                 // 6. 添加AI消息到对话历史

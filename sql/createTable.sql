@@ -168,4 +168,41 @@ COMMENT ON COLUMN t_chat_history.update_time IS '更新时间';
 COMMENT ON COLUMN t_chat_history.is_delete IS '是否删除';
 -- TODO 可以按需添加 parentId 字段，将 AI 消息和对应的用户提示词进行关联，便于生成失败时的重试、或者用户手动重新生成,我不太理解这个意思，不过应该是涉及重试的逻辑，之后在实现
 COMMENT ON COLUMN t_chat_history.parent_id IS '父消息id';
--- TODO 如果需要保存每个版本的代码文件，还可以添加 fileList 字段，结构为 JSON 数组格式，这样每条消息就对应一个代码版本。这样肯定不行，我准备采用一个版本表，然后在目录中再加一层目录 v1.v2.v3...
+
+
+-- 应用代码版本表
+CREATE TABLE IF NOT EXISTS t_app_version
+(
+    id              BIGSERIAL PRIMARY KEY,
+    app_id          BIGINT       NOT NULL,
+    chat_history_id BIGINT           NULL,
+    version_num     INT          NOT NULL,
+    code_dir        VARCHAR(512) NOT NULL,
+    model_type      VARCHAR(64)      NULL,
+    user_id         BIGINT       NOT NULL,
+    create_time     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_delete       SMALLINT     NOT NULL DEFAULT 0,
+    CONSTRAINT uk_app_version UNIQUE (app_id, version_num)
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_version_app_id ON t_app_version (app_id);
+CREATE INDEX IF NOT EXISTS idx_app_version_chat_history_id ON t_app_version (chat_history_id);
+CREATE INDEX IF NOT EXISTS idx_app_version_app_id_create_time ON t_app_version (app_id, create_time);
+
+CREATE TRIGGER update_app_version_modtime
+    BEFORE UPDATE ON t_app_version
+    FOR EACH ROW
+    EXECUTE FUNCTION update_modified_column();
+
+COMMENT ON TABLE t_app_version IS '应用代码版本';
+COMMENT ON COLUMN t_app_version.id IS 'id';
+COMMENT ON COLUMN t_app_version.app_id IS '应用id';
+COMMENT ON COLUMN t_app_version.chat_history_id IS '关联的AI对话消息id';
+COMMENT ON COLUMN t_app_version.version_num IS '版本号，从1递增';
+COMMENT ON COLUMN t_app_version.code_dir IS '代码目录，如 v1、v2';
+COMMENT ON COLUMN t_app_version.model_type IS '生成该版本使用的AI模型';
+COMMENT ON COLUMN t_app_version.user_id IS '创建用户id';
+COMMENT ON COLUMN t_app_version.create_time IS '创建时间';
+COMMENT ON COLUMN t_app_version.update_time IS '更新时间';
+COMMENT ON COLUMN t_app_version.is_delete IS '是否删除';
