@@ -7,7 +7,9 @@ import lombok.Getter;
 public enum ModelTypeEnum {
 
     GPT("gpt-5.5"),
-    DEEPSEEK("deepseek-v4-flash");
+    DEEPSEEKFLASH("deepseek-v4-flash"),
+    DEEPSEEKPRO("deepseek-v4-pro"),
+    CLAUDESONNET("claude-sonnet-4-6");
 
     private final String modelName;
 

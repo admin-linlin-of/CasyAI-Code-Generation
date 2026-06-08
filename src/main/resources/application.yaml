@@ -91,32 +91,45 @@ knife4j:
 #langchain4j:
 #  open-ai:
 #    streaming-chat-model:
-#      base-url: https://api.deepseek.com
-#      api-key: ${depAPI}
+#      base-url: ${url}
+#      api-key: ${key}
 #      model-name: deepseek-v4-flash
 #      max-tokens: 8192
-#      strict-json-schema: true
-#      response-format: json_object
+#      #      strict-json-schema: true
+#      #      response-format: json_object
 #      log-requests: true
 #      log-responses: true
 #    chat-model:
-#      base-url: https://api.deepseek.com
-#      api-key: ${depAPI}
+#      base-url: ${url}
+#      api-key: ${key}
 #      model-name: deepseek-v4-flash
 #      max-tokens: 8192
-#      strict-json-schema: true
-#      response-format: json_object
+#      #      strict-json-schema: true
+#      #      response-format: json_object
 #      log-requests: true
 #      log-responses: true
 #
 #ai:
 #  gpt:
-#    base-url: http://gpttap.top/v1
-#    api-key: ${NEWAPI}
+#    base-url: ${url}
+#    api-key: ${key}
 #    model-name: gpt-5.5
 #    max-tokens: 8192
-#    strict-json-schema: true
-#    response-format: json_object
+#    #    strict-json-schema: true
+#    #    response-format: json_object
 #    log-requests: true
 #    log-responses: true
-
+#  deepseek:
+#    base-url: ${url}
+#    api-key: ${key}
+#    model-name: deepseek-v4-pro
+#    max-tokens: 8192
+#    log-requests: true
+#    log-responses: true
+#  claude:
+#    base-url: ${url}
+#    api-key: ${key}
+#    model-name: claude-opus-4-8
+#    max-tokens: 8192
+#    log-requests: true
+#    log-responses: true

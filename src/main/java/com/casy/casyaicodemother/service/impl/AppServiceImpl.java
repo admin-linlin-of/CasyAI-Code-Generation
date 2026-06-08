@@ -260,6 +260,17 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 .orderBy(sortField, "ascend".equals(sortOrder));
     }
 
+    /**
+     * 代码生成
+     *
+     * <h3>工具调用消息流程图：</h3>
+     * <img src="../../../../../../javadoc/doc-files/代码生成不同类型的流程.png" alt="登录验证流程" width="700"  height="500"/>
+     * @param appId 应用ID
+     * @param message 用户提示词
+     * @param modelType 模型类型
+     * @param loginUser 登录用户
+     * @return 消息流
+     */
     @Override
     public Flux<String> chatToGenCode(Long appId, String message, String modelType, User loginUser) {
         // 1. 参数校验

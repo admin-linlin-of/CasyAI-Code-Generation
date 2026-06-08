@@ -1,4 +1,4 @@
-package com.casy.casyaicodemother.ai.gpt;
+package com.casy.casyaicodemother.ai.claude;
 
 import com.casy.casyaicodemother.ai.DefaultModelProvider;
 import com.casy.casyaicodemother.ai.ModelProvider;
@@ -14,11 +14,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties(GptModelProperties.class)
-public class GptModelConfig {
+@EnableConfigurationProperties(ClaudeSonnet46Properties.class)
+public class ClaudeSonnet46ModelConfig {
 
-    @Bean("gptChatModel")
-    ChatModel gptChatModel(GptModelProperties g) {
+    @Bean("claudeSonnet46ChatModel")
+    ChatModel ClaudeSonnet46ChatModel(ClaudeSonnet46Properties g) {
         return OpenAiChatModel.builder()
                 .httpClientBuilder(JdkHttpClient.builder())
                 .baseUrl(g.getBaseUrl())
@@ -32,8 +32,8 @@ public class GptModelConfig {
                 .build();
     }
 
-    @Bean("gptStreamingChatModel")
-    StreamingChatModel gptStreamingChatModel(GptModelProperties g) {
+    @Bean("claudeSonnet46StreamingChatModel")
+    StreamingChatModel ClaudeSonnet46StreamingChatModel(ClaudeSonnet46Properties g) {
         return OpenAiStreamingChatModel.builder()
                 .httpClientBuilder(JdkHttpClient.builder())
                 .baseUrl(g.getBaseUrl())
@@ -47,11 +47,11 @@ public class GptModelConfig {
                 .build();
     }
 
-    /** 注册 GPT 模型策略，参见 {@link com.casy.casyaicodemother.ai.deepseek.DeepSeekV4FlashModelConfig} */
+    /** 注册 Claude Sonnet 4.6 模型策略 */
     @Bean
-    ModelProvider gptModelProvider(
-            @Qualifier("gptChatModel") ChatModel chatModel,
-            @Qualifier("gptStreamingChatModel") StreamingChatModel streamingChatModel) {
-        return new DefaultModelProvider(ModelTypeEnum.GPT, chatModel, streamingChatModel);
+    ModelProvider claudeSonnet46ModelProvider(
+            @Qualifier("claudeSonnet46ChatModel") ChatModel chatModel,
+            @Qualifier("claudeSonnet46StreamingChatModel") StreamingChatModel streamingChatModel) {
+        return new DefaultModelProvider(ModelTypeEnum.CLAUDESONNET, chatModel, streamingChatModel);
     }
 }

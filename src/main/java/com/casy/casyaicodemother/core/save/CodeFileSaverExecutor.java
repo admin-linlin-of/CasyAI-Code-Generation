@@ -33,6 +33,9 @@ public class CodeFileSaverExecutor {
         return switch (codeGenType) {
             case HTML -> htmlCodeFileSaver.saveCode((HtmlCodeResult) codeResult, appId, versionDir);
             case MULTI_FILE -> multiFileCodeFileSaver.saveCode((MultiFileCodeResult) codeResult, appId, versionDir);
+            case VUE_PROJECT -> {
+                yield null;
+            }
             default -> throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型: " + codeGenType);
         };
     }

@@ -1,8 +1,8 @@
 package com.casy.casyaicodemother.core;
 
-import com.casy.casyaicodemother.ai.model.HtmlCodeResult;
-import com.casy.casyaicodemother.ai.model.MultiFileCodeResult;
-import com.casy.casyaicodemother.core.chatModel.ChatModelExecutor;
+import cn.hutool.json.JSONUtil;
+import com.casy.casyaicodemother.ai.AiCodeGeneratorServiceFactory;
+import com.casy.casyaicodemother.ai.model.*;
 import com.casy.casyaicodemother.core.parser.CodeParserExecutor;
 import com.casy.casyaicodemother.core.save.CodeFileSaverExecutor;
 import com.casy.casyaicodemother.exception.BusinessException;
@@ -10,6 +10,8 @@ import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import com.casy.casyaicodemother.service.AppVersionService;
+import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.service.TokenStream;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
@@ -26,6 +28,9 @@ public class AiCodeGeneratorFacade {
     @Lazy
     private AppVersionService appVersionService;
 
+    @Resource
+    private AiCodeGeneratorServiceFactory aiCodeGeneratorServiceFactory;
+
     /**
      * 统一入口：根据类型生成并保存代码
      *
@@ -39,11 +44,11 @@ public class AiCodeGeneratorFacade {
         }
         return switch (codeGenTypeEnum) {
             case HTML -> {
-                HtmlCodeResult htmlCodeResult = ChatModelExecutor.executeParser(modelTypeEnum, appId).generateHtmlCode(userMessage);
+                HtmlCodeResult htmlCodeResult = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId).generateHtmlCode(userMessage);
                 yield CodeFileSaverExecutor.executeSaver(htmlCodeResult, CodeGenTypeEnum.HTML, appId);
             }
             case MULTI_FILE -> {
-                MultiFileCodeResult multiFileCodeResult = ChatModelExecutor.executeParser(modelTypeEnum, appId).generateMultiFileCode(userMessage);
+                MultiFileCodeResult multiFileCodeResult = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId).generateMultiFileCode(userMessage);
                 yield CodeFileSaverExecutor.executeSaver(multiFileCodeResult, CodeGenTypeEnum.MULTI_FILE, appId);
             }
             default -> {
@@ -66,12 +71,16 @@ public class AiCodeGeneratorFacade {
         }
         return switch (codeGenTypeEnum) {
             case HTML -> {
-                Flux<String> stringFlux = ChatModelExecutor.executeParser(modelTypeEnum, appId).generateHtmlCodeStream(userMessage);
+                Flux<String> stringFlux = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId).generateHtmlCodeStream(userMessage);
                 yield processCodeStream(stringFlux, CodeGenTypeEnum.HTML, modelTypeEnum, appId, userMessageId);
             }
             case MULTI_FILE -> {
-                Flux<String> stringFlux = ChatModelExecutor.executeParser(modelTypeEnum, appId).generateMultiFileCodeStream(userMessage);
+                Flux<String> stringFlux = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId).generateMultiFileCodeStream(userMessage);
                 yield processCodeStream(stringFlux, CodeGenTypeEnum.MULTI_FILE, modelTypeEnum, appId, userMessageId);
+            }
+            case VUE_PROJECT -> {
+                TokenStream tokenStream = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId).generateVueProjectCodeStream(appId, userMessage);
+                yield processTokenStream(tokenStream);
             }
             default -> {
                 String errorMessage = "不支持的生成类型：" + codeGenTypeEnum.getValue();
@@ -108,5 +117,84 @@ public class AiCodeGeneratorFacade {
             }
         });
     }
+
+    /**
+     * 将 TokenStream 转换为 Flux&lt;String&gt;，实时推送 AI 文本响应与工具调用各阶段事件。
+     * <p>
+     * 工具调用完整生命周期（参考 LangChain4j Tools 文档）：
+     * <pre>
+     * 1. onPartialResponse      → AI 生成普通文本 token（非工具调用阶段）
+     * 2. onPartialToolCall      → AI 流式输出工具调用请求（工具名 + 参数 JSON 片段）
+     * 3. onToolExecuted         → AI Service 执行完工具后回调（含完整请求 + 执行结果）
+     * 4. onCompleteResponse     → 本轮 AI 响应全部结束（可能含多轮工具调用）
+     * 5. onError                → 流式过程中发生异常
+     * </pre>
+     * 注意：TokenStream（AI Service 高层 API）不提供 onCompleteToolCall，
+     * 该回调仅存在于底层 StreamingChatModel 的 StreamingChatResponseHandler 中。
+     * 完整工具请求信息通过 onToolExecuted 的 request() 获取。
+     *
+     * <h3>工具调用消息流程图：</h3>
+     * <img src="../../../../../javadoc/doc-files/VUE项目生成流程.png" alt="登录验证流程" width="700"  height="500"/>
+     * @param tokenStream TokenStream 对象
+     * @return Flux&lt;String&gt; JSON 格式的流式响应
+     */
+    private Flux<String> processTokenStream(TokenStream tokenStream) {
+        return Flux.create(sink -> {
+            tokenStream
+                    // 阶段1：AI 普通文本流式输出
+                    // 当 LLM 生成文本内容（非工具调用）时，每产生一个 token 触发一次
+                    // 前端 type=ai_response，可实时拼接展示 AI 回复
+                    .onPartialResponse(partialResponse -> {
+                        sink.next(JSONUtil.toJsonStr(new AiResponseMessage(partialResponse)));
+                    })
+                    // 阶段2：工具调用请求流式输出（仅部分 LLM 支持，如 OpenAI）
+                    // LLM 决定调用工具后，以流式方式输出工具名和参数 JSON 片段
+                    // 同一工具调用会多次触发，index 标识第几个工具，partialArguments 为参数片段
+                    // 所有片段拼接后应形成完整 JSON，如 {"city":"London"}
+                    // 部分提供商（Bedrock/Google/Mistral/Ollama）不支持流式工具调用，此回调不会触发
+                    // 前端 type=tool_request, partial=true，可展示"正在调用 xxx 工具..."
+                    .onPartialToolCall(partialToolCall -> {
+                        ToolRequestMessage message = new ToolRequestMessage(
+                                partialToolCall.index(),
+                                partialToolCall.id(),
+                                partialToolCall.name(),
+                                partialToolCall.partialArguments(),
+                                true
+                        );
+                        sink.next(JSONUtil.toJsonStr(message));
+                    })
+                    // 阶段3：工具执行完成
+                    // AI Service 在收到完整工具调用请求后自动执行对应 @Tool 方法，执行完毕后触发
+                    // request() 含完整工具请求（id/name/arguments），result() 含执行返回值
+                    // 若启用 executeToolsConcurrently()，多个工具会并发执行，各自独立触发此回调
+                    // 前端 type=tool_executed，可展示工具执行结果（如文件写入成功）
+                    .onToolExecuted(toolExecution -> {
+                        ToolExecutionRequest request = toolExecution.request();
+                        ToolExecutedMessage message = new ToolExecutedMessage(
+                                request.id(),
+                                request.name(),
+                                request.arguments(),
+                                toolExecution.result(),
+                                toolExecution.hasFailed()
+                        );
+                        sink.next(JSONUtil.toJsonStr(message));
+                    })
+                    // 阶段4：本轮响应全部完成
+                    // 所有文本输出和工具调用（含多轮 tool→LLM→tool 循环）结束后触发
+                    // response.aiMessage() 包含最终 AI 消息，可获取所有工具调用记录
+                    .onCompleteResponse(response -> {
+                        log.info("Vue 项目生成完成，最终响应: {}", response.aiMessage().text());
+                        sink.complete();
+                    })
+                    // 阶段5：异常处理
+                    // 网络错误、模型错误、工具执行未捕获异常等导致流中断时触发
+                    .onError(error -> {
+                        log.error("TokenStream 流式生成异常", error);
+                        sink.error(error);
+                    })
+                    .start();
+        });
+    }
+
 
 }

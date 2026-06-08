@@ -4,6 +4,7 @@ import com.casy.casyaicodemother.constant.Global;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import jakarta.annotation.Resource;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -38,4 +39,18 @@ class AiCodeGeneratorFacadeTest {
         File file = aiCodeGeneratorFacade.generateAndSaveCode("帮我实现一个简单的登录页，代码不要超过100行", CodeGenTypeEnum.MULTI_FILE, ModelTypeEnum.GPT, 1L);
         assertNotNull(file);
     }
+
+    @Test
+    void generateVueProjectCodeStream() {
+        Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(
+                "简单的任务记录网站，总代码量不超过 200 行",
+                CodeGenTypeEnum.VUE_PROJECT, ModelTypeEnum.GPT,2L, 2L);
+        // 阻塞等待所有数据收集完成
+        List<String> result = codeStream.collectList().block();
+        // 验证结果
+        Assertions.assertNotNull(result);
+        String completeContent = String.join("", result);
+        Assertions.assertNotNull(completeContent);
+    }
+
 }

@@ -1,4 +1,4 @@
-package com.casy.casyaicodemother.ai.gpt;
+package com.casy.casyaicodemother.ai.deepseek;
 
 import com.casy.casyaicodemother.ai.DefaultModelProvider;
 import com.casy.casyaicodemother.ai.ModelProvider;
@@ -14,11 +14,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties(GptModelProperties.class)
-public class GptModelConfig {
+@EnableConfigurationProperties(DeepSeekV4ProModelProperties.class)
+public class DeepSeekV4ProModelConfig {
 
-    @Bean("gptChatModel")
-    ChatModel gptChatModel(GptModelProperties g) {
+    @Bean("deepSeekV4ProChatModel")
+    ChatModel deepSeekV4ProChatModel(DeepSeekV4ProModelProperties g) {
         return OpenAiChatModel.builder()
                 .httpClientBuilder(JdkHttpClient.builder())
                 .baseUrl(g.getBaseUrl())
@@ -32,8 +32,8 @@ public class GptModelConfig {
                 .build();
     }
 
-    @Bean("gptStreamingChatModel")
-    StreamingChatModel gptStreamingChatModel(GptModelProperties g) {
+    @Bean("deepSeekV4ProStreamingChatModel")
+    StreamingChatModel deepSeekV4ProStreamingChatModel(DeepSeekV4ProModelProperties g) {
         return OpenAiStreamingChatModel.builder()
                 .httpClientBuilder(JdkHttpClient.builder())
                 .baseUrl(g.getBaseUrl())
@@ -47,11 +47,11 @@ public class GptModelConfig {
                 .build();
     }
 
-    /** 注册 GPT 模型策略，参见 {@link com.casy.casyaicodemother.ai.deepseek.DeepSeekV4FlashModelConfig} */
+    /** 注册 DeepSeek V4 Pro 模型策略 */
     @Bean
-    ModelProvider gptModelProvider(
-            @Qualifier("gptChatModel") ChatModel chatModel,
-            @Qualifier("gptStreamingChatModel") StreamingChatModel streamingChatModel) {
-        return new DefaultModelProvider(ModelTypeEnum.GPT, chatModel, streamingChatModel);
+    ModelProvider deepSeekV4ProModelProvider(
+            @Qualifier("deepSeekV4ProChatModel") ChatModel chatModel,
+            @Qualifier("deepSeekV4ProStreamingChatModel") StreamingChatModel streamingChatModel) {
+        return new DefaultModelProvider(ModelTypeEnum.DEEPSEEKPRO, chatModel, streamingChatModel);
     }
 }

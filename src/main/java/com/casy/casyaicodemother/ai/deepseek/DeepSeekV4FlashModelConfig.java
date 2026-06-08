@@ -1,4 +1,4 @@
-package com.casy.casyaicodemother.ai.gpt;
+package com.casy.casyaicodemother.ai.deepseek;
 
 import com.casy.casyaicodemother.ai.DefaultModelProvider;
 import com.casy.casyaicodemother.ai.ModelProvider;
@@ -13,12 +13,20 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * DeepSeek V4 Flash 模型配置（系统默认模型）。
+ * <p>
+ * 除创建 LangChain4j 的 ChatModel Bean 外，还需注册 {@link ModelProvider} 策略 Bean，
+ * 这样 {@link com.casy.casyaicodemother.ai.AiCodeGeneratorServiceFactory} 才能自动发现并使用该模型。
+ * <p>
+ * 其他模型（GPT、Claude、DeepSeek Pro）的配置类结构与此相同，均遵循「Config + Properties + ModelProvider Bean」三件套。
+ */
 @Configuration
-@EnableConfigurationProperties(GptModelProperties.class)
-public class GptModelConfig {
+@EnableConfigurationProperties(DeepSeekV4FlashModelProperties.class)
+public class DeepSeekV4FlashModelConfig {
 
-    @Bean("gptChatModel")
-    ChatModel gptChatModel(GptModelProperties g) {
+    @Bean("deepSeekV4FlashChatModel")
+    ChatModel deepSeekV4FlashChatModel(DeepSeekV4FlashModelProperties g) {
         return OpenAiChatModel.builder()
                 .httpClientBuilder(JdkHttpClient.builder())
                 .baseUrl(g.getBaseUrl())
@@ -32,8 +40,8 @@ public class GptModelConfig {
                 .build();
     }
 
-    @Bean("gptStreamingChatModel")
-    StreamingChatModel gptStreamingChatModel(GptModelProperties g) {
+    @Bean("deepSeekV4FlashStreamingChatModel")
+    StreamingChatModel deepSeekV4FlashStreamingChatModel(DeepSeekV4FlashModelProperties g) {
         return OpenAiStreamingChatModel.builder()
                 .httpClientBuilder(JdkHttpClient.builder())
                 .baseUrl(g.getBaseUrl())
@@ -47,11 +55,14 @@ public class GptModelConfig {
                 .build();
     }
 
-    /** 注册 GPT 模型策略，参见 {@link com.casy.casyaicodemother.ai.deepseek.DeepSeekV4FlashModelConfig} */
+    /**
+     * 将 Flash 模型注册为策略，供 Factory 自动收集。
+     * 新增其他模型时，复制此 Bean 的写法即可，无需改 Factory。
+     */
     @Bean
-    ModelProvider gptModelProvider(
-            @Qualifier("gptChatModel") ChatModel chatModel,
-            @Qualifier("gptStreamingChatModel") StreamingChatModel streamingChatModel) {
-        return new DefaultModelProvider(ModelTypeEnum.GPT, chatModel, streamingChatModel);
+    ModelProvider deepSeekV4FlashModelProvider(
+            @Qualifier("deepSeekV4FlashChatModel") ChatModel chatModel,
+            @Qualifier("deepSeekV4FlashStreamingChatModel") StreamingChatModel streamingChatModel) {
+        return new DefaultModelProvider(ModelTypeEnum.DEEPSEEKFLASH, chatModel, streamingChatModel);
     }
 }
