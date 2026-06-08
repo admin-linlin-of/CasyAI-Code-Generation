@@ -155,3 +155,22 @@ strict-json-schema: true 只作用于 AiServices 返回 POJO 的方法（generat
 redis.clients.jedis.exceptions.JedisDataException: ERR unknown command 'JSON.GET', with args beginning with: 
 
 原因：RedisChatMemoryStore 用的是 RedisJSON 命令（JSON.GET / JSON.SET），你本地是普通 Redis，没装 RedisJSON 模块。
+
+## 对话记忆总结
+### 1. 记忆持久化和游标查询：
+- 将对话记录保存到表中包括用户和助手消息
+- 使用游标查询：使用时间为游标值，解决记忆不断生成，分页查询容易导致重复的问题，并且游标查询解决深度分页的问题，并且给用户看的对话历史暂时是不需要查看全部的，用户在对话框中向上移动的场景会很适合游标查询
+### 2. 使用redis存储对话记忆
+- langchain可以直接对接redis默认是使用JSON格式，并且需要使用redis-stack才有json格式
+- 使用redis存储对话记忆的优点：速度比数据库快，另外redis也能有持久化机制
+### 3. 按memoryId隔离记忆
+- 对不同的对话单独生成一个service，对不同的模型也单独生成一个service,但是对话记忆仍要使用一个memoryId
+### 4. 版本号功能
+- 添加版本号功能最多只能生成10个版本
+最后的扩展模块
+- 记录应用对话总轮次
+  统计每个应用的对话轮数，这个数据可以用于分析用户使用习惯，也可以作为应用复杂度的参考指标，这个我准备做完第七章后在实现
+- 对话历史导出功能
+  支持导出对话记录为 Markdown 文件，方便用户保存和分享开发过程。和第八期的导出代码一起实现
+- 智能记忆管理（较难）
+利用 AI 分析对话次数较多的应用，智能总结过去的对话历史，节省 Token 的同时优化记忆效果。做完第七章在实现，需要更加全面的分析项目

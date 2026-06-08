@@ -9,8 +9,8 @@
       </a-space>
     </header>
 
-    <div class="core-layout">
-      <section class="chat-panel">
+    <div ref="layoutRef" class="core-layout">
+      <section class="chat-panel" :style="{ width: `${chatWidth}px` }">
         <div ref="messageRef" class="message-list">
           <div v-if="historyHasMore" class="load-more">
             <a-button :loading="loadingMoreHistory" type="link" @click="loadMoreHistory">
@@ -52,6 +52,12 @@
         </div>
       </section>
 
+      <div
+        class="resize-handle"
+        title="拖拽调整宽度"
+        @mousedown.prevent="startResize('chat', $event)"
+      />
+
       <!-- 右侧：代码 / 预览 共用同一区域，通过 Segmented 切换 -->
       <section class="preview-panel">
         <div class="preview-panel__head">
@@ -90,7 +96,30 @@
         </div>
       </section>
 
-      <aside class="version-panel">
+      <div
+        v-if="!versionCollapsed"
+        class="resize-handle"
+        title="拖拽调整宽度"
+        @mousedown.prevent="startResize('version', $event)"
+      />
+
+      <aside
+        v-show="!versionCollapsed"
+        class="version-panel"
+        :style="{ width: `${versionWidth}px` }"
+      >
+        <div class="version-panel__head">
+          <span>版本列表</span>
+          <a-button
+            class="version-panel__collapse"
+            size="small"
+            type="text"
+            title="折叠版本列表"
+            @click="toggleVersionPanel"
+          >
+            <RightOutlined />
+          </a-button>
+        </div>
         <div class="version-panel__list">
           <div
             v-for="version in versionList"
@@ -101,15 +130,30 @@
             ]"
             @click="selectVersion(version)"
           >
-            <span class="version-item__label">{{ version.codeDir }}</span>
             <div class="version-item__thumb">
               <iframe :src="getVersionPreviewUrl(version)" tabindex="-1" title="version-preview" />
             </div>
+            <div class="version-item__meta">
+              <span class="version-item__label">{{ formatVersionLabel(version) }}</span>
+              <span v-if="version.modelType" class="version-item__model">{{ version.modelType }}</span>
+            </div>
           </div>
+          <a-empty v-if="versionList.length === 0" description="暂无版本" />
         </div>
-        <span class="version-panel__title">版本列表</span>
       </aside>
+
+      <button
+        v-if="versionCollapsed"
+        class="version-panel-expand"
+        title="展开版本列表"
+        type="button"
+        @click="toggleVersionPanel"
+      >
+        <LeftOutlined />
+        <span>版本</span>
+      </button>
     </div>
+    <div v-if="resizingActive" class="resize-overlay" />
     <a-modal v-model:open="detailVisible" title="应用详情" :footer="null" width="560px">
       <div class="detail-modal">
         <div class="detail-row">
@@ -174,7 +218,7 @@ import { deleteApp, deployApp, getAppVoById, updateApp } from '@/api/appControll
 import { getAppVersionsByAppId } from '@/api/appVersionController'
 import { listAppChatHistoryByPage } from '@/api/chatHistoryController'
 import { useLoginUserStore } from '@/stores/loginUser'
-import { CheckCircleOutlined } from '@ant-design/icons-vue'
+import { CheckCircleOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons-vue'
 import request from '@/axios/request'
 import { API_BASE_URL } from '@/config'
 import AiMarkdownMessage from '@/components/AiMarkdownMessage.vue'
@@ -246,6 +290,122 @@ let eventSource: EventSource | null = null
 
 const versionList = ref<API.AppVersion[]>([])
 const selectedVersionCodeDir = ref('')
+
+const layoutRef = ref<HTMLElement>()
+const chatWidth = ref(420)
+const versionWidth = ref(152)
+const versionCollapsed = ref(false)
+const versionWidthBeforeCollapse = ref(152)
+const DEFAULT_VERSION_WIDTH = 152
+const MAX_VERSION_WIDTH = 200
+const MIN_CHAT_WIDTH = 280
+const MIN_PREVIEW_WIDTH = 320
+const MIN_VERSION_WIDTH = 120
+const RESIZE_HANDLE_WIDTH = 6
+const RESIZE_HANDLE_GAP = 4
+const LAYOUT_PADDING = 12
+
+let resizingTarget: 'chat' | 'version' | null = null
+let layoutLeft = 0
+let layoutRight = 0
+const resizingActive = ref(false)
+
+const getHandleTotalWidth = () => RESIZE_HANDLE_WIDTH + RESIZE_HANDLE_GAP
+
+const getHandlesTotalWidth = () => getHandleTotalWidth() * getResizeHandleCount()
+
+const getEffectiveVersionWidth = () => (versionCollapsed.value ? 0 : versionWidth.value)
+
+const getResizeHandleCount = () => (versionCollapsed.value ? 1 : 2)
+
+const getLayoutInnerWidth = () => {
+  const layoutWidth = layoutRef.value?.clientWidth ?? 0
+  return Math.max(0, layoutWidth - LAYOUT_PADDING * 2)
+}
+
+const updateLayoutBounds = () => {
+  const rect = layoutRef.value?.getBoundingClientRect()
+  if (!rect) return
+  layoutLeft = rect.left + LAYOUT_PADDING
+  layoutRight = rect.right - LAYOUT_PADDING
+}
+
+const getMaxChatWidth = () =>
+  getLayoutInnerWidth() - getHandlesTotalWidth() - MIN_PREVIEW_WIDTH - getEffectiveVersionWidth()
+
+const getMaxVersionWidth = () =>
+  Math.min(
+    MAX_VERSION_WIDTH,
+    getLayoutInnerWidth() - getHandlesTotalWidth() - MIN_PREVIEW_WIDTH - chatWidth.value,
+  )
+
+const startResize = (target: 'chat' | 'version', event: MouseEvent) => {
+  resizingTarget = target
+  updateLayoutBounds()
+  resizingActive.value = true
+  document.addEventListener('mousemove', onResizeMove)
+  document.addEventListener('mouseup', stopResize)
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+}
+
+const onResizeMove = (event: MouseEvent) => {
+  if (!resizingTarget) return
+  updateLayoutBounds()
+  if (resizingTarget === 'chat') {
+    const maxChat = getMaxChatWidth()
+    const nextChatWidth = event.clientX - layoutLeft - getHandleTotalWidth() / 2
+    chatWidth.value = Math.max(MIN_CHAT_WIDTH, Math.min(maxChat, nextChatWidth))
+    return
+  }
+  const rawVersionWidth = layoutRight - event.clientX - getHandleTotalWidth() / 2
+  if (rawVersionWidth < 48) {
+    versionWidthBeforeCollapse.value = Math.max(versionWidth.value, DEFAULT_VERSION_WIDTH)
+    versionCollapsed.value = true
+    stopResize()
+    return
+  }
+  versionWidth.value = Math.max(
+    MIN_VERSION_WIDTH,
+    Math.min(getMaxVersionWidth(), rawVersionWidth),
+  )
+}
+
+const stopResize = () => {
+  resizingTarget = null
+  resizingActive.value = false
+  document.removeEventListener('mousemove', onResizeMove)
+  document.removeEventListener('mouseup', stopResize)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+}
+
+const toggleVersionPanel = () => {
+  if (versionCollapsed.value) {
+    versionCollapsed.value = false
+    versionWidth.value = versionWidthBeforeCollapse.value || DEFAULT_VERSION_WIDTH
+    return
+  }
+  versionWidthBeforeCollapse.value = versionWidth.value
+  versionCollapsed.value = true
+}
+
+const initLayoutWidth = () => {
+  const layoutWidth = getLayoutInnerWidth()
+  if (!layoutWidth) return
+  chatWidth.value = Math.max(MIN_CHAT_WIDTH, Math.round(layoutWidth * 0.32))
+  const nextVersionWidth = Math.min(
+    MAX_VERSION_WIDTH,
+    Math.max(DEFAULT_VERSION_WIDTH, Math.round(layoutWidth * 0.14)),
+  )
+  versionWidth.value = nextVersionWidth
+  versionWidthBeforeCollapse.value = nextVersionWidth
+}
+
+const formatVersionLabel = (version: API.AppVersion) => {
+  if (version.versionNum != null) return `v${version.versionNum}`
+  return version.codeDir || '未知版本'
+}
 
 const isOwnApp = computed(() => {
   const loginUserId = loginUserStore.loginUser.id
@@ -350,15 +510,20 @@ const getVersionPreviewUrl = (version: API.AppVersion) => {
   return `${API_BASE_URL}/static/${codeGenType}_${appId.value}_${version.codeDir}/`
 }
 
-const loadVersions = async () => {
+const loadVersions = async (selectLatest = false) => {
   try {
     const res = await getAppVersionsByAppId({ appid: appId.value })
     const list = Array.isArray(res.data) ? res.data : []
     versionList.value = list
     if (list.length) {
       const latest = list[0]
-      if (!selectedVersionCodeDir.value || !list.some((v) => v.codeDir === selectedVersionCodeDir.value)) {
+      if (
+        selectLatest ||
+        !selectedVersionCodeDir.value ||
+        !list.some((v) => v.codeDir === selectedVersionCodeDir.value)
+      ) {
         selectedVersionCodeDir.value = latest.codeDir || ''
+        savedVirtualFiles.value = []
       }
       buildPreviewUrl(selectedVersionCodeDir.value)
     }
@@ -513,7 +678,7 @@ const startStream = (messageText: string) => {
     showPreview.value = true
     rightViewMode.value = 'preview'
     closeEventSource()
-    await loadVersions()
+    await loadVersions(true)
     await loadSavedCodeFiles()
   })
 
@@ -562,6 +727,8 @@ const doDeploy = async () => {
 }
 
 onMounted(async () => {
+  await nextTick()
+  initLayoutWidth()
   await fetchAppInfo()
   await loadVersions()
   await loadChatHistory()
@@ -587,6 +754,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   closeEventSource()
+  stopResize()
 })
 </script>
 
@@ -614,14 +782,17 @@ onBeforeUnmount(() => {
 
 .core-layout {
   height: calc(100vh - 120px);
-  display: grid;
-  grid-template-columns: minmax(280px, 38%) 1fr 72px;
-  gap: 12px;
+  display: flex;
+  align-items: stretch;
   padding: 12px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .chat-panel,
-.preview-panel {
+.preview-panel,
+.version-panel {
   border-radius: 14px;
   border: 1px solid var(--border-color);
   background: var(--bg-card);
@@ -629,6 +800,14 @@ onBeforeUnmount(() => {
 }
 
 .chat-panel {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.preview-panel {
+  flex: 1;
+  min-width: 320px;
   display: flex;
   flex-direction: column;
 }
@@ -690,9 +869,52 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
 }
 
-.preview-panel {
-  display: flex;
-  flex-direction: column;
+.resize-handle {
+  width: 6px;
+  margin: 0 2px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  border-radius: 999px;
+  position: relative;
+  touch-action: none;
+}
+
+.resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  right: -4px;
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background: rgba(22, 119, 255, 0.08);
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 36px;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: var(--border-color);
+}
+
+.resize-handle:hover::after,
+.resize-handle:active::after {
+  background: #1677ff;
+}
+
+.resize-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  cursor: col-resize;
 }
 
 .preview-panel__head {
@@ -720,41 +942,74 @@ onBeforeUnmount(() => {
 }
 
 .version-panel {
-  border-radius: 14px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-card);
-  min-height: 0;
+  flex-shrink: 0;
+  align-self: stretch;
   display: flex;
-  flex-direction: row-reverse;
+  flex-direction: column;
   overflow: hidden;
+  min-height: 0;
+  max-height: 100%;
 }
 
-.version-panel__title {
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  font-size: 12px;
+.version-panel__head {
+  height: 46px;
+  padding: 0 8px 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.version-panel__collapse {
   color: var(--text-secondary);
-  letter-spacing: 4px;
-  padding: 10px 6px;
-  border-left: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
 .version-panel__list {
-  flex: 1;
+  flex: 1 1 0;
+  height: 0;
+  min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
-  padding: 8px 6px;
+  overscroll-behavior: contain;
+  padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.version-panel__list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.version-panel__list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 999px;
+}
+
+.version-panel__list::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 999px;
+}
+
+.version-panel__list::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.32);
 }
 
 .version-item {
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid var(--border-color);
   overflow: hidden;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: var(--bg-card);
+  flex-shrink: 0;
 }
 
 .version-item--active {
@@ -762,18 +1017,9 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.35);
 }
 
-.version-item__label {
-  display: block;
-  font-size: 11px;
-  text-align: center;
-  padding: 4px 0;
-  color: var(--text-secondary);
-  background: rgba(0, 0, 0, 0.02);
-}
-
 .version-item__thumb {
   width: 100%;
-  height: 52px;
+  aspect-ratio: 16 / 10;
   overflow: hidden;
   background: #fff;
   pointer-events: none;
@@ -785,6 +1031,55 @@ onBeforeUnmount(() => {
   border: none;
   transform: scale(0.25);
   transform-origin: top left;
+}
+
+.version-item__meta {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.version-item__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.version-item__model {
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-panel-expand {
+  width: 28px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 0;
+  font-size: 12px;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.version-panel-expand span {
+  writing-mode: vertical-rl;
+  letter-spacing: 2px;
+}
+
+.version-panel-expand:hover {
+  color: #1677ff;
+  border-color: rgba(22, 119, 255, 0.45);
 }
 
 .detail-modal {
@@ -839,26 +1134,23 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1200px) {
   .core-layout {
-    grid-template-columns: 1fr;
+    flex-direction: column;
     height: auto;
   }
 
   .chat-panel,
   .preview-panel,
   .version-panel {
+    width: 100% !important;
     min-height: 420px;
   }
 
-  .version-panel {
-    flex-direction: column;
+  .preview-panel {
+    min-width: 0;
   }
 
-  .version-panel__title {
-    writing-mode: horizontal-tb;
-    letter-spacing: 0;
-    padding: 8px 12px;
-    border-left: none;
-    border-bottom: 1px solid var(--border-color);
+  .resize-handle {
+    display: none;
   }
 
   .version-panel__list {
@@ -868,7 +1160,7 @@ onBeforeUnmount(() => {
   }
 
   .version-item {
-    min-width: 88px;
+    min-width: 160px;
     flex-shrink: 0;
   }
 }

@@ -1,6 +1,6 @@
 package com.casy.casyaicodemother.service.impl;
 
-import cn.dev33.satoken.stp.StpUtil;
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.constant.UserConstant;
@@ -69,8 +69,16 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         }
         // 代码目录
         String code_dir = String.format("v%s", lastVersion);
-        // 用户id
-        Long userId = StpUtil.getLoginIdAsLong();
+        /**
+         * Long userId = StpUtil.getLoginIdAsLong();
+         * 会报错SaTokenContext 上下文尚未初始化
+         * 原因：
+         * createCodeVersion 是在 AiCodeGeneratorFacade.processCodeStream 的 doOnComplete 里调用的。
+         * Reactor 流完成回调跑在 Reactor 线程，不是发起请求的 HTTP 线程。
+         * SaToken 靠 Filter 在请求线程里把登录信息放进 ThreadLocal，异步线程里没有这个上下文，
+         * 所以 StpUtil.getLoginIdAsLong() 会报「SaTokenContext 上下文尚未初始化」。
+         */
+        Long userId = appById.getUserId();
         AppVersion appVersion = new AppVersion();
         appVersion.setVersionNum(lastVersion);
         appVersion.setCodeDir(code_dir);
@@ -88,12 +96,10 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         // 获取文件目录
         App appById = appService.getAppById(appVersion.getAppId());
         String DirName = String.format("%s_%s_%s", appById.getCodeGenType(), appVersion.getAppId(), appVersion.getCodeDir());
-        String filePath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/" + DirName;
+        String filePath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + DirName;
         File file = new File(filePath);
-        // 检查文件是否存在
         ThrowUtils.throwIf(!file.exists(), ErrorCode.OPERATION_ERROR, "应用文件不存在");
-        // 删除文件
-        boolean deleted = file.delete();
+        boolean deleted = FileUtil.del(file);
         if (!deleted) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "文件删除失败");
         }
