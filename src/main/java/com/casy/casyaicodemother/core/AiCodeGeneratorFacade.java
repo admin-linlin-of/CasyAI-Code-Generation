@@ -79,8 +79,12 @@ public class AiCodeGeneratorFacade {
                 yield processCodeStream(stringFlux, CodeGenTypeEnum.MULTI_FILE, modelTypeEnum, appId, userMessageId);
             }
             case VUE_PROJECT -> {
+                // 流开始前：把 modelType、userMessageId 放进 CodeGenContextHolder，
+                // 供 FileWriteTool 首次写文件时 createCodeVersion 使用（工具本身只能拿到 appId）
+                CodeGenContextHolder.set(appId, modelTypeEnum, userMessageId);
                 TokenStream tokenStream = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId).generateVueProjectCodeStream(appId, userMessage);
-                yield processTokenStream(tokenStream);
+                // 流结束（成功/失败/取消）后清理上下文，避免内存泄漏
+                yield processTokenStream(tokenStream).doFinally(signal -> CodeGenContextHolder.remove(appId));
             }
             default -> {
                 String errorMessage = "不支持的生成类型：" + codeGenTypeEnum.getValue();
@@ -135,6 +139,7 @@ public class AiCodeGeneratorFacade {
      *
      * <h3>工具调用消息流程图：</h3>
      * <img src="../../../../../javadoc/doc-files/VUE项目生成流程.png" alt="登录验证流程" width="700"  height="500"/>
+     *
      * @param tokenStream TokenStream 对象
      * @return Flux&lt;String&gt; JSON 格式的流式响应
      */

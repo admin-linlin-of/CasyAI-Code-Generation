@@ -173,10 +173,13 @@ const modelType = ref('deepseek-v4-flash')
 const codeGenTypeOptions = [
   { value: 'multi_file', label: '多文件模式' },
   { value: 'html', label: 'HTML 模式' },
+  { value: 'vue_project', label: 'Vue 工程模式' },
 ]
 const modelTypeOptions = [
   { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+  { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
   { value: 'gpt-5.5', label: 'GPT 5.5' },
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
 ]
 
 const quickTags = ['波普风电商页面', '企业网站', '电商运营后台', '暗黑话题社区']

@@ -55,6 +55,9 @@ public class AiCodeGeneratorServiceFactory {
     private RedisChatMemoryStore redisChatMemoryStore;
     @Resource
     private ChatHistoryService chatHistoryService;
+    /** 必须注入 Spring Bean，不能用 new FileWriteTool()，否则 @Resource AppVersionService 不会生效 */
+    @Resource
+    private FileWriteTool fileWriteTool;
     /**
      * Spring 自动收集容器中所有 ModelProvider Bean（各 *ModelConfig 注册）。
      * 新增模型时此字段无需修改，符合开闭原则。
@@ -110,7 +113,7 @@ public class AiCodeGeneratorServiceFactory {
             case VUE_PROJECT -> AiServices.builder(AiCodeGeneratorService.class)
                     .streamingChatModel(provider.getStreamingChatModel())
                     .chatMemoryProvider(memoryId -> chatMemory)
-                    .tools(new FileWriteTool())
+                    .tools(fileWriteTool)
                     // hallucinatedToolNameStrategy（幻觉工具名称策略）配置了找不到工具时的处理策略，可以让框架帮我们处理 AI 出现幻觉的情况，比如告诉 AI “找不到工具”
                     // TODO 注意‍‍！这里最好做一些调整，防止 AI 一直无限循环调用工具，包括：
                     // TODO 调大对话记忆的容量，否则 AI 会中途断片儿，忘记已经生成了哪些文件

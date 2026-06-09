@@ -9,6 +9,8 @@ import cn.hutool.json.JSONUtil;
 import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.constant.UserConstant;
 import com.casy.casyaicodemother.core.AiCodeGeneratorFacade;
+import com.casy.casyaicodemother.core.builder.VueProjectBuilder;
+import com.casy.casyaicodemother.core.handler.StreamHandlerExecutor;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.exception.ThrowUtils;
@@ -31,6 +33,7 @@ import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
@@ -45,6 +48,7 @@ import static com.casy.casyaicodemother.constant.AppConstant.APP_PUBLISHED;
 /**
  * 应用 服务层实现。
  */
+@Slf4j
 @Service
 public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppService {
 
@@ -56,6 +60,12 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Resource
     private ChatHistoryService chatHistoryService;
+
+    @Resource
+    private StreamHandlerExecutor streamHandlerExecutor;
+
+    @Resource
+    private VueProjectBuilder vueProjectBuilder;
 
     @Override
     public long createApp(AppAddRequest appAddRequest, User loginUser) {
@@ -293,14 +303,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         }
         // 5. 通过校验后，添加用户消息到对话历史
         long userMessageId = chatHistoryService.saveUserMessage(appId, message, loginUser);
-        StringBuilder aiResponseBuilder = new StringBuilder();
-        return aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, modelTypeEnum, appId, userMessageId)
-                // 收集AI响应
-                .doOnNext(aiResponseBuilder::append)
-                // 6. 添加AI消息到对话历史
-                .doOnComplete(() -> chatHistoryService.saveAiMessage(appId, userMessageId, aiResponseBuilder.toString(), loginUser))
-                // 7. 添加AI异常消息到对话历史
-                .doOnError(error -> chatHistoryService.saveErrorMessage(appId, userMessageId, error.getMessage(), loginUser));
+        // 6. 调用 AI 生成代码
+        Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, modelTypeEnum, appId, userMessageId);
+        return streamHandlerExecutor.doExecute(codeStream, chatHistoryService, appId, userMessageId, loginUser, codeGenTypeEnum);
     }
 
     @Override
@@ -328,14 +333,27 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (!sourceDir.exists() || !sourceDir.isDirectory()) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "应用代码不存在，请先生成代码！");
         }
-        // 7. 复制文件到部署目录
+        // 7. Vue 项目特殊处理：执行构建
+        CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenType);
+        if (codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT) {
+            // Vue 项目需要构建
+            boolean buildSuccess = vueProjectBuilder.buildProject(sourceDirPath);
+            ThrowUtils.throwIf(!buildSuccess, ErrorCode.SYSTEM_ERROR, "Vue项目构建失败，请检查代码和依赖");
+            // 检查 dist 目录是否存在
+            File distDir = new File(sourceDirPath, "dist");
+            ThrowUtils.throwIf(!distDir.exists(), ErrorCode.SYSTEM_ERROR, "Vue 项目构建完成但未生成 dist 目录");
+            // 将 dist 目录作为部署源
+            sourceDir = distDir;
+            log.info("Vue 项目构建成功，将部署 dist 目录: {}", distDir.getAbsolutePath());
+        }
+        // 8. 复制文件到部署目录
         String deployDirPath = AppConstant.CODE_DEPLOY_ROOT_DIR + File.separator + deployKey;
         try {
             FileUtil.copyContent(sourceDir, new File(deployDirPath), true);
         } catch (Exception e) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "部署失败：" + e.getMessage());
         }
-        // 8. 更新应用的 deployKey 和部署时间
+        // 9. 更新应用的 deployKey 和部署时间
         App updateApp = new App();
         updateApp.setId(appId);
         updateApp.setDeployKey(deployKey);

@@ -16,6 +16,7 @@
             :options="[
               { value: 'multi_file', label: 'multi_file' },
               { value: 'html', label: 'html' },
+              { value: 'vue_project', label: 'vue_project' },
             ]"
           />
         </a-form-item>
@@ -122,6 +123,7 @@ import { APP_FEATURED_PRIORITY, APP_NOT_PUBLISH, APP_PUBLISHED } from '@/constan
 const CODE_GEN_TYPE_LABEL_MAP: Record<string, string> = {
   multi_file: '多文件模式',
   html: 'HTML 模式',
+  vue_project: 'Vue 工程模式',
 }
 
 const router = useRouter()

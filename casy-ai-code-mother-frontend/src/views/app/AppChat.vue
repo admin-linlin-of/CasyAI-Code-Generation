@@ -78,10 +78,13 @@
             :files="displayVirtualFiles"
             :read-only="generating"
           />
-          <!-- 预览模式：iframe 展示后端静态资源 -->
+          <!-- Vue 项目：后端异步 npm build，轮询 dist 就绪后再加载 iframe -->
+          <div v-else-if="rightViewMode === 'preview' && showPreview && previewBuilding" class="preview-building">
+            <a-spin tip="项目打包中，请稍候..." />
+          </div>
           <iframe
             v-else-if="rightViewMode === 'preview' && showPreview"
-            :key="previewUrl"
+            :key="`${previewUrl}-${previewRefreshKey}`"
             :src="previewUrl"
             title="app-preview"
           />
@@ -131,7 +134,19 @@
             @click="selectVersion(version)"
           >
             <div class="version-item__thumb">
-              <iframe :src="getVersionPreviewUrl(version)" tabindex="-1" title="version-preview" />
+              <div v-if="isVersionBuilding(version)" class="version-item__building">
+                <a-spin size="small" tip="打包中" />
+              </div>
+              <div v-else-if="!isVersionPreviewReady(version)" class="version-item__building">
+                <span class="version-item__unavailable">无预览</span>
+              </div>
+              <iframe
+                v-else
+                :key="`${version.codeDir}-${getVersionPreviewKey(version)}`"
+                :src="getVersionPreviewUrl(version)"
+                tabindex="-1"
+                title="version-preview"
+              />
             </div>
             <div class="version-item__meta">
               <span class="version-item__label">{{ formatVersionLabel(version) }}</span>
@@ -220,7 +235,13 @@ import { listAppChatHistoryByPage } from '@/api/chatHistoryController'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { CheckCircleOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons-vue'
 import request from '@/axios/request'
-import { API_BASE_URL } from '@/config'
+import {
+  checkStaticResourceReady,
+  CodeGenTypeEnum,
+  getStaticBaseUrl,
+  getStaticPreviewUrl,
+  waitForStaticResourceReady,
+} from '@/utils/previewUrl'
 import AiMarkdownMessage from '@/components/AiMarkdownMessage.vue'
 import CodeWorkspace from '@/components/CodeWorkspace.vue'
 import { APP_TYPE_OPTIONS } from '@/constant/appType'
@@ -274,13 +295,18 @@ const modelType = ref(
 )
 const modelTypeOptions = [
   { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+  { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
   { value: 'gpt-5.5', label: 'GPT 5.5' },
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
 ]
 
 const appInfo = ref<API.AppVO>()
 const messages = ref<ChatMessage[]>([])
 const previewUrl = ref('')
+const staticBaseUrl = ref('')
 const showPreview = ref(false)
+const previewBuilding = ref(false)
+const previewRefreshKey = ref(0)
 const messageRef = ref<HTMLElement>()
 const loadingHistory = ref(false)
 const loadingMoreHistory = ref(false)
@@ -290,6 +316,9 @@ let eventSource: EventSource | null = null
 
 const versionList = ref<API.AppVersion[]>([])
 const selectedVersionCodeDir = ref('')
+type VersionBuildState = 'building' | 'ready' | 'unavailable' | 'timeout'
+const versionBuildStates = ref<Record<string, VersionBuildState>>({})
+const versionPreviewKeys = ref<Record<string, number>>({})
 
 const layoutRef = ref<HTMLElement>()
 const chatWidth = ref(420)
@@ -413,6 +442,57 @@ const isOwnApp = computed(() => {
   return loginUserId != null && ownerId != null && loginUserId === ownerId
 })
 
+const isVueProject = computed(() => appInfo.value?.codeGenType === CodeGenTypeEnum.VUE_PROJECT)
+
+const isVersionBuilding = (version: API.AppVersion) =>
+  Boolean(version.codeDir && versionBuildStates.value[version.codeDir] === 'building')
+
+const isVersionPreviewReady = (version: API.AppVersion) =>
+  !isVueProject.value ||
+  Boolean(version.codeDir && versionBuildStates.value[version.codeDir] === 'ready')
+
+const getVersionPreviewKey = (version: API.AppVersion) =>
+  version.codeDir ? (versionPreviewKeys.value[version.codeDir] ?? 0) : 0
+
+const markVersionPreviewReady = (codeDir: string) => {
+  versionBuildStates.value[codeDir] = 'ready'
+  versionPreviewKeys.value[codeDir] = (versionPreviewKeys.value[codeDir] ?? 0) + 1
+  previewRefreshKey.value++
+}
+
+const initVersionPreviewStates = async (list: API.AppVersion[], pollLatest = false) => {
+  if (!isVueProject.value) return
+  for (const version of list) {
+    const codeDir = version.codeDir
+    if (!codeDir) continue
+    if (pollLatest && version === list[0]) {
+      versionBuildStates.value[codeDir] = 'building'
+      continue
+    }
+    const ready = await checkStaticResourceReady(getVersionPreviewUrl(version))
+    versionBuildStates.value[codeDir] = ready ? 'ready' : 'unavailable'
+  }
+}
+
+const waitForVuePreviewReady = async (codeDir?: string) => {
+  const dir = codeDir || selectedVersionCodeDir.value
+  if (!isVueProject.value || !dir) return
+  previewBuilding.value = true
+  versionBuildStates.value[dir] = 'building'
+  try {
+    const url = getVersionPreviewUrl({ codeDir: dir } as API.AppVersion)
+    const ready = await waitForStaticResourceReady(url)
+    versionBuildStates.value[dir] = ready ? 'ready' : 'timeout'
+    if (ready) {
+      markVersionPreviewReady(dir)
+    } else {
+      message.warning('项目打包超时，请稍后刷新页面重试')
+    }
+  } finally {
+    previewBuilding.value = false
+  }
+}
+
 /** 右侧面板视图：code = Monaco 代码，preview = iframe 预览 */
 type RightViewMode = 'code' | 'preview'
 const rightViewMode = ref<RightViewMode>('preview')
@@ -444,8 +524,8 @@ const displayVirtualFiles = computed(() => {
 const hasCodeContent = computed(() => hasVirtualFileContent(displayVirtualFiles.value))
 
 const loadSavedCodeFiles = async () => {
-  if (!previewUrl.value) return
-  const files = await fetchSavedVirtualFiles(previewUrl.value)
+  if (!staticBaseUrl.value) return
+  const files = await fetchSavedVirtualFiles(staticBaseUrl.value)
   if (files.length) savedVirtualFiles.value = files
 }
 
@@ -502,12 +582,14 @@ const buildPreviewUrl = (codeDir?: string) => {
   const codeGenType = appInfo.value?.codeGenType || 'multi_file'
   const dir = codeDir || selectedVersionCodeDir.value
   const deployKey = dir ? `${codeGenType}_${appId.value}_${dir}` : `${codeGenType}_${appId.value}`
-  previewUrl.value = `${API_BASE_URL}/static/${deployKey}/`
+  staticBaseUrl.value = getStaticBaseUrl(deployKey)
+  previewUrl.value = getStaticPreviewUrl(codeGenType, deployKey)
 }
 
 const getVersionPreviewUrl = (version: API.AppVersion) => {
   const codeGenType = appInfo.value?.codeGenType || 'multi_file'
-  return `${API_BASE_URL}/static/${codeGenType}_${appId.value}_${version.codeDir}/`
+  const deployKey = `${codeGenType}_${appId.value}_${version.codeDir}`
+  return getStaticPreviewUrl(codeGenType, deployKey)
 }
 
 const loadVersions = async (selectLatest = false) => {
@@ -526,6 +608,7 @@ const loadVersions = async (selectLatest = false) => {
         savedVirtualFiles.value = []
       }
       buildPreviewUrl(selectedVersionCodeDir.value)
+      await initVersionPreviewStates(list, selectLatest)
     }
   } catch {
     versionList.value = []
@@ -679,6 +762,7 @@ const startStream = (messageText: string) => {
     rightViewMode.value = 'preview'
     closeEventSource()
     await loadVersions(true)
+    await waitForVuePreviewReady(selectedVersionCodeDir.value)
     await loadSavedCodeFiles()
   })
 
@@ -934,6 +1018,14 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 
+.preview-building {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 240px;
+}
+
 .preview-panel__body iframe {
   width: 100%;
   height: 100%;
@@ -1023,6 +1115,21 @@ onBeforeUnmount(() => {
   overflow: hidden;
   background: #fff;
   pointer-events: none;
+}
+
+.version-item__building {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fafafa;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.version-item__unavailable {
+  color: var(--text-secondary);
 }
 
 .version-item__thumb iframe {
