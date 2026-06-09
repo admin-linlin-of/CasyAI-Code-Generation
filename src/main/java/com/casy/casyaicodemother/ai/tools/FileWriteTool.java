@@ -20,10 +20,11 @@ import java.nio.file.StandardOpenOption;
 /**
  * 文件写入工具（VUE_PROJECT 模式下 AI 通过 @Tool 调用）。
  * <p>
- * AI 传入的是相对路径（如 src/App.vue），本工具负责：
- * 1. 首次写入时为该次生成创建新版本（v1/v2...）并写入 t_app_version
- * 2. 将文件落到带版本号的目录：tmp/code_output/vue_project_{appId}_v{n}/...
- * 3. 返回相对路径给 AI，避免暴露服务器绝对路径
+ * AI 传入相对路径（如 src/pages/Home.vue），本工具负责：
+ * 1. 首次写入：createCodeVersion → 写库；v2+ 时 {@link com.casy.casyaicodemother.core.vue.VueProjectVersionManager} 已从上一版复制完整源码
+ * 2. 写入带版本号目录：tmp/code_output/vue_project_{appId}_v{n}/...
+ * 3. node_modules 不在此复制，构建时链接到 vue_project_{appId}_shared/node_modules
+ * 4. 返回相对路径给 AI，不暴露服务器绝对路径
  */
 @Slf4j
 @Component
@@ -42,9 +43,7 @@ public class FileWriteTool {
         try {
             Path path = Paths.get(relativeFilePath);
             if (!path.isAbsolute()) {
-                // --- 版本目录逻辑（仅相对路径时生效）---
-                // 第一次 writeFile：createCodeVersion → 返回 v1，并写入数据库
-                // 同一次生成内后续 writeFile：直接复用已创建的 v1，不会重复建版本
+                // 第一次 writeFile：createCodeVersion（v2+ 会先复制上一版完整源码，再写入/覆盖本文件）
                 String versionDir = CodeGenContextHolder.getOrCreateVersionDir(appId, appVersionService);
                 // 有版本 → vue_project_123_v1；无上下文（异常情况）→ 降级为 vue_project_123
                 String projectDirName = versionDir != null

@@ -16,13 +16,17 @@ import java.util.concurrent.ConcurrentHashMap;
  * 因此用 ConcurrentHashMap 以 appId 为 key，在流式生成开始前存入上下文，
  * 首次写文件时懒创建版本，流结束后清理。
  * <p>
- * 整体流程：
+ * 整体流程（多版本 + 共用 node_modules）：
  * <pre>
- * 1. AiCodeGeneratorFacade.generateAndSaveCodeStream  → set(appId, modelType, userMessageId)
- * 2. AI 第一次调用 FileWriteTool.writeFile            → getOrCreateVersionDir → 写库 + 返回 v1/v2...
- * 3. AI 后续写文件                                     → 复用同一个 versionDir，不再重复建版本
- * 4. JsonMessageStreamHandler 流结束                   → getVersionDir → npm build 同版本目录
- * 5. AiCodeGeneratorFacade 流结束                      → remove(appId)
+ * 1. AiCodeGeneratorFacade.set(appId, modelType, userMessageId)
+ * 2. AI 首次 writeFile → createCodeVersion
+ *      ├─ v1：空目录
+ *      └─ v2+：VueProjectVersionManager 从上一版复制（不含 node_modules/dist）
+ * 3. AI 写入/覆盖文件（增量修改时可能只写一个 .vue）
+ * 4. JsonMessageStreamHandler 流结束 → VueProjectBuilder 异步 build
+ *      ├─ npm install 仅在 vue_project_{appId}_shared
+ *      └─ 版本目录 node_modules 链接到 shared
+ * 5. AiCodeGeneratorFacade.remove(appId)
  * </pre>
  */
 public class CodeGenContextHolder {

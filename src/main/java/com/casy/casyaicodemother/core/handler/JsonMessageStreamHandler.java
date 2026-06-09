@@ -65,8 +65,7 @@ public class JsonMessageStreamHandler {
                     // 流式响应完成后，添加 AI 消息到对话历史
                     String aiResponse = chatHistoryStringBuilder.toString();
                     chatHistoryService.saveAiMessage(appId, userMessageId, chatHistoryStringBuilder.toString(), loginUser);
-                    // 异步 npm install + npm run build
-                    // 必须与 FileWriteTool 写入的目录一致（带版本号），否则 build 找不到刚生成的代码
+                    // 异步 build：shared 安装依赖 + 版本目录链接 node_modules + 输出 dist 到本版本
                     String versionDir = CodeGenContextHolder.getVersionDir(appId);
                     String projectDirName = versionDir != null
                             ? CodeGenContextHolder.buildProjectDirName(appId, versionDir)

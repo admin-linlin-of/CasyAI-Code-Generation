@@ -4,6 +4,7 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.constant.UserConstant;
+import com.casy.casyaicodemother.core.vue.VueProjectVersionManager;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.exception.ThrowUtils;
@@ -44,31 +45,42 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
     @Resource
     private AppVersionMapper appVersionMapper;
 
+    @Resource
+    private VueProjectVersionManager vueProjectVersionManager;
+
+    /**
+     * 创建代码版本记录，并在磁盘上初始化版本目录。
+     * <p>
+     * v1：创建空目录，AI 从零写入全部文件。
+     * v2+：先把上一版本完整复制到新目录（排除 node_modules、dist），AI 再只改需要改的文件。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public String createCodeVersion(Long appId, ModelTypeEnum modelTypeEnum, Long userMessageId) {
         ThrowUtils.throwIf(appId == null || modelTypeEnum == null, ErrorCode.PARAMS_ERROR);
-        // 获取应用数据
         App appById = appService.getAppById(appId);
         ThrowUtils.throwIf(appById == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
-        // 获取最新的应用版本
+
         AppVersionRequest appVersionRequest = new AppVersionRequest();
         appVersionRequest.setAppId(appId);
         appVersionRequest.setSortField("version_num");
         appVersionRequest.setSortOrder("ascend");
         List<AppVersion> appVersions = appVersionMapper.selectListByQuery(getQueryWrapper(appVersionRequest));
+
         int lastVersion = 1;
+        String previousCodeDir = null;
         if (appVersions != null && !appVersions.isEmpty()) {
-            // 检查是否超过10个版本，超过10则删除最早的一个版本
             if (appVersions.size() == 10) {
                 AppVersion appVersion = appVersions.getFirst();
                 appVersionService.removeByAppVersion(appVersion);
+                appVersions = appVersions.subList(1, appVersions.size());
             }
             AppVersion last = appVersions.getLast();
+            previousCodeDir = last.getCodeDir();
             lastVersion = last.getVersionNum() + 1;
         }
-        // 代码目录
-        String code_dir = String.format("v%s", lastVersion);
+
+        String codeDir = String.format("v%s", lastVersion);
         /**
          * Long userId = StpUtil.getLoginIdAsLong();
          * 会报错SaTokenContext 上下文尚未初始化
@@ -81,29 +93,31 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         Long userId = appById.getUserId();
         AppVersion appVersion = new AppVersion();
         appVersion.setVersionNum(lastVersion);
-        appVersion.setCodeDir(code_dir);
+        appVersion.setCodeDir(codeDir);
         appVersion.setUserId(userId);
         appVersion.setModelType(modelTypeEnum.getModelName());
         appVersion.setAppId(appId);
         appVersion.setChatHistoryId(userMessageId);
         this.save(appVersion);
-        return code_dir;
+
+        // 磁盘：v1 空目录；v2+ 从上一版复制源码（node_modules 走 shared，不在版本间复制）
+        vueProjectVersionManager.initializeNewVersionDirectory(appId, codeDir, previousCodeDir);
+        return codeDir;
     }
 
 
     @Override
     public void removeByAppVersion(AppVersion appVersion) {
-        // 获取文件目录
         App appById = appService.getAppById(appVersion.getAppId());
-        String DirName = String.format("%s_%s_%s", appById.getCodeGenType(), appVersion.getAppId(), appVersion.getCodeDir());
-        String filePath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + DirName;
+        String dirName = String.format("%s_%s_%s", appById.getCodeGenType(), appVersion.getAppId(), appVersion.getCodeDir());
+        String filePath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + dirName;
         File file = new File(filePath);
         ThrowUtils.throwIf(!file.exists(), ErrorCode.OPERATION_ERROR, "应用文件不存在");
         boolean deleted = FileUtil.del(file);
         if (!deleted) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "文件删除失败");
         }
-        // 删除版本记录
+        // 共用依赖目录 vue_project_{appId}_shared 不随单版本删除，避免其他版本失去 node_modules
         this.removeById(appVersion.getId());
     }
 
