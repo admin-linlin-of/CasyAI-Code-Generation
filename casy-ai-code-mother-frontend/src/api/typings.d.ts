@@ -36,6 +36,7 @@ declare namespace API {
 
   type AppDeployRequest = {
     appId?: number
+    codeDir?: string
   }
 
   type AppQueryRequest = {
@@ -69,6 +70,8 @@ declare namespace API {
     versionNum?: number
     codeDir?: string
     modelType?: string
+    buildStatus?: string
+    deployStatus?: string
     userId?: number
     createTime?: string
     updateTime?: string
@@ -87,6 +90,11 @@ declare namespace API {
     codeDir?: string
     modelType?: string
     userId?: number
+  }
+
+  type AppVersionRetryBuildRequest = {
+    appId?: number
+    codeDir?: string
   }
 
   type BaseResponsePageAppVersion = {

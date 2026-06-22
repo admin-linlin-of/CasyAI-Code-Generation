@@ -26,6 +26,15 @@
             ]"
           >
             <div class="message-item__content">
+              <!-- AI 深度思考区域：流式展示 reasoning 内容 -->
+              <details
+                v-if="msg.role === 'ai' && msg.thinking"
+                class="message-item__thinking"
+                open
+              >
+                <summary>深度思考</summary>
+                <pre class="message-item__thinking-body">{{ msg.thinking }}</pre>
+              </details>
               <!-- AI 消息：Markdown + 高亮 + 打字机；用户消息：纯文本 -->
               <AiMarkdownMessage
                 v-if="msg.role === 'ai'"
@@ -79,11 +88,16 @@
             :read-only="generating"
           />
           <!-- Vue 项目：后端异步 npm build，轮询 dist 就绪后再加载 iframe -->
+          <div v-else-if="rightViewMode === 'preview' && showPreview && selectedVersionBuildFailed" class="preview-building">
+            <a-empty description="项目打包失败">
+              <a-button type="primary" :loading="retryingBuild" @click="retryBuild()">重新打包</a-button>
+            </a-empty>
+          </div>
           <div v-else-if="rightViewMode === 'preview' && showPreview && previewBuilding" class="preview-building">
             <a-spin tip="项目打包中，请稍候..." />
           </div>
           <iframe
-            v-else-if="rightViewMode === 'preview' && showPreview"
+            v-else-if="rightViewMode === 'preview' && showPreview && selectedVersionPreviewReady"
             :key="`${previewUrl}-${previewRefreshKey}`"
             :src="previewUrl"
             title="app-preview"
@@ -136,6 +150,18 @@
             <div class="version-item__thumb">
               <div v-if="isVersionBuilding(version)" class="version-item__building">
                 <a-spin size="small" tip="打包中" />
+              </div>
+              <div v-else-if="isVersionBuildFailed(version)" class="version-item__building version-item__building--retry">
+                <span class="version-item__unavailable">打包失败</span>
+                <a-button
+                  class="version-item__retry"
+                  size="small"
+                  type="link"
+                  :loading="retryingBuild && selectedVersionCodeDir === version.codeDir"
+                  @click.stop="retryBuild(version.codeDir)"
+                >
+                  重试
+                </a-button>
               </div>
               <div v-else-if="!isVersionPreviewReady(version)" class="version-item__building">
                 <span class="version-item__unavailable">无预览</span>
@@ -230,17 +256,15 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { deleteApp, deployApp, getAppVoById, updateApp } from '@/api/appController'
-import { getAppVersionsByAppId } from '@/api/appVersionController'
+import { getAppVersionsByAppId, retryVersionBuild } from '@/api/appVersionController'
 import { listAppChatHistoryByPage } from '@/api/chatHistoryController'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { CheckCircleOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons-vue'
 import request from '@/axios/request'
 import {
-  checkStaticResourceReady,
   CodeGenTypeEnum,
   getStaticBaseUrl,
   getStaticPreviewUrl,
-  waitForStaticResourceReady,
 } from '@/utils/previewUrl'
 import AiMarkdownMessage from '@/components/AiMarkdownMessage.vue'
 import CodeWorkspace from '@/components/CodeWorkspace.vue'
@@ -257,6 +281,8 @@ type ChatMessage = {
   id?: number
   role: 'user' | 'ai'
   content: string
+  /** AI 深度思考内容（reasoning 流） */
+  thinking?: string
   createTime?: string
   streaming?: boolean
 }
@@ -301,11 +327,13 @@ const modelTypeOptions = [
 ]
 
 const appInfo = ref<API.AppVO>()
+const isVueProject = computed(() => appInfo.value?.codeGenType === CodeGenTypeEnum.VUE_PROJECT)
 const messages = ref<ChatMessage[]>([])
 const previewUrl = ref('')
 const staticBaseUrl = ref('')
 const showPreview = ref(false)
 const previewBuilding = ref(false)
+const retryingBuild = ref(false)
 const previewRefreshKey = ref(0)
 const messageRef = ref<HTMLElement>()
 const loadingHistory = ref(false)
@@ -316,9 +344,28 @@ let eventSource: EventSource | null = null
 
 const versionList = ref<API.AppVersion[]>([])
 const selectedVersionCodeDir = ref('')
-type VersionBuildState = 'building' | 'ready' | 'unavailable' | 'timeout'
-const versionBuildStates = ref<Record<string, VersionBuildState>>({})
 const versionPreviewKeys = ref<Record<string, number>>({})
+
+const selectedVersion = computed(() =>
+  versionList.value.find((v) => v.codeDir === selectedVersionCodeDir.value),
+)
+
+const isVersionBuildingStatus = (status?: string) => status === 'pending' || status === 'building'
+
+const isVersionBuilding = (version: API.AppVersion) =>
+  isVueProject.value && isVersionBuildingStatus(version.buildStatus)
+
+const isVersionBuildFailed = (version: API.AppVersion) =>
+  isVueProject.value && version.buildStatus === 'failed'
+
+const isVersionPreviewReady = (version: API.AppVersion) =>
+  !isVueProject.value || version.buildStatus === 'success'
+
+const selectedVersionBuildFailed = computed(() => isVersionBuildFailed(selectedVersion.value || {}))
+
+const selectedVersionPreviewReady = computed(() =>
+  !isVueProject.value || selectedVersion.value?.buildStatus === 'success',
+)
 
 const layoutRef = ref<HTMLElement>()
 const chatWidth = ref(420)
@@ -442,54 +489,67 @@ const isOwnApp = computed(() => {
   return loginUserId != null && ownerId != null && loginUserId === ownerId
 })
 
-const isVueProject = computed(() => appInfo.value?.codeGenType === CodeGenTypeEnum.VUE_PROJECT)
-
-const isVersionBuilding = (version: API.AppVersion) =>
-  Boolean(version.codeDir && versionBuildStates.value[version.codeDir] === 'building')
-
-const isVersionPreviewReady = (version: API.AppVersion) =>
-  !isVueProject.value ||
-  Boolean(version.codeDir && versionBuildStates.value[version.codeDir] === 'ready')
-
 const getVersionPreviewKey = (version: API.AppVersion) =>
   version.codeDir ? (versionPreviewKeys.value[version.codeDir] ?? 0) : 0
 
 const markVersionPreviewReady = (codeDir: string) => {
-  versionBuildStates.value[codeDir] = 'ready'
   versionPreviewKeys.value[codeDir] = (versionPreviewKeys.value[codeDir] ?? 0) + 1
   previewRefreshKey.value++
 }
 
-const initVersionPreviewStates = async (list: API.AppVersion[], pollLatest = false) => {
-  if (!isVueProject.value) return
-  for (const version of list) {
-    const codeDir = version.codeDir
-    if (!codeDir) continue
-    if (pollLatest && version === list[0]) {
-      versionBuildStates.value[codeDir] = 'building'
-      continue
+const pollVersionBuildStatus = async (codeDir: string) => {
+  for (let i = 0; i < 120; i++) {
+    const res = await getAppVersionsByAppId({ appid: appId.value })
+    const list = Array.isArray(res.data) ? res.data : []
+    versionList.value = list
+    const version = list.find((v) => v.codeDir === codeDir)
+    if (!version) return false
+    if (version.buildStatus === 'success') {
+      markVersionPreviewReady(codeDir)
+      return true
     }
-    const ready = await checkStaticResourceReady(getVersionPreviewUrl(version))
-    versionBuildStates.value[codeDir] = ready ? 'ready' : 'unavailable'
+    if (version.buildStatus === 'failed') {
+      message.error('项目打包失败')
+      return false
+    }
+    await new Promise((r) => setTimeout(r, 3000))
   }
+  return false
 }
 
 const waitForVuePreviewReady = async (codeDir?: string) => {
   const dir = codeDir || selectedVersionCodeDir.value
   if (!isVueProject.value || !dir) return
   previewBuilding.value = true
-  versionBuildStates.value[dir] = 'building'
   try {
-    const url = getVersionPreviewUrl({ codeDir: dir } as API.AppVersion)
-    const ready = await waitForStaticResourceReady(url)
-    versionBuildStates.value[dir] = ready ? 'ready' : 'timeout'
-    if (ready) {
-      markVersionPreviewReady(dir)
-    } else {
+    const ready = await pollVersionBuildStatus(dir)
+    if (!ready && selectedVersion.value?.buildStatus !== 'failed') {
       message.warning('项目打包超时，请稍后刷新页面重试')
     }
   } finally {
     previewBuilding.value = false
+  }
+}
+
+const retryBuild = async (codeDir?: string) => {
+  const dir = codeDir || selectedVersionCodeDir.value
+  if (!isVueProject.value || !dir || generating.value || retryingBuild.value) return
+  retryingBuild.value = true
+  try {
+    const res = await retryVersionBuild({ appId: Number(appId.value), codeDir: dir })
+    if (res.data.code !== 0) {
+      message.error(res.data.message || '重新打包失败')
+      return
+    }
+    if (dir !== selectedVersionCodeDir.value) {
+      selectedVersionCodeDir.value = dir
+      buildPreviewUrl(dir)
+    }
+    rightViewMode.value = 'preview'
+    showPreview.value = true
+    await waitForVuePreviewReady(dir)
+  } finally {
+    retryingBuild.value = false
   }
 }
 
@@ -608,7 +668,6 @@ const loadVersions = async (selectLatest = false) => {
         savedVirtualFiles.value = []
       }
       buildPreviewUrl(selectedVersionCodeDir.value)
-      await initVersionPreviewStates(list, selectLatest)
     }
   } catch {
     versionList.value = []
@@ -731,7 +790,7 @@ const startStream = (messageText: string) => {
   showPreview.value = false
   // 开始生成时自动切到代码视图，实时看 Monaco 流式输出
   rightViewMode.value = 'code'
-  const aiMsg: ChatMessage = { role: 'ai', content: '', streaming: true }
+  const aiMsg: ChatMessage = { role: 'ai', content: '', thinking: '', streaming: true }
   messages.value.push(aiMsg)
   const baseURL = request.defaults.baseURL ?? ''
   const url = new URL('app/chat/gen/code', baseURL.endsWith('/') ? baseURL : `${baseURL}/`)
@@ -744,9 +803,13 @@ const startStream = (messageText: string) => {
   eventSource.onmessage = (event) => {
     if (finished) return
     try {
-      // 后端包装为 JSON，避免 EventSource 丢空格
-      const data = JSON.parse(event.data) as { c?: string }
-      aiMsg.content += data.c ?? ''
+      // 后端包装为 JSON：普通内容 {"c":"..."}，深度思考 {"c":"...","t":"thinking"}
+      const data = JSON.parse(event.data) as { c?: string; t?: string }
+      if (data.t === 'thinking') {
+        aiMsg.thinking = (aiMsg.thinking ?? '') + (data.c ?? '')
+      } else {
+        aiMsg.content += data.c ?? ''
+      }
     } catch {
       aiMsg.content += event.data ?? ''
     }
@@ -798,10 +861,11 @@ const doDeploy = async () => {
   }
   deploying.value = true
   try {
-    const res = await deployApp({ appId: appId.value })
+    const res = await deployApp({ appId: appId.value, codeDir: selectedVersionCodeDir.value })
     if (res.data.code === 0 && res.data.data) {
       deployUrl.value = res.data.data
       deploySuccessVisible.value = true
+      await loadVersions()
       return
     }
     message.error(res.data.message || '部署失败')
@@ -935,6 +999,35 @@ onBeforeUnmount(() => {
 .message-item--ai .message-item__content {
   background: rgba(22, 119, 255, 0.08);
   border: 1px solid var(--border-color);
+}
+
+.message-item__thinking {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px dashed rgba(22, 119, 255, 0.35);
+}
+
+.message-item__thinking summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1677ff;
+  user-select: none;
+}
+
+.message-item__thinking-body {
+  margin: 8px 0 0;
+  padding: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  font-family: inherit;
+  max-height: 240px;
+  overflow: auto;
 }
 
 .message-item--user .message-item__content {
@@ -1125,6 +1218,18 @@ onBeforeUnmount(() => {
   justify-content: center;
   background: #fafafa;
   color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.version-item__building--retry {
+  pointer-events: auto;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.version-item__retry {
+  padding: 0;
+  height: auto;
   font-size: 12px;
 }
 

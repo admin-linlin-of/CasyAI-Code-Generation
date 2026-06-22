@@ -38,6 +38,21 @@ export async function getAppVersionsByAppId(
   })
 }
 
+/** 重新打包指定版本 POST /tAppVersion/retryBuild */
+export async function retryVersionBuild(
+  body: API.AppVersionRetryBuildRequest,
+  options?: { [key: string]: any },
+) {
+  return request<API.BaseResponseBoolean>('/tAppVersion/retryBuild', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
 /** 管理员分页查询应用代码版本 POST /tAppVersion/list/page */
 export async function listAppVersionByPage(
   body: API.AppVersionRequest,
