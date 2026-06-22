@@ -186,6 +186,24 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
+        <!-- 网页自动化工具https://www.selenium.dev/zh-cn/documentation/overview/ -->
+        <dependency>
+            <groupId>org.seleniumhq.selenium</groupId>
+            <artifactId>selenium-java</artifactId>
+            <version>4.41.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.seleniumhq.selenium</groupId>
+            <artifactId>selenium-grid</artifactId>
+            <version>4.41.0</version>
+        </dependency>
+        <!-- 程序化控制网络浏览器的库https://bonigarcia.dev/webdrivermanager/#motivation -->
+        <dependency>
+            <groupId>io.github.bonigarcia</groupId>
+            <artifactId>webdrivermanager</artifactId>
+            <version>6.3.4</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

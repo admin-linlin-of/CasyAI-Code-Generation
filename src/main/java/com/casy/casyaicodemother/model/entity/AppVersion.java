@@ -67,6 +67,18 @@ public class AppVersion implements Serializable {
     private String modelType;
 
     /**
+     * 构建状态：pending/building/success/failed
+     */
+    @Column("build_status")
+    private String buildStatus;
+
+    /**
+     * 部署状态：not_deployed/deploying/success/failed
+     */
+    @Column("deploy_status")
+    private String deployStatus;
+
+    /**
      * 创建用户id
      */
     @Column("user_id")

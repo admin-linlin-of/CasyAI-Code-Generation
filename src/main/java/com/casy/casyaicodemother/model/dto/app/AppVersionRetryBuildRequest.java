@@ -6,16 +6,10 @@ import java.io.Serial;
 import java.io.Serializable;
 
 @Data
-public class AppDeployRequest implements Serializable {
+public class AppVersionRetryBuildRequest implements Serializable {
 
-    /**
-     * 应用 id
-     */
     private Long appId;
 
-    /**
-     * 部署的版本目录，如 v1；为空时部署最新版本
-     */
     private String codeDir;
 
     @Serial

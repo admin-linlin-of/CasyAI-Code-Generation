@@ -4,8 +4,11 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RuntimeUtil;
 import com.casy.casyaicodemother.core.vue.VueProjectNodeModulesLinker;
 import com.casy.casyaicodemother.core.vue.VueProjectVersionManager;
+import com.casy.casyaicodemother.model.enums.VersionBuildStatusEnum;
+import com.casy.casyaicodemother.service.AppVersionService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
@@ -35,6 +38,10 @@ public class VueProjectBuilder {
     @Resource
     private VueProjectNodeModulesLinker nodeModulesLinker;
 
+    @Resource
+    @Lazy
+    private AppVersionService appVersionService;
+
     /**
      * 异步构建项目（不阻塞 SSE 流结束响应）
      */
@@ -44,6 +51,7 @@ public class VueProjectBuilder {
                 buildProject(projectPath);
             } catch (Exception e) {
                 log.error("异步构建 Vue 项目时发生异常：{}", e.getMessage(), e);
+                markBuildFailed(projectPath);
             }
         });
     }
@@ -57,25 +65,53 @@ public class VueProjectBuilder {
         File projectDir = new File(projectPath);
         if (!projectDir.exists() || !projectDir.isDirectory()) {
             log.error("项目目录不存在：{}", projectDir);
+            markBuildFailed(projectPath);
             return false;
         }
         File packageJson = new File(projectDir, "package.json");
         if (!packageJson.exists()) {
             log.error("package.json 不存在：{}", packageJson.getAbsolutePath());
+            markBuildFailed(projectPath);
             return false;
         }
 
         Long appId = versionManager.extractAppIdFromProjectPath(projectPath);
-        if (appId == null) {
-            log.error("无法从路径解析 appId，跳过共用依赖逻辑：{}", projectPath);
-            return buildProjectLegacy(projectDir);
+        String codeDir = versionManager.extractCodeDirFromProjectPath(projectPath);
+        if (appId != null && codeDir != null) {
+            appVersionService.updateBuildStatus(appId, codeDir, VersionBuildStatusEnum.BUILDING);
         }
 
+        boolean success;
+        if (appId == null) {
+            log.error("无法从路径解析 appId，跳过共用依赖逻辑：{}", projectPath);
+            success = buildProjectLegacy(projectDir);
+        } else {
+            success = doBuildProject(projectPath, projectDir, appId);
+        }
+        return finishBuild(appId, codeDir, success);
+    }
+
+    private void markBuildFailed(String projectPath) {
+        Long appId = versionManager.extractAppIdFromProjectPath(projectPath);
+        String codeDir = versionManager.extractCodeDirFromProjectPath(projectPath);
+        if (appId != null && codeDir != null) {
+            appVersionService.updateBuildStatus(appId, codeDir, VersionBuildStatusEnum.FAILED);
+        }
+    }
+
+    private boolean finishBuild(Long appId, String codeDir, boolean success) {
+        if (appId != null && codeDir != null) {
+            appVersionService.updateBuildStatus(appId, codeDir,
+                    success ? VersionBuildStatusEnum.SUCCESS : VersionBuildStatusEnum.FAILED);
+        }
+        return success;
+    }
+
+    private boolean doBuildProject(String projectPath, File projectDir, Long appId) {
         File sharedDir = versionManager.getSharedDir(appId);
         log.info("开始构建 Vue 项目：{}，共用依赖目录：{}", projectPath, sharedDir.getAbsolutePath());
 
         try {
-            // 1. 依赖描述文件同步到 shared，按需 install（全版本只维护一份 node_modules）
             boolean depsChanged = syncDependenciesToShared(projectDir, sharedDir);
             File sharedNodeModules = new File(sharedDir, "node_modules");
             if (!sharedNodeModules.exists() || depsChanged) {
@@ -84,14 +120,12 @@ public class VueProjectBuilder {
                     return false;
                 }
             }
-            // 2. 版本目录通过链接使用 shared/node_modules，避免每版复制 1G+ 依赖
             nodeModulesLinker.ensureNodeModulesLink(projectDir.toPath(), sharedNodeModules.toPath());
         } catch (IOException e) {
             log.error("准备共用 node_modules 失败：{}", e.getMessage(), e);
             return false;
         }
 
-        // 3. 在版本目录 build，产物 dist 属于该版本
         if (!executeNpmBuild(projectDir)) {
             log.error("npm run build 失败：{}", projectDir.getAbsolutePath());
             return false;
@@ -179,6 +213,7 @@ public class VueProjectBuilder {
             log.error("执行命令异常：{}，{}", command, e.getMessage());
             return false;
         }
+
     }
 
     private boolean executeNpmInstall(File workingDir) {

@@ -1,9 +1,12 @@
 package com.casy.casyaicodemother.service.impl;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.constant.UserConstant;
+import com.casy.casyaicodemother.constant.AppConstant;
+import com.casy.casyaicodemother.core.builder.VueProjectBuilder;
 import com.casy.casyaicodemother.core.vue.VueProjectVersionManager;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
@@ -13,7 +16,10 @@ import com.casy.casyaicodemother.model.dto.app.AppVersionRequest;
 import com.casy.casyaicodemother.model.entity.App;
 import com.casy.casyaicodemother.model.entity.AppVersion;
 import com.casy.casyaicodemother.model.entity.User;
+import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
+import com.casy.casyaicodemother.model.enums.VersionBuildStatusEnum;
+import com.casy.casyaicodemother.model.enums.VersionDeployStatusEnum;
 import com.casy.casyaicodemother.service.AppService;
 import com.casy.casyaicodemother.service.AppVersionService;
 import com.mybatisflex.core.paginate.Page;
@@ -47,6 +53,9 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
 
     @Resource
     private VueProjectVersionManager vueProjectVersionManager;
+
+    @Resource
+    private VueProjectBuilder vueProjectBuilder;
 
     /**
      * 创建代码版本记录，并在磁盘上初始化版本目录。
@@ -98,6 +107,8 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         appVersion.setModelType(modelTypeEnum.getModelName());
         appVersion.setAppId(appId);
         appVersion.setChatHistoryId(userMessageId);
+        appVersion.setBuildStatus(VersionBuildStatusEnum.PENDING.getValue());
+        appVersion.setDeployStatus(VersionDeployStatusEnum.NOT_DEPLOYED.getValue());
         this.save(appVersion);
 
         // 磁盘：v1 空目录；v2+ 从上一版复制源码（node_modules 走 shared，不在版本间复制）
@@ -146,6 +157,77 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
             appVersionRequest.setSortOrder("descend");
         }
         return page(Page.of(pageNum, pageSize), getQueryWrapper(appVersionRequest));
+    }
+
+    @Override
+    public AppVersion getByAppIdAndCodeDir(Long appId, String codeDir) {
+        ThrowUtils.throwIf(appId == null || StrUtil.isBlank(codeDir), ErrorCode.PARAMS_ERROR);
+        return getOne(QueryWrapper.create()
+                .eq(AppVersion::getAppId, appId)
+                .eq(AppVersion::getCodeDir, codeDir));
+    }
+
+    @Override
+    public void updateBuildStatus(Long appId, String codeDir, VersionBuildStatusEnum buildStatus) {
+        if (appId == null || StrUtil.isBlank(codeDir) || buildStatus == null) {
+            return;
+        }
+        AppVersion appVersion = getByAppIdAndCodeDir(appId, codeDir);
+        if (appVersion == null) {
+            return;
+        }
+        AppVersion update = new AppVersion();
+        update.setId(appVersion.getId());
+        update.setBuildStatus(buildStatus.getValue());
+        updateById(update);
+    }
+
+    @Override
+    public void updateDeployStatus(Long appId, String codeDir, VersionDeployStatusEnum deployStatus) {
+        if (appId == null || StrUtil.isBlank(codeDir) || deployStatus == null) {
+            return;
+        }
+        AppVersion appVersion = getByAppIdAndCodeDir(appId, codeDir);
+        if (appVersion == null) {
+            return;
+        }
+        AppVersion update = new AppVersion();
+        update.setId(appVersion.getId());
+        update.setDeployStatus(deployStatus.getValue());
+        updateById(update);
+    }
+
+    @Override
+    public String getLatestCodeDir(Long appId) {
+        ThrowUtils.throwIf(appId == null, ErrorCode.PARAMS_ERROR);
+        AppVersionRequest appVersionRequest = new AppVersionRequest();
+        appVersionRequest.setAppId(appId);
+        appVersionRequest.setSortField("version_num");
+        appVersionRequest.setSortOrder("descend");
+        List<AppVersion> appVersions = appVersionMapper.selectListByQuery(getQueryWrapper(appVersionRequest));
+        if (CollUtil.isEmpty(appVersions)) {
+            return null;
+        }
+        return appVersions.getFirst().getCodeDir();
+    }
+
+    @Override
+    public void retryBuild(Long appId, String codeDir, User loginUser) {
+        ThrowUtils.throwIf(appId == null || StrUtil.isBlank(codeDir), ErrorCode.PARAMS_ERROR);
+        App app = appService.getAppById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        checkAppVersionViewAuth(app, loginUser);
+        ThrowUtils.throwIf(CodeGenTypeEnum.VUE_PROJECT != CodeGenTypeEnum.getEnumByValue(app.getCodeGenType()),
+                ErrorCode.OPERATION_ERROR, "仅 Vue 项目支持重新打包");
+        AppVersion appVersion = getByAppIdAndCodeDir(appId, codeDir);
+        ThrowUtils.throwIf(appVersion == null, ErrorCode.NOT_FOUND_ERROR, "版本不存在");
+        ThrowUtils.throwIf(VersionBuildStatusEnum.BUILDING.getValue().equals(appVersion.getBuildStatus()),
+                ErrorCode.OPERATION_ERROR, "正在打包中，请稍候");
+        String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator
+                + vueProjectVersionManager.getVersionDirName(appId, codeDir);
+        File projectDir = new File(projectPath);
+        ThrowUtils.throwIf(!projectDir.exists(), ErrorCode.NOT_FOUND_ERROR, "版本代码目录不存在");
+        vueProjectBuilder.buildProjectAsync(projectPath);
     }
 
     private void checkAppVersionViewAuth(App app, User loginUser) {

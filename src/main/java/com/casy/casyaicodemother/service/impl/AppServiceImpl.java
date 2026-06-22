@@ -10,6 +10,7 @@ import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.constant.UserConstant;
 import com.casy.casyaicodemother.core.AiCodeGeneratorFacade;
 import com.casy.casyaicodemother.core.builder.VueProjectBuilder;
+import com.casy.casyaicodemother.core.vue.VueProjectVersionManager;
 import com.casy.casyaicodemother.core.handler.StreamHandlerExecutor;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
@@ -24,9 +25,11 @@ import com.casy.casyaicodemother.model.entity.User;
 import com.casy.casyaicodemother.model.enums.AppTypeEnum;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
+import com.casy.casyaicodemother.model.enums.VersionDeployStatusEnum;
 import com.casy.casyaicodemother.model.vo.app.AppVO;
 import com.casy.casyaicodemother.model.vo.user.UserVO;
 import com.casy.casyaicodemother.service.AppService;
+import com.casy.casyaicodemother.service.AppVersionService;
 import com.casy.casyaicodemother.service.ChatHistoryService;
 import com.casy.casyaicodemother.service.UserService;
 import com.mybatisflex.core.paginate.Page;
@@ -34,6 +37,7 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
@@ -66,6 +70,13 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Resource
     private VueProjectBuilder vueProjectBuilder;
+
+    @Resource
+    @Lazy
+    private AppVersionService appVersionService;
+
+    @Resource
+    private VueProjectVersionManager vueProjectVersionManager;
 
     @Override
     public long createApp(AppAddRequest appAddRequest, User loginUser) {
@@ -309,7 +320,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     }
 
     @Override
-    public String deployApp(Long appId, User loginUser) {
+    public String deployApp(Long appId, String codeDir, User loginUser) {
         // 1. 参数校验
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
@@ -326,42 +337,62 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         }
         // 5. 获取代码生成类型，构建源目录路径
         String codeGenType = app.getCodeGenType();
-        String sourceDirName = codeGenType + "_" + appId;
+        CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenType);
+        String deployCodeDir = codeDir;
+        if (codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT) {
+            if (StrUtil.isBlank(deployCodeDir)) {
+                deployCodeDir = appVersionService.getLatestCodeDir(appId);
+            }
+            ThrowUtils.throwIf(StrUtil.isBlank(deployCodeDir), ErrorCode.SYSTEM_ERROR, "暂无可部署版本");
+            appVersionService.updateDeployStatus(appId, deployCodeDir, VersionDeployStatusEnum.DEPLOYING);
+        }
+        String sourceDirName = codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT
+                ? vueProjectVersionManager.getVersionDirName(appId, deployCodeDir)
+                : codeGenType + "_" + appId;
         String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + sourceDirName;
         // 6. 检查源目录是否存在
         File sourceDir = new File(sourceDirPath);
         if (!sourceDir.exists() || !sourceDir.isDirectory()) {
+            markDeployFailed(appId, deployCodeDir, codeGenTypeEnum);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "应用代码不存在，请先生成代码！");
         }
-        // 7. Vue 项目特殊处理：执行构建
-        CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenType);
-        if (codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT) {
-            // Vue 项目需要构建
-            boolean buildSuccess = vueProjectBuilder.buildProject(sourceDirPath);
-            ThrowUtils.throwIf(!buildSuccess, ErrorCode.SYSTEM_ERROR, "Vue项目构建失败，请检查代码和依赖");
-            // 检查 dist 目录是否存在
-            File distDir = new File(sourceDirPath, "dist");
-            ThrowUtils.throwIf(!distDir.exists(), ErrorCode.SYSTEM_ERROR, "Vue 项目构建完成但未生成 dist 目录");
-            // 将 dist 目录作为部署源
-            sourceDir = distDir;
-            log.info("Vue 项目构建成功，将部署 dist 目录: {}", distDir.getAbsolutePath());
-        }
-        // 8. 复制文件到部署目录
-        String deployDirPath = AppConstant.CODE_DEPLOY_ROOT_DIR + File.separator + deployKey;
         try {
+            // 7. Vue 项目特殊处理：执行构建
+            if (codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT) {
+                boolean buildSuccess = vueProjectBuilder.buildProject(sourceDirPath);
+                ThrowUtils.throwIf(!buildSuccess, ErrorCode.SYSTEM_ERROR, "Vue项目构建失败，请检查代码和依赖");
+                File distDir = new File(sourceDirPath, "dist");
+                ThrowUtils.throwIf(!distDir.exists(), ErrorCode.SYSTEM_ERROR, "Vue 项目构建完成但未生成 dist 目录");
+                sourceDir = distDir;
+                log.info("Vue 项目构建成功，将部署 dist 目录: {}", distDir.getAbsolutePath());
+            }
+            // 8. 复制文件到部署目录
+            String deployDirPath = AppConstant.CODE_DEPLOY_ROOT_DIR + File.separator + deployKey;
             FileUtil.copyContent(sourceDir, new File(deployDirPath), true);
+            // 9. 更新应用的 deployKey 和部署时间
+            App updateApp = new App();
+            updateApp.setId(appId);
+            updateApp.setDeployKey(deployKey);
+            updateApp.setDeployedTime(LocalDateTime.now());
+            boolean updateResult = this.updateById(updateApp);
+            ThrowUtils.throwIf(!updateResult, ErrorCode.OPERATION_ERROR, "更新应用部署信息失败");
+            if (codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT) {
+                appVersionService.updateDeployStatus(appId, deployCodeDir, VersionDeployStatusEnum.SUCCESS);
+            }
+            return String.format("%s/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
         } catch (Exception e) {
+            markDeployFailed(appId, deployCodeDir, codeGenTypeEnum);
+            if (e instanceof BusinessException businessException) {
+                throw businessException;
+            }
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "部署失败：" + e.getMessage());
         }
-        // 9. 更新应用的 deployKey 和部署时间
-        App updateApp = new App();
-        updateApp.setId(appId);
-        updateApp.setDeployKey(deployKey);
-        updateApp.setDeployedTime(LocalDateTime.now());
-        boolean updateResult = this.updateById(updateApp);
-        ThrowUtils.throwIf(!updateResult, ErrorCode.OPERATION_ERROR, "更新应用部署信息失败");
-        // 9. 返回可访问的 URL
-        return String.format("%s/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
+    }
+
+    private void markDeployFailed(Long appId, String codeDir, CodeGenTypeEnum codeGenTypeEnum) {
+        if (codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT && StrUtil.isNotBlank(codeDir)) {
+            appVersionService.updateDeployStatus(appId, codeDir, VersionDeployStatusEnum.FAILED);
+        }
     }
 
     /**

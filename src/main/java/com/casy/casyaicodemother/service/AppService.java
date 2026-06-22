@@ -147,5 +147,5 @@ public interface AppService extends IService<App> {
      * @param loginUser 登录用户
      * @return 部署网址
      */
-    String deployApp(Long appId, User loginUser);
+    String deployApp(Long appId, String codeDir, User loginUser);
 }

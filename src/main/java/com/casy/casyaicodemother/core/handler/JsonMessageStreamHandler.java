@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.casy.casyaicodemother.ai.model.AiResponseMessage;
+import com.casy.casyaicodemother.ai.model.AiThinkingMessage;
 import com.casy.casyaicodemother.ai.model.StreamMessage;
 import com.casy.casyaicodemother.ai.model.ToolExecutedMessage;
 import com.casy.casyaicodemother.ai.model.ToolRequestMessage;
@@ -18,10 +19,12 @@ import com.casy.casyaicodemother.model.enums.StreamMessageTypeEnum;
 import com.casy.casyaicodemother.service.ChatHistoryService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -33,6 +36,7 @@ import java.util.Set;
 public class JsonMessageStreamHandler {
 
     @Resource
+    @Lazy
     private VueProjectBuilder vueProjectBuilder;
 
     /**
@@ -98,6 +102,12 @@ public class JsonMessageStreamHandler {
                 // 直接拼接响应
                 chatHistoryStringBuilder.append(data);
                 return data;
+            }
+            case AI_THINKING -> {
+                AiThinkingMessage aiThinkingMessage = JSONUtil.toBean(chunk, AiThinkingMessage.class);
+                String data = aiThinkingMessage.getData();
+                // 深度思考仅实时推前端展示，不写入对话历史
+                return JSONUtil.toJsonStr(Map.of("c", data, "t", "thinking"));
             }
             case TOOL_REQUEST -> {
                 ToolRequestMessage toolRequestMessage = JSONUtil.toBean(chunk, ToolRequestMessage.class);

@@ -216,9 +216,14 @@ public class AppController {
         //前端使用 EventSource 对接目前的接口时，会出现空格丢失问题。
         return appService.chatToGenCode(appId, message, modelType, loginUser)
                 .map(chunk -> {
-                    // 前端使用 EventSource 对接目前的接口时，会出现空格丢失问题，将内容包装成JSON对象
-                    Map<String, String> wrapper = Map.of("c", chunk);
-                    String jsonData = JSONUtil.toJsonStr(wrapper);
+                    // 深度思考已由 JsonMessageStreamHandler 包装为 {"c":"...","t":"thinking"}，直接透传
+                    String jsonData;
+                    if (chunk.startsWith("{") && chunk.contains("\"t\"")) {
+                        jsonData = chunk;
+                    } else {
+                        // 普通内容包装为 {"c":"..."}，避免 EventSource 丢空格
+                        jsonData = JSONUtil.toJsonStr(Map.of("c", chunk));
+                    }
                     return ServerSentEvent.<String>builder()
                             .data(jsonData)
                             .build();
@@ -244,7 +249,7 @@ public class AppController {
         // 获取当前登录用户
         User loginUser = userService.getLoginUser();
         // 调用服务部署应用
-        String deployUrl = appService.deployApp(appId, loginUser);
+        String deployUrl = appService.deployApp(appId, appDeployRequest.getCodeDir(), loginUser);
         return ResultUtils.success(deployUrl);
     }
 

@@ -54,7 +54,7 @@ public class VueProjectVersionManager {
     /** 复制版本时跳过的目录（体积大或可重建） */
     public static final Set<String> COPY_EXCLUDE_DIR_NAMES = Set.of("node_modules", "dist");
 
-    private static final Pattern VERSION_PATH_PATTERN = Pattern.compile("vue_project_(\\d+)_v\\d+");
+    private static final Pattern VERSION_PATH_PATTERN = Pattern.compile("vue_project_(\\d+)_(v\\d+)");
 
     public String getSharedDirName(Long appId) {
         return String.format("%s_%s_shared", CodeGenTypeEnum.VUE_PROJECT.getValue(), appId);
@@ -148,6 +148,17 @@ public class VueProjectVersionManager {
         Matcher matcher = VERSION_PATH_PATTERN.matcher(projectPath.replace('\\', '/'));
         if (matcher.find()) {
             return Long.parseLong(matcher.group(1));
+        }
+        return null;
+    }
+
+    public String extractCodeDirFromProjectPath(String projectPath) {
+        if (projectPath == null) {
+            return null;
+        }
+        Matcher matcher = VERSION_PATH_PATTERN.matcher(projectPath.replace('\\', '/'));
+        if (matcher.find()) {
+            return matcher.group(2);
         }
         return null;
     }

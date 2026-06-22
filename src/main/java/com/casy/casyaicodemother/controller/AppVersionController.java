@@ -8,6 +8,7 @@ import com.casy.casyaicodemother.constant.UserConstant;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.exception.ThrowUtils;
 import com.casy.casyaicodemother.model.dto.app.AppVersionRequest;
+import com.casy.casyaicodemother.model.dto.app.AppVersionRetryBuildRequest;
 import com.casy.casyaicodemother.model.entity.AppVersion;
 import com.casy.casyaicodemother.model.entity.User;
 import com.casy.casyaicodemother.service.AppVersionService;
@@ -35,6 +36,16 @@ public class AppVersionController {
     public List<AppVersion> getAppVersionsByAppId(@PathVariable Long appid) {
         User loginUser = userService.getLoginUser();
         return tAppVersionService.getAppVersionsByAppId(appid, loginUser);
+    }
+
+    @Operation(summary = "重新打包指定版本")
+    @SaCheckLogin
+    @PostMapping("/retryBuild")
+    public BaseResponse<Boolean> retryBuild(@RequestBody AppVersionRetryBuildRequest request) {
+        ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
+        User loginUser = userService.getLoginUser();
+        tAppVersionService.retryBuild(request.getAppId(), request.getCodeDir(), loginUser);
+        return ResultUtils.success(true);
     }
 
     @Operation(summary = "管理员分页查询应用代码版本")

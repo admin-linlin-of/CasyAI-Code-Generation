@@ -44,6 +44,8 @@ public class DeepSeekV4ProModelConfig {
                 .logResponses(g.getLogResponses())
                 .strictJsonSchema(g.getStrictJsonSchema())
                 .responseFormat(g.getResponseFormat())
+                // 解析 API 返回的 reasoning_content，触发 onPartialThinking 回调
+                .returnThinking(true)
                 .build();
     }
 

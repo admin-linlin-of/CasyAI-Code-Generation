@@ -11,6 +11,7 @@ import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import com.casy.casyaicodemother.service.AppVersionService;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.model.chat.response.PartialThinking;
 import dev.langchain4j.service.TokenStream;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -127,11 +128,12 @@ public class AiCodeGeneratorFacade {
      * <p>
      * 工具调用完整生命周期（参考 LangChain4j Tools 文档）：
      * <pre>
-     * 1. onPartialResponse      → AI 生成普通文本 token（非工具调用阶段）
-     * 2. onPartialToolCall      → AI 流式输出工具调用请求（工具名 + 参数 JSON 片段）
-     * 3. onToolExecuted         → AI Service 执行完工具后回调（含完整请求 + 执行结果）
-     * 4. onCompleteResponse     → 本轮 AI 响应全部结束（可能含多轮工具调用）
-     * 5. onError                → 流式过程中发生异常
+     * 1. onPartialThinking      → AI 深度思考/reasoning token（需模型开启 returnThinking）
+     * 2. onPartialResponse      → AI 生成普通文本 token（非工具调用阶段）
+     * 3. onPartialToolCall      → AI 流式输出工具调用请求（工具名 + 参数 JSON 片段）
+     * 4. onToolExecuted         → AI Service 执行完工具后回调（含完整请求 + 执行结果）
+     * 5. onCompleteResponse     → 本轮 AI 响应全部结束（可能含多轮工具调用）
+     * 6. onError                → 流式过程中发生异常
      * </pre>
      * 注意：TokenStream（AI Service 高层 API）不提供 onCompleteToolCall，
      * 该回调仅存在于底层 StreamingChatModel 的 StreamingChatResponseHandler 中。
@@ -149,6 +151,12 @@ public class AiCodeGeneratorFacade {
                     // 阶段1：AI 普通文本流式输出
                     // 当 LLM 生成文本内容（非工具调用）时，每产生一个 token 触发一次
                     // 前端 type=ai_response，可实时拼接展示 AI 回复
+                    // 阶段0：AI 深度思考流式输出（DeepSeek reasoning 等模型）
+                    // 每产生一个 thinking token 触发一次，前端 type=ai_thinking 单独展示
+                    .onPartialThinking((PartialThinking partialThinking) -> {
+                        sink.next(JSONUtil.toJsonStr(new AiThinkingMessage(partialThinking.text())));
+                    })
+                    // 阶段1：AI 普通文本流式输出
                     .onPartialResponse(partialResponse -> {
                         sink.next(JSONUtil.toJsonStr(new AiResponseMessage(partialResponse)));
                     })
