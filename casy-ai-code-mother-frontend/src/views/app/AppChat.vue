@@ -821,20 +821,31 @@ const startStream = (messageText: string) => {
     finished = true
     aiMsg.streaming = false
     generating.value = false
+    closeEventSource()
+    // 错误信息已通过 onmessage 写入 aiMsg.content，跳过预览加载
+    const isError = aiMsg.content.startsWith('生成失败')
+    if (isError) {
+      scrollToBottom()
+      return
+    }
     showPreview.value = true
     rightViewMode.value = 'preview'
-    closeEventSource()
     await loadVersions(true)
     await waitForVuePreviewReady(selectedVersionCodeDir.value)
     await loadSavedCodeFiles()
   })
 
+  // 连接异常且未收到任何内容时的兜底（如网络中断）
   eventSource.onerror = () => {
     closeEventSource()
     if (!finished) {
+      finished = true
       aiMsg.streaming = false
       generating.value = false
-      message.error('生成中断，请重试')
+      if (!aiMsg.content.trim()) {
+        aiMsg.content = '生成失败，请重试'
+      }
+      scrollToBottom()
     }
   }
 }
