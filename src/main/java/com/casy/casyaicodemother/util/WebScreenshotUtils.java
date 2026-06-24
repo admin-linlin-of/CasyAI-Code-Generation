@@ -2,17 +2,24 @@ package com.casy.casyaicodemother.util;
 
 import cn.hutool.core.img.ImgUtil;
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.util.RandomUtil;
+import cn.hutool.core.util.StrUtil;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
+import io.github.bonigarcia.wdm.WebDriverManager;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.openqa.selenium.JavascriptExecutor;
+import org.openqa.selenium.OutputType;
+import org.openqa.selenium.TakesScreenshot;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
+import java.io.File;
 import java.time.Duration;
+import java.util.UUID;
 
 @Slf4j
 public class WebScreenshotUtils {
@@ -35,6 +42,7 @@ public class WebScreenshotUtils {
      */
     private static WebDriver initChromeDriver(int width, int height) {
         try {
+            setupChromeDriver();
             ChromeOptions options = new ChromeOptions();
             // 无头模式,通过 --headless 参数，Chrome 浏览器在后台运行，不会弹出窗口。
             options.addArguments("--headless");
@@ -61,6 +69,27 @@ public class WebScreenshotUtils {
             log.error("初始化 Chrome 浏览器失败", e);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "初始化 Chrome 浏览器失败");
         }
+    }
+
+    /**
+     * 配置 ChromeDriver 路径。
+     * Selenium 4 内置 SeleniumManager 会从 googlechromelabs.github.io 自动下载驱动，
+     * 国内网络通常无法访问该地址，导致 NoSuchDriverException。
+     * 优先使用本地已配置的驱动；未配置时由 WebDriverManager 按本机 Chrome 版本下载并缓存。
+     */
+    private static void setupChromeDriver() {
+        String driverPath = System.getProperty("webdriver.chrome.driver");
+        if (StrUtil.isBlank(driverPath)) {
+            driverPath = System.getenv("WEBDRIVER_CHROME_DRIVER");
+        }
+        if (StrUtil.isNotBlank(driverPath)) {
+            System.setProperty("webdriver.chrome.driver", driverPath);
+            // 已指定本地驱动时关闭 SeleniumManager，避免再次联网下载
+            System.setProperty("selenium.manager", "false");
+            return;
+        }
+        // 首次下载较慢，之后使用 ~/.cache/selenium/chromedriver/ 缓存
+        WebDriverManager.chromedriver().setup();
     }
 
     /**
@@ -120,7 +149,41 @@ public class WebScreenshotUtils {
      * @return 压缩后的截图文件路径，失败返回null
      */
     public static String saveWebPageScreenshot(String webUrl) {
-        return null;
+        if (StrUtil.isBlank(webUrl)) {
+            log.error("网页URL不能为空");
+            return null;
+        }
+        try {
+            // 创建临时目录
+            String rootPath = System.getProperty("user.dir") + File.separator + "tmp" + File.separator + "screenshots"
+                    + File.separator + UUID.randomUUID().toString().substring(0, 8);
+            FileUtil.mkdir(rootPath);
+            // 图片后缀
+            final String IMAGE_SUFFIX = ".png";
+            // 原始截图文件路径
+            String imageSavePath = rootPath + File.separator + RandomUtil.randomNumbers(5) + IMAGE_SUFFIX;
+            // 方向网页
+            webDriver.get(webUrl);
+            // 等待页面加载完成
+            waitForPageLoad(webDriver);
+            // 截图
+            byte[] screenshotBytes = ((TakesScreenshot) webDriver).getScreenshotAs(OutputType.BYTES);
+            // 保存原始图片
+            saveImage(screenshotBytes, imageSavePath);
+            log.info("原始截图保存成功：{}", imageSavePath);
+            // 压缩图片
+            final String COMPRESSION_SUFFIX = "_compressed.jpg";
+            String compressedImagePath = rootPath + File.separator + RandomUtil.randomNumbers(5) + COMPRESSION_SUFFIX;
+            // 参数顺序：源文件(原始png) -> 目标文件(压缩jpg)
+            compressImage(imageSavePath, compressedImagePath);
+            log.info("压缩图片保存成功：{}", compressedImagePath);
+            // 删除原始图片，只保留压缩图片
+            FileUtil.del(imageSavePath);
+            return compressedImagePath;
+        } catch(Exception e) {
+            log.error("网页截图失败：{}", webUrl, e);
+            return null;
+        }
     }
 
 }

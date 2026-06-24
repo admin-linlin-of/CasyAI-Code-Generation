@@ -9,7 +9,14 @@ spring:
     name: casy-ai-code-mother
   mvc:
     async:
+      # 前端 SSE 最长等待；需不小于 langchain4j.http-client.read-timeout
       request-timeout: 600000
+
+# LangChain4j 调用模型 API 的 HTTP 超时（流式读超时须覆盖长生成，避免 60s 报 closed）
+langchain4j:
+  http-client:
+    connect-timeout: 30s
+    read-timeout: 600s
   # redis
   data:
     redis:

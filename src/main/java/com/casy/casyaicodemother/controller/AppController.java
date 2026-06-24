@@ -231,7 +231,20 @@ public class AppController {
                 .concatWith(Mono.just(
                         ServerSentEvent.<String>builder()
                                 .event("done").data("").build()
-                ));
+                ))
+                // SSE 接口不能走 GlobalExceptionHandler（返回 JSON），需在流内将异常转为 SSE 数据推送给前端
+                .onErrorResume(e -> {
+                    log.error("chatToGenCode stream error", e);
+                    String msg = StrUtil.blankToDefault(e.getMessage(), "未知错误");
+                    if (!msg.startsWith("生成失败")) {
+                        msg = "生成失败：" + msg;
+                    }
+                    String jsonData = JSONUtil.toJsonStr(Map.of("c", msg));
+                    return Flux.just(
+                            ServerSentEvent.<String>builder().data(jsonData).build(),
+                            ServerSentEvent.<String>builder().event("done").data("").build()
+                    );
+                });
     }
 
     /**

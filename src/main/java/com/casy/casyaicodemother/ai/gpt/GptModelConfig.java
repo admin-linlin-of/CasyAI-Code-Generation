@@ -2,8 +2,8 @@ package com.casy.casyaicodemother.ai.gpt;
 
 import com.casy.casyaicodemother.ai.DefaultModelProvider;
 import com.casy.casyaicodemother.ai.ModelProvider;
+import com.casy.casyaicodemother.config.LangChain4jHttpClientFactory;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
-import dev.langchain4j.http.client.jdk.JdkHttpClient;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -18,9 +18,9 @@ import org.springframework.context.annotation.Configuration;
 public class GptModelConfig {
 
     @Bean("gptChatModel")
-    ChatModel gptChatModel(GptModelProperties g) {
+    ChatModel gptChatModel(GptModelProperties g, LangChain4jHttpClientFactory httpClientFactory) {
         return OpenAiChatModel.builder()
-                .httpClientBuilder(JdkHttpClient.builder())
+                .httpClientBuilder(httpClientFactory.jdkHttpClientBuilder())
                 .baseUrl(g.getBaseUrl())
                 .apiKey(g.getApiKey())
                 .modelName(g.getModelName())
@@ -33,9 +33,9 @@ public class GptModelConfig {
     }
 
     @Bean("gptStreamingChatModel")
-    StreamingChatModel gptStreamingChatModel(GptModelProperties g) {
+    StreamingChatModel gptStreamingChatModel(GptModelProperties g, LangChain4jHttpClientFactory httpClientFactory) {
         return OpenAiStreamingChatModel.builder()
-                .httpClientBuilder(JdkHttpClient.builder())
+                .httpClientBuilder(httpClientFactory.jdkHttpClientBuilder())
                 .baseUrl(g.getBaseUrl())
                 .apiKey(g.getApiKey())
                 .modelName(g.getModelName())

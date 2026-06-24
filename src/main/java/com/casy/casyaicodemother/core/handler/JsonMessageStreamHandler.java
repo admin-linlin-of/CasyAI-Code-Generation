@@ -22,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.HashSet;
 import java.util.Map;
@@ -65,18 +66,25 @@ public class JsonMessageStreamHandler {
                     return handleJsonMessageChunk(chunk, chatHistoryStringBuilder, seenToolIds);
                 })
                 .filter(StrUtil::isNotEmpty) // 过滤空串
-                .doOnComplete(() -> {
-                    // 流式响应完成后，添加 AI 消息到对话历史
+                // 流结束后统一收尾：空响应写入错误并推送到 SSE，避免 doOnComplete 抛异常导致前端收不到错误
+                .concatWith(Mono.defer(() -> {
                     String aiResponse = chatHistoryStringBuilder.toString();
-                    chatHistoryService.saveAiMessage(appId, userMessageId, chatHistoryStringBuilder.toString(), loginUser);
-                    // 异步 build：shared 安装依赖 + 版本目录链接 node_modules + 输出 dist 到本版本
+                    if (StrUtil.isBlank(aiResponse)) {
+                        String detail = "模型未返回任何内容";
+                        chatHistoryService.saveErrorMessage(appId, userMessageId, detail, loginUser);
+                        // 作为普通文本 chunk 推送，前端 onmessage 可实时展示
+                        return Mono.just("生成失败：" + detail);
+                    }
+                    chatHistoryService.saveAiMessage(appId, userMessageId, aiResponse, loginUser);
                     String versionDir = CodeGenContextHolder.getVersionDir(appId);
                     String projectDirName = versionDir != null
                             ? CodeGenContextHolder.buildProjectDirName(appId, versionDir)
                             : "vue_project_" + appId;
                     String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/" + projectDirName;
                     vueProjectBuilder.buildProjectAsync(projectPath);
-                })
+                    return Mono.empty();
+                }))
+                // 流中途异常时持久化错误，Controller 层 onErrorResume 负责推送给前端
                 .doOnError(error -> chatHistoryService.saveErrorMessage(appId, userMessageId, error.getMessage(), loginUser));
     }
 

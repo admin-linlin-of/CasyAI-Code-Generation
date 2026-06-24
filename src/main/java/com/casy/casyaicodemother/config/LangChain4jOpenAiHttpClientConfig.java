@@ -1,7 +1,7 @@
 package com.casy.casyaicodemother.config;
 
 import dev.langchain4j.http.client.HttpClientBuilder;
-import dev.langchain4j.http.client.jdk.JdkHttpClient;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -13,15 +13,23 @@ import org.springframework.context.annotation.Configuration;
  * 从而抛出 {@code RestClientException: Error while extracting response for type [java.lang.String]}。
  *
  * <p>解决思路：为 {@link dev.langchain4j.model.openai.OpenAiChatModel} 提供 JDK 自带的
- * {@link JdkHttpClient}，按原始字节流读取 UTF-8 文本，不参与上述 Jackson 映射。
- * Bean 名称需与 Starter 中 {@code openAiChatModelHttpClientBuilder} 一致，以覆盖默认的
- * SpringRestClient Bean。
+ * {@link dev.langchain4j.http.client.jdk.JdkHttpClient}，按原始字节流读取 UTF-8 文本，不参与上述 Jackson 映射。
+ * Bean 名称需与 Starter 中 {@code openAiChatModelHttpClientBuilder}、
+ * {@code openAiStreamingChatModelHttpClientBuilder} 一致，以覆盖默认 SpringRestClient Bean。
  */
 @Configuration
+@EnableConfigurationProperties(LangChain4jHttpClientProperties.class)
 public class LangChain4jOpenAiHttpClientConfig {
 
+    /** 非流式 chat-model（如 deepseek-v4-flash 同步调用） */
     @Bean("openAiChatModelHttpClientBuilder")
-    HttpClientBuilder openAiChatModelHttpClientBuilder() {
-        return JdkHttpClient.builder();
+    HttpClientBuilder openAiChatModelHttpClientBuilder(LangChain4jHttpClientFactory httpClientFactory) {
+        return httpClientFactory.jdkHttpClientBuilder();
+    }
+
+    /** 流式 streaming-chat-model；未覆盖时走 SpringRestClient，默认 60s 读超时 */
+    @Bean("openAiStreamingChatModelHttpClientBuilder")
+    HttpClientBuilder openAiStreamingChatModelHttpClientBuilder(LangChain4jHttpClientFactory httpClientFactory) {
+        return httpClientFactory.jdkHttpClientBuilder();
     }
 }
