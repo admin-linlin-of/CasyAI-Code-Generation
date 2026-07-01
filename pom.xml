@@ -203,6 +203,15 @@
             <artifactId>webdrivermanager</artifactId>
             <version>6.3.4</version>
         </dependency>
+
+        <!-- 阿里oss服务 -->
+        <!-- Source: https://mvnrepository.com/artifact/com.aliyun/alibabacloud-oss-v2 -->
+        <dependency>
+            <groupId>com.aliyun</groupId>
+            <artifactId>alibabacloud-oss-v2</artifactId>
+            <version>0.5.0</version>
+            <scope>compile</scope>
+        </dependency>
     </dependencies>
 
     <build>
