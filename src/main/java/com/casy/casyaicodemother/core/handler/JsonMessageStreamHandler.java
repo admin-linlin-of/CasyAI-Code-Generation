@@ -9,17 +9,12 @@ import com.casy.casyaicodemother.ai.model.AiThinkingMessage;
 import com.casy.casyaicodemother.ai.model.StreamMessage;
 import com.casy.casyaicodemother.ai.model.ToolExecutedMessage;
 import com.casy.casyaicodemother.ai.model.ToolRequestMessage;
-import com.casy.casyaicodemother.constant.AppConstant;
-import com.casy.casyaicodemother.core.CodeGenContextHolder;
-import com.casy.casyaicodemother.core.builder.VueProjectBuilder;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.model.entity.User;
 import com.casy.casyaicodemother.model.enums.StreamMessageTypeEnum;
 import com.casy.casyaicodemother.service.ChatHistoryService;
-import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -35,10 +30,6 @@ import java.util.Set;
 @Slf4j
 @Component
 public class JsonMessageStreamHandler {
-
-    @Resource
-    @Lazy
-    private VueProjectBuilder vueProjectBuilder;
 
     /**
      * 处理 TokenStream（VUE_PROJECT）
@@ -76,12 +67,6 @@ public class JsonMessageStreamHandler {
                         return Mono.just("生成失败：" + detail);
                     }
                     chatHistoryService.saveAiMessage(appId, userMessageId, aiResponse, loginUser);
-                    String versionDir = CodeGenContextHolder.getVersionDir(appId);
-                    String projectDirName = versionDir != null
-                            ? CodeGenContextHolder.buildProjectDirName(appId, versionDir)
-                            : "vue_project_" + appId;
-                    String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/" + projectDirName;
-                    vueProjectBuilder.buildProjectAsync(projectPath);
                     return Mono.empty();
                 }))
                 // 流中途异常时持久化错误，Controller 层 onErrorResume 负责推送给前端

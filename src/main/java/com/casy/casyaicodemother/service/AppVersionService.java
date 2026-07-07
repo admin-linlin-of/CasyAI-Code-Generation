@@ -39,4 +39,6 @@ public interface AppVersionService extends IService<AppVersion> {
     String getLatestCodeDir(Long appId);
 
     void retryBuild(Long appId, String codeDir, User loginUser);
+
+    void buildVersion(Long appId, String codeDir, User loginUser);
 }

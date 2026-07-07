@@ -48,6 +48,16 @@ public class AppVersionController {
         return ResultUtils.success(true);
     }
 
+    @Operation(summary = "打包指定版本")
+    @SaCheckLogin
+    @PostMapping("/build")
+    public BaseResponse<Boolean> buildVersion(@RequestBody AppVersionRetryBuildRequest request) {
+        ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
+        User loginUser = userService.getLoginUser();
+        tAppVersionService.buildVersion(request.getAppId(), request.getCodeDir(), loginUser);
+        return ResultUtils.success(true);
+    }
+
     @Operation(summary = "管理员分页查询应用代码版本")
     @SaCheckRole(UserConstant.ADMIN_ROLE)
     @PostMapping("/list/page")

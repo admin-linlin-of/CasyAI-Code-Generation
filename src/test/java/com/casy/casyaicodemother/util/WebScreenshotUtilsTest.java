@@ -9,7 +9,7 @@ class WebScreenshotUtilsTest {
     @Test
     void saveWebPageScreenshot() {
         String testUrl = "https://www.codefather.cn";
-        String webPageScreenshot = WebScreenshotUtils.saveWebPageScreenshot(testUrl);
+        String webPageScreenshot = WebScreenshotUtils.takeScreenshot(testUrl).join();
         Assertions.assertNotNull(webPageScreenshot);
     }
 }

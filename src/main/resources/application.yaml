@@ -11,12 +11,6 @@ spring:
     async:
       # 前端 SSE 最长等待；需不小于 langchain4j.http-client.read-timeout
       request-timeout: 600000
-
-# LangChain4j 调用模型 API 的 HTTP 超时（流式读超时须覆盖长生成，避免 60s 报 closed）
-langchain4j:
-  http-client:
-    connect-timeout: 30s
-    read-timeout: 600s
   # redis
   data:
     redis:
@@ -26,7 +20,6 @@ langchain4j:
       password: YourStrongPassword123!
       database: 1         # Sa-Token 建议单独库，和业务 key 隔离
       timeout: 10s
-      ttl: 3600           # 你 LangChain 自定义字段，保留
       lettuce:
         pool:
           max-active: 200
@@ -57,6 +50,13 @@ langchain4j:
     show-sql: true     # 控制台打印 SQL
     properties:
       hibernate.format_sql: true # 格式化 SQL
+
+# LangChain4j 调用模型 API 的 HTTP 超时（流式读超时须覆盖长生成，避免 60s 报 closed）
+langchain4j:
+  http-client:
+    connect-timeout: 30s
+    read-timeout: 600s
+  ttl: 3600           # 你 LangChain 自定义字段，保留
 
 
 mybatis-flex:

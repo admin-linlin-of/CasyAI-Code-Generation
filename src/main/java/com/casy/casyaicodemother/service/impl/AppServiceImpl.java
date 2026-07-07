@@ -28,10 +28,7 @@ import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import com.casy.casyaicodemother.model.enums.VersionDeployStatusEnum;
 import com.casy.casyaicodemother.model.vo.app.AppVO;
 import com.casy.casyaicodemother.model.vo.user.UserVO;
-import com.casy.casyaicodemother.service.AppService;
-import com.casy.casyaicodemother.service.AppVersionService;
-import com.casy.casyaicodemother.service.ChatHistoryService;
-import com.casy.casyaicodemother.service.UserService;
+import com.casy.casyaicodemother.service.*;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
@@ -77,6 +74,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Resource
     private VueProjectVersionManager vueProjectVersionManager;
+
+    @Resource
+    private ScreenshotService screenshotService;
 
     @Override
     public long createApp(AppAddRequest appAddRequest, User loginUser) {
@@ -349,7 +349,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         String sourceDirName = codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT
                 ? vueProjectVersionManager.getVersionDirName(appId, deployCodeDir)
                 : codeGenType + "_" + appId;
-        String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + sourceDirName;
+        String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + sourceDirName + "_" + deployCodeDir;
         // 6. 检查源目录是否存在
         File sourceDir = new File(sourceDirPath);
         if (!sourceDir.exists() || !sourceDir.isDirectory()) {
@@ -379,6 +379,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             if (codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT) {
                 appVersionService.updateDeployStatus(appId, deployCodeDir, VersionDeployStatusEnum.SUCCESS);
             }
+            // 10. 构建应用访问URL
+            String appDeployUrl = String.format("%s/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
+            // 11. 异步生成截图并更新应用封面
+            generateAppScreenshotAsync(appId, appDeployUrl);
             return String.format("%s/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
         } catch (Exception e) {
             markDeployFailed(appId, deployCodeDir, codeGenTypeEnum);
@@ -387,6 +391,26 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             }
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "部署失败：" + e.getMessage());
         }
+    }
+
+    /**
+     * 异步生成应用截图并更新封面
+     *
+     * @param appId  应用ID
+     * @param appDeployUrl 应用访问URL
+     */
+    private void generateAppScreenshotAsync(Long appId, String appDeployUrl) {
+        // 使用虚拟线程异步执行
+        Thread.startVirtualThread(() -> {
+            // 调用截图服务生成截图并上传
+            String screenshotUrl = screenshotService.generateAndUploadScreenshot(appDeployUrl);
+            // 更新应用封面字段
+            App updateApp = new App();
+            updateApp.setId(appId);
+            updateApp.setCover(screenshotUrl);
+            boolean updated = this.updateById(updateApp);
+            ThrowUtils.throwIf(!updated, ErrorCode.OPERATION_ERROR, "更新应用封面字段失败");
+        });
     }
 
     private void markDeployFailed(Long appId, String codeDir, CodeGenTypeEnum codeGenTypeEnum) {

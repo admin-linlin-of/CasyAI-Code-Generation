@@ -213,12 +213,17 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
 
     @Override
     public void retryBuild(Long appId, String codeDir, User loginUser) {
+        buildVersion(appId, codeDir, loginUser);
+    }
+
+    @Override
+    public void buildVersion(Long appId, String codeDir, User loginUser) {
         ThrowUtils.throwIf(appId == null || StrUtil.isBlank(codeDir), ErrorCode.PARAMS_ERROR);
         App app = appService.getAppById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
         checkAppVersionViewAuth(app, loginUser);
         ThrowUtils.throwIf(CodeGenTypeEnum.VUE_PROJECT != CodeGenTypeEnum.getEnumByValue(app.getCodeGenType()),
-                ErrorCode.OPERATION_ERROR, "仅 Vue 项目支持重新打包");
+                ErrorCode.OPERATION_ERROR, "仅 Vue 项目支持打包");
         AppVersion appVersion = getByAppIdAndCodeDir(appId, codeDir);
         ThrowUtils.throwIf(appVersion == null, ErrorCode.NOT_FOUND_ERROR, "版本不存在");
         ThrowUtils.throwIf(VersionBuildStatusEnum.BUILDING.getValue().equals(appVersion.getBuildStatus()),

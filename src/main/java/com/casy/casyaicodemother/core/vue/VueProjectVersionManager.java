@@ -40,7 +40,7 @@ import java.util.regex.Pattern;
  *        ├─ v1：仅创建空目录
  *        └─ v2+：copyVersionProject(上一版 → 新版)，排除 node_modules/dist
  *   → AI 写入/覆盖文件（可能只改一个 .vue）
- *   → 流结束 → VueProjectBuilder
+ *   → 流结束 → 前端调用 /tAppVersion/build → VueProjectBuilder
  *        ├─ 同步 package.json 到 shared
  *        ├─ shared 里 npm install（依赖未变则跳过）
  *        ├─ 版本目录 node_modules → junction/软链 → shared/node_modules

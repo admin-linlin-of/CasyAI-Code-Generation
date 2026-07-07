@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *      ├─ v1：空目录
  *      └─ v2+：VueProjectVersionManager 从上一版复制（不含 node_modules/dist）
  * 3. AI 写入/覆盖文件（增量修改时可能只写一个 .vue）
- * 4. JsonMessageStreamHandler 流结束 → VueProjectBuilder 异步 build
+ * 4. 前端调用 /tAppVersion/build 触发 VueProjectBuilder 异步 build
  *      ├─ npm install 仅在 vue_project_{appId}_shared
  *      └─ 版本目录 node_modules 链接到 shared
  * 5. AiCodeGeneratorFacade.remove(appId)
