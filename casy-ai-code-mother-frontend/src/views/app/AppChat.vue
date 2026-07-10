@@ -6,6 +6,8 @@
         <a-select v-model:value="modelType" :options="modelTypeOptions" style="width: 180px" />
         <a-button @click="openDetailModal">详情</a-button>
         <a-button :loading="deploying" type="primary" @click="doDeploy">部署</a-button>
+        <!-- 下载当前选中版本的代码压缩包 -->
+        <a-button :loading="downloading" @click="downloadCode">下载</a-button>
       </a-space>
     </header>
 
@@ -256,7 +258,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { deleteApp, deployApp, getAppVoById, updateApp } from '@/api/appController'
-import { getAppVersionsByAppId, retryVersionBuild } from '@/api/appVersionController'
+import { getAppVersionsByAppId, buildVersion, retryBuild } from '@/api/appVersionController'
 import { listAppChatHistoryByPage } from '@/api/chatHistoryController'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { CheckCircleOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons-vue'
@@ -299,6 +301,7 @@ const appId = computed(() => {
 const inputMessage = ref('')
 const generating = ref(false)
 const deploying = ref(false)
+const downloading = ref(false)
 const updating = ref(false)
 const deleting = ref(false)
 const detailVisible = ref(false)
@@ -536,7 +539,7 @@ const retryBuild = async (codeDir?: string) => {
   if (!isVueProject.value || !dir || generating.value || retryingBuild.value) return
   retryingBuild.value = true
   try {
-    const res = await retryVersionBuild({ appId: Number(appId.value), codeDir: dir })
+    const res = await retryBuild({ appId: Number(appId.value), codeDir: dir })
     if (res.data.code !== 0) {
       message.error(res.data.message || '重新打包失败')
       return
@@ -831,6 +834,18 @@ const startStream = (messageText: string) => {
     showPreview.value = true
     rightViewMode.value = 'preview'
     await loadVersions(true)
+    // Vue 项目：代码生成完成后调用打包接口，再轮询打包状态
+    if (isVueProject.value && selectedVersionCodeDir.value) {
+      const buildRes = await buildVersion({
+        appId: Number(appId.value),
+        codeDir: selectedVersionCodeDir.value,
+      })
+      if (buildRes.data.code !== 0) {
+        message.error(buildRes.data.message || '项目打包失败')
+        scrollToBottom()
+        return
+      }
+    }
     await waitForVuePreviewReady(selectedVersionCodeDir.value)
     await loadSavedCodeFiles()
   })
@@ -882,6 +897,49 @@ const doDeploy = async () => {
     message.error(res.data.message || '部署失败')
   } finally {
     deploying.value = false
+  }
+}
+
+/** 下载当前选中版本的代码压缩包 */
+const downloadCode = async () => {
+  if (!appId.value) {
+    message.error('应用ID不存在')
+    return
+  }
+  // 使用右侧版本列表当前选中的 codeDir 作为下载版本
+  const version = selectedVersionCodeDir.value
+  if (!version) {
+    message.warning('请先选择要下载的版本')
+    return
+  }
+  downloading.value = true
+  try {
+    const API_BASE_URL = request.defaults.baseURL || ''
+    const url = `${API_BASE_URL}/app/download/${appId.value}/${encodeURIComponent(version)}`
+    const response = await fetch(url, {
+      method: 'GET',
+      credentials: 'include',
+    })
+    if (!response.ok) {
+      throw new Error(`下载失败: ${response.status}`)
+    }
+    // 从响应头解析文件名，兜底使用 appId-version.zip
+    const contentDisposition = response.headers.get('Content-Disposition')
+    const fileName =
+      contentDisposition?.match(/filename="(.+)"/)?.[1] || `${appId.value}-${version}.zip`
+    const blob = await response.blob()
+    const downloadUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.download = fileName
+    link.click()
+    URL.revokeObjectURL(downloadUrl)
+    message.success('代码下载成功')
+  } catch (error) {
+    console.error('下载失败：', error)
+    message.error('下载失败，请重试')
+  } finally {
+    downloading.value = false
   }
 }
 

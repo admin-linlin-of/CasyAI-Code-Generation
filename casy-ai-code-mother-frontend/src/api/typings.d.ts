@@ -97,12 +97,6 @@ declare namespace API {
     codeDir?: string
   }
 
-  type BaseResponsePageAppVersion = {
-    code?: number
-    data?: PageAppVersion
-    message?: string
-  }
-
   type AppVO = {
     id?: number
     appName?: string
@@ -147,6 +141,12 @@ declare namespace API {
   type BaseResponseLong = {
     code?: number
     data?: number
+    message?: string
+  }
+
+  type BaseResponsePageAppVersion = {
+    code?: number
+    data?: PageAppVersion
     message?: string
   }
 
@@ -219,6 +219,10 @@ declare namespace API {
 
   type DeleteRequest = {
     id?: number
+  }
+
+  type downloadAppCodeParams = {
+    appId: number
   }
 
   type getAppByIdParams = {

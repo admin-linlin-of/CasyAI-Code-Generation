@@ -38,21 +38,6 @@ export async function getAppVersionsByAppId(
   })
 }
 
-/** 重新打包指定版本 POST /tAppVersion/retryBuild */
-export async function retryVersionBuild(
-  body: API.AppVersionRetryBuildRequest,
-  options?: { [key: string]: any },
-) {
-  return request<API.BaseResponseBoolean>('/tAppVersion/retryBuild', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    data: body,
-    ...(options || {}),
-  })
-}
-
 /** 管理员分页查询应用代码版本 POST /tAppVersion/list/page */
 export async function listAppVersionByPage(
   body: API.AppVersionRequest,
@@ -95,6 +80,36 @@ export async function remove1(
   return request<boolean>(`/tAppVersion/remove/${param0}`, {
     method: 'DELETE',
     params: { ...queryParams },
+    ...(options || {}),
+  })
+}
+
+/** 重新打包指定版本 POST /tAppVersion/retryBuild */
+export async function retryBuild(
+  body: API.AppVersionRetryBuildRequest,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseBoolean>('/tAppVersion/retryBuild', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+/** 打包指定版本 POST /tAppVersion/build */
+export async function buildVersion(
+  body: API.AppVersionRetryBuildRequest,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseBoolean>('/tAppVersion/build', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
     ...(options || {}),
   })
 }
