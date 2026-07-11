@@ -169,6 +169,7 @@ COMMENT ON COLUMN t_chat_history.is_delete IS '是否删除';
 -- TODO 可以按需添加 parentId 字段，将 AI 消息和对应的用户提示词进行关联，便于生成失败时的重试、或者用户手动重新生成,我不太理解这个意思，不过应该是涉及重试的逻辑，之后在实现
 COMMENT ON COLUMN t_chat_history.parent_id IS '父消息id';
 
+drop table t_app_version;
 
 -- 应用代码版本表
 CREATE TABLE IF NOT EXISTS t_app_version

@@ -1,12 +1,13 @@
 <template>
   <div class="ai-markdown" :class="{ 'ai-markdown--typing': typing }">
-    <!-- 流已开始但尚无字符：三点加载 -->
+    <!-- 流已开始但尚无字符：三点加载（工具执行阶段常见，Vue 项目 LLM 长时间无文本输出） -->
     <div v-if="waiting" class="ai-markdown__loading">
       <span /><span /><span />
     </div>
     <template v-else>
+      <!-- 按 displayLen 截断后的 Markdown HTML -->
       <div v-if="html" class="ai-markdown__body" v-html="html" />
-      <!-- 打字机追赶中：闪烁光标 -->
+      <!-- displayLen 尚未追上 content.length 时显示闪烁光标 -->
       <span v-if="typing" class="ai-markdown__cursor" />
     </template>
   </div>
@@ -15,10 +16,33 @@
 <script lang="ts" setup>
 /**
  * AI 消息展示组件：Markdown 渲染 + 代码高亮 + 打字机效果。
+ * <p>
+ * <b>调用方</b>：{@link AppChat.vue} 的 {@code startStream}，通过 SSE 累积 {@code aiMsg.content}，
+ * 并传入 {@code streaming} 表示是否仍在接收流。
+ * <p>
+ * <b>为何按「原始 SSE 字符数」而非 Markdown 长度控制打字机</b>：
+ * {@link aiContentToMarkdown} 会把 JSON / 代码块展开成很长的 Markdown；
+ * 若按 Markdown 长度追赶，几帧内就会显示完全部渲染结果，失去打字机效果。
+ * 因此用 {@code displayLen} 跟踪 {@code props.content}（SSE 原文）的可见前缀长度。
+ * <p>
+ * <b>Vue 项目流式改造要点</b>（相对旧版）：
+ * <ul>
+ *   <li>旧版：{@code streaming=false} 时立刻 {@code displayLen = content.length}，流结束瞬间全文蹦出</li>
+ *   <li>新版：{@code streaming=false} 后仍通过 {@code requestAnimationFrame} 继续追赶，
+ *       直到 {@code displayLen >= content.length}，避免工具回调大块 SSE 一次性展示</li>
+ *   <li>配合后端 {@code JsonMessageStreamHandler} 不再推送整文件内容，单次 SSE 块更小</li>
+ * </ul>
+ * <p>
+ * <b>展示状态流转</b>：
+ * <pre>
+ * streaming=true, content=''     → waiting（三点加载）
+ * streaming=true, content 增长   → typing + 每帧 displayLen += CHARS_PER_FRAME
+ * streaming=false, 仍有未展示字符 → typing 继续（关键改动）
+ * displayLen >= content.length   → 静止展示全文，光标消失
+ * </pre>
  *
- * 打字机按「原始 SSE 字符数」控制显示进度，而不是 Markdown 长度。
- * 原因：JSON 会被 aiContentToMarkdown 展开成很长的代码块，若按 Markdown 长度
- * 追赶会几帧内显示完全部内容。
+ * @see AppChat.vue#startStream
+ * @see aiContentToMarkdown
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { aiContentToMarkdown } from '@/utils/aiContentMarkdown'
@@ -28,69 +52,80 @@ import { renderMarkdown } from '@/utils/markdownRenderer'
 const CHARS_PER_FRAME = 3
 
 const props = defineProps<{
-  content: string // SSE 累积的原始文本
-  streaming?: boolean // 是否仍在接收流
+  /** SSE 累积的 AI 回复原文（AppChat 中 aiMsg.content） */
+  content: string
+  /** 是否仍在接收 SSE；false 表示 done 事件已触发，但打字机可能仍在追赶 */
+  streaming?: boolean
 }>()
 
-/** 当前打字机已「打出」的字符数（相对 content） */
+/**
+ * 打字机当前已「打出」的字符数（相对 props.content 的下标，不含）。
+ * 渲染时只展示 content.slice(0, displayLen)。
+ */
 const displayLen = ref(0)
+
+/** requestAnimationFrame 句柄；非 0 表示动画循环正在运行 */
 let rafId = 0
 
-const streamTarget = computed(() => props.content.length)
+/**
+ * 等待首包：流已开始但 content 仍为空。
+ * Vue 项目生成时，LLM 可能先执行 writeFile 工具，数十秒内无文本 SSE。
+ */
+const waiting = computed(() => !!props.streaming && props.content.length === 0)
 
-/** 等待首包 */
-const waiting = computed(() => !!props.streaming && streamTarget.value === 0)
+/**
+ * 是否处于打字机追赶中。
+ * 注意：不再依赖 streaming，流结束后若 displayLen 落后仍会返回 true。
+ */
+const typing = computed(() => displayLen.value < props.content.length)
 
-/** 已收到内容但 displayLen 尚未追上 */
-const typing = computed(
-  () => !!props.streaming && displayLen.value < streamTarget.value,
-)
+/** 当前应展示的 SSE 原文前缀（打字机截断结果） */
+const visibleRaw = computed(() => props.content.slice(0, displayLen.value))
 
-/** 按 displayLen 截断的原始文本，再转 Markdown */
-const visibleRaw = computed(() => {
-  const len = props.streaming ? displayLen.value : props.content.length
-  return props.content.slice(0, len)
-})
-
+/** 可见原文 → Markdown → HTML，供 v-html 渲染 */
 const html = computed(() => renderMarkdown(aiContentToMarkdown(visibleRaw.value)))
 
+/** 取消未完成的 rAF 循环，组件卸载或无需动画时调用 */
 const stopAnim = () => {
   if (rafId) cancelAnimationFrame(rafId)
   rafId = 0
 }
 
-/** 每帧多显示 CHARS_PER_FRAME 个字符，直到追上 content.length */
+/**
+ * 单帧动画：displayLen 向 content.length 靠近 CHARS_PER_FRAME 个字符。
+ * 追上目标后停止调度下一帧。
+ */
 const tick = () => {
   const target = props.content.length
-  if (!props.streaming || displayLen.value >= target) {
+  if (displayLen.value >= target) {
     rafId = 0
     return
   }
   displayLen.value = Math.min(target, displayLen.value + CHARS_PER_FRAME)
-  // 浏览器大约 每秒 60 次（每屏刷新一次）会执行你注册的回调。requestAnimationFrame(tick) 的意思是：下一帧刷新屏幕之前，请执行一次 tick 函数。
   rafId = requestAnimationFrame(tick)
 }
 
-/** 有新 SSE 数据且动画未在跑时启动循环（不重置 displayLen，避免闪烁） */
+/**
+ * 若 displayLen 落后 content 且当前无 rAF 循环，则启动 tick。
+ * streaming  true/false 均可调用（流结束后继续追赶依赖此方法）。
+ */
 const ensureAnim = () => {
-  if (!props.streaming) return
   if (displayLen.value < props.content.length && !rafId) {
     rafId = requestAnimationFrame(tick)
   }
 }
 
+/** content 有新 SSE 片段追加时，尝试启动/续跑打字机动画 */
 watch(
   () => props.content.length,
-  () => {
-    if (props.streaming) {
-      ensureAnim()
-      return
-    }
-    displayLen.value = props.content.length
-    stopAnim()
-  },
+  () => ensureAnim(),
 )
 
+/**
+ * streaming 状态变化：
+ * - true：流进行中，确保动画运行
+ * - false：done 事件触发；不立即 displayLen = content.length，仅 ensureAnim 继续追赶
+ */
 watch(
   () => props.streaming,
   (streaming) => {
@@ -98,8 +133,7 @@ watch(
       ensureAnim()
       return
     }
-    stopAnim()
-    displayLen.value = props.content.length
+    ensureAnim()
   },
   { immediate: true },
 )

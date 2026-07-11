@@ -1,6 +1,7 @@
 package com.casy.casyaicodemother.ai;
 
 import com.casy.casyaicodemother.ai.tools.FileWriteTool;
+import com.casy.casyaicodemother.ai.tools.RepairingToolExecutor;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
@@ -12,6 +13,9 @@ import dev.langchain4j.community.store.memory.chat.redis.RedisChatMemoryStore;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.service.AiServices;
+import dev.langchain4j.service.tool.AiServiceTool;
+import dev.langchain4j.service.tool.ToolErrorHandlerResult;
+import dev.langchain4j.service.tool.ToolService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -113,7 +117,12 @@ public class AiCodeGeneratorServiceFactory {
             case VUE_PROJECT -> AiServices.builder(AiCodeGeneratorService.class)
                     .streamingChatModel(provider.getStreamingChatModel())
                     .chatMemoryProvider(memoryId -> chatMemory)
-                    .tools(fileWriteTool)
+                    // 用 RepairingToolExecutor 包装默认执行器，在 Jackson 解析前先尝试修复 LLM 返回的非法 tool arguments JSON
+                    .tools(wrapToolsWithRepair(fileWriteTool))
+                    // 修复仍失败时，将错误文本回传 LLM 让其自行纠正（而非直接中断流式生成）
+                    .toolArgumentsErrorHandler((error, context) -> ToolErrorHandlerResult.text(
+                            "工具参数 JSON 解析失败：" + error.getMessage()
+                                    + "。请确保 content 中双引号转义为 \\\"，换行用 \\n；单块不超过1500字符，大文件分块 append=false/true 写入。"))
                     // hallucinatedToolNameStrategy（幻觉工具名称策略）配置了找不到工具时的处理策略，可以让框架帮我们处理 AI 出现幻觉的情况，比如告诉 AI “找不到工具”
                     // TODO 注意‍‍！这里最好做一些调整，防止 AI 一直无限循环调用工具，包括：
                     // TODO 调大对话记忆的容量，否则 AI 会中途断片儿，忘记已经生成了哪些文件
@@ -135,6 +144,20 @@ public class AiCodeGeneratorServiceFactory {
 
     private String getCacheKey(ModelTypeEnum modelTypeEnum, CodeGenTypeEnum codeGenType, Long appId) {
         return String.format("%s_%s_%s", modelTypeEnum.getModelName(), codeGenType.getValue(), appId);
+    }
+
+    /**
+     * 将 @Tool Bean 注册为 AiServiceTool，并用 {@link RepairingToolExecutor} 包装原始执行器。
+     * <p>
+     * 背景：LLM 调用 writeFile 时，content 内未转义的双引号会导致 arguments JSON 解析失败；
+     * 包装后在真正执行工具前先做 JSON 容错修复。
+     */
+    private List<AiServiceTool> wrapToolsWithRepair(Object toolBean) {
+        return ToolService.findTools(toolBean).stream()
+                .map(tool -> tool.toBuilder()
+                        .toolExecutor(new RepairingToolExecutor(tool.toolExecutor()))
+                        .build())
+                .toList();
     }
 
     /**

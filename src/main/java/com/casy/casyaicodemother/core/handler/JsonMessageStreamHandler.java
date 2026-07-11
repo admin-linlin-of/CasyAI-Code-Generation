@@ -1,6 +1,5 @@
 package com.casy.casyaicodemother.core.handler;
 
-import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
@@ -120,16 +119,10 @@ public class JsonMessageStreamHandler {
                 ToolExecutedMessage toolExecutedMessage = JSONUtil.toBean(chunk, ToolExecutedMessage.class);
                 JSONObject jsonObject = JSONUtil.parseObj(toolExecutedMessage.getArguments());
                 String relativeFilePath = jsonObject.getStr("relativeFilePath");
-                String suffix = FileUtil.getSuffix(relativeFilePath);
-                String content = jsonObject.getStr("content");
-                String result = String.format("""
-                        [工具调用] 写入文件 %s
-                        ```%s
-                        %s
-                        ```
-                        """, relativeFilePath, suffix, content);
-                // 输出前端和要持久化的内容
-                String output = String.format("\n\n%s\n\n", result);
+                boolean failed = Boolean.TRUE.equals(toolExecutedMessage.getFailed());
+                // 聊天区只推送路径摘要，不嵌入完整文件内容，避免单次 SSE 块过大导致前端无法打字机展示
+                String status = failed ? "失败" : "成功";
+                String output = String.format("\n\n[工具调用] 写入文件 `%s` %s\n\n", relativeFilePath, status);
                 chatHistoryStringBuilder.append(output);
                 return output;
             }

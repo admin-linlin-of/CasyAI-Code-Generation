@@ -93,7 +93,7 @@ declare namespace API {
   }
 
   type AppVersionRetryBuildRequest = {
-    appId?: number
+    appId?: string
     codeDir?: string
   }
 

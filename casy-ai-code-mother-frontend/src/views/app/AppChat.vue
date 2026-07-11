@@ -344,6 +344,17 @@ const loadingMoreHistory = ref(false)
 const historyHasMore = ref(false)
 const historyCursor = ref<string>()
 let eventSource: EventSource | null = null
+let codeRefreshTimer: ReturnType<typeof setTimeout> | null = null
+
+/** Vue 项目生成中：工具写入文件后防抖刷新右侧代码面板 */
+const scheduleCodeRefresh = () => {
+  if (!isVueProject.value) return
+  if (codeRefreshTimer) clearTimeout(codeRefreshTimer)
+  codeRefreshTimer = setTimeout(() => {
+    codeRefreshTimer = null
+    void loadSavedCodeFiles()
+  }, 400)
+}
 
 const versionList = ref<API.AppVersion[]>([])
 const selectedVersionCodeDir = ref('')
@@ -539,7 +550,7 @@ const retryBuild = async (codeDir?: string) => {
   if (!isVueProject.value || !dir || generating.value || retryingBuild.value) return
   retryingBuild.value = true
   try {
-    const res = await retryBuild({ appId: Number(appId.value), codeDir: dir })
+    const res = await retryBuild({ appId: appId.value, codeDir: dir })
     if (res.data.code !== 0) {
       message.error(res.data.message || '重新打包失败')
       return
@@ -812,9 +823,11 @@ const startStream = (messageText: string) => {
         aiMsg.thinking = (aiMsg.thinking ?? '') + (data.c ?? '')
       } else {
         aiMsg.content += data.c ?? ''
+        scheduleCodeRefresh()
       }
     } catch {
       aiMsg.content += event.data ?? ''
+      scheduleCodeRefresh()
     }
     scrollToBottom()
   }
@@ -837,7 +850,7 @@ const startStream = (messageText: string) => {
     // Vue 项目：代码生成完成后调用打包接口，再轮询打包状态
     if (isVueProject.value && selectedVersionCodeDir.value) {
       const buildRes = await buildVersion({
-        appId: Number(appId.value),
+        appId: appId.value,
         codeDir: selectedVersionCodeDir.value,
       })
       if (buildRes.data.code !== 0) {
