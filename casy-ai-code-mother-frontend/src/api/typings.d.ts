@@ -71,6 +71,7 @@ declare namespace API {
     codeDir?: string
     modelType?: string
     buildStatus?: string
+    buildError?: string
     deployStatus?: string
     userId?: number
     createTime?: string
@@ -215,6 +216,21 @@ declare namespace API {
     appId: number
     message: string
     modelType: string
+  }
+
+  type listCodeFilesParams = {
+    appId: number | string
+    codeDir: string
+  }
+
+  type AppCodeFileListVO = {
+    files?: string[]
+  }
+
+  type BaseResponseAppCodeFileListVO = {
+    code?: number
+    data?: AppCodeFileListVO
+    message?: string
   }
 
   type DeleteRequest = {

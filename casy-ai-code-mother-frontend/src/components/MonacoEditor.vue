@@ -16,17 +16,16 @@
  *   CodeWorkspace 传入 modelValue（文件内容）和 language（html/css/javascript）
  *     → 本组件 watch props → editor.setValue() / setModelLanguage()
  */
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { loadMonaco } from '@/utils/monacoSetup'
 import { useThemeStore } from '@/stores/theme'
 
 const props = withDefaults(
   defineProps<{
-    /** 当前文件的代码文本，对应 v-model */
     modelValue: string
-    /** Monaco 语言 ID：html / css / javascript */
+    /** 打字机展示值；未传时与 modelValue 一致 */
+    displayValue?: string
     language?: string
-    /** 只读：AI 生成过程中不允许用户手动改代码 */
     readOnly?: boolean
   }>(),
   {
@@ -34,6 +33,8 @@ const props = withDefaults(
     readOnly: true,
   },
 )
+
+const shownValue = computed(() => props.displayValue ?? props.modelValue)
 
 const containerRef = ref<HTMLElement>()
 const { isDark } = useThemeStore()
@@ -67,7 +68,7 @@ onMounted(async () => {
   monacoApi = await loadMonaco()
 
   editor = monacoApi.editor.create(containerRef.value, {
-    value: props.modelValue,
+    value: shownValue.value,
     language: props.language,
     theme: getMonacoTheme(),
     readOnly: props.readOnly,
@@ -81,12 +82,12 @@ onMounted(async () => {
   })
 
   // init 完成前 props 可能已有内容（如静态文件已加载），这里补同步一次
-  syncContent(props.modelValue)
+  syncContent(shownValue.value)
   await nextTick()
-  editor.layout()
+  editor?.layout()
 })
 
-watch(() => props.modelValue, syncContent)
+watch(shownValue, syncContent)
 watch(() => props.language, syncLanguage)
 watch(
   () => props.readOnly,

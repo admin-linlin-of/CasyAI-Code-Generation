@@ -34,6 +34,11 @@ public interface AppVersionService extends IService<AppVersion> {
 
     void updateBuildStatus(Long appId, String codeDir, VersionBuildStatusEnum buildStatus);
 
+    /**
+     * 更新构建状态；失败时可写入 buildError 供前端展示 npm 输出摘要。
+     */
+    void updateBuildStatus(Long appId, String codeDir, VersionBuildStatusEnum buildStatus, String buildError);
+
     void updateDeployStatus(Long appId, String codeDir, VersionDeployStatusEnum deployStatus);
 
     String getLatestCodeDir(Long appId);

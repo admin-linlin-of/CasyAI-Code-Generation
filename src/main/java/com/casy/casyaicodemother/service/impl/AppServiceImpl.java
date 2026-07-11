@@ -348,8 +348,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         }
         String sourceDirName = codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT
                 ? vueProjectVersionManager.getVersionDirName(appId, deployCodeDir)
-                : codeGenType + "_" + appId;
-        String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + sourceDirName + "_" + deployCodeDir;
+                : codeGenType + "_" + appId + "_" + deployCodeDir;
+        String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + sourceDirName ;
         // 6. 检查源目录是否存在
         File sourceDir = new File(sourceDirPath);
         if (!sourceDir.exists() || !sourceDir.isDirectory()) {

@@ -68,6 +68,18 @@ export async function deployApp(body: API.AppDeployRequest, options?: { [key: st
   })
 }
 
+/** 列出 Vue 项目源码文件 GET /app/code/files */
+export async function listCodeFiles(
+  params: API.listCodeFilesParams,
+  options?: { [key: string]: any },
+) {
+  return request<API.BaseResponseAppCodeFileListVO>('/app/code/files', {
+    method: 'GET',
+    params: { ...params },
+    ...(options || {}),
+  })
+}
+
 /** 此处后端没有提供注释 GET /app/download/${param0} */
 export async function downloadAppCode(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)

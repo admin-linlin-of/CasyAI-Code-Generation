@@ -16,7 +16,9 @@ import com.casy.casyaicodemother.exception.ThrowUtils;
 import com.casy.casyaicodemother.model.dto.app.*;
 import com.casy.casyaicodemother.model.entity.App;
 import com.casy.casyaicodemother.model.entity.User;
+import com.casy.casyaicodemother.model.vo.app.AppCodeFileListVO;
 import com.casy.casyaicodemother.model.vo.app.AppVO;
+import com.casy.casyaicodemother.service.AppCodeFileService;
 import com.casy.casyaicodemother.service.AppService;
 import com.casy.casyaicodemother.service.ProjectDownloadService;
 import com.casy.casyaicodemother.service.UserService;
@@ -32,6 +34,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.io.File;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -50,6 +53,9 @@ public class AppController {
 
     @Resource
     private ProjectDownloadService projectDownloadService;
+
+    @Resource
+    private AppCodeFileService appCodeFileService;
 
     /**
      * 创建应用（须填写 initPrompt）
@@ -252,6 +258,23 @@ public class AppController {
                             ServerSentEvent.<String>builder().event("done").data("").build()
                     );
                 });
+    }
+
+    /**
+     * 列出 Vue 项目版本目录下的源码文件相对路径（供前端代码预览文件树使用）。
+     */
+    @Operation(summary = "列出 Vue 项目源码文件")
+    @SaCheckLogin
+    @GetMapping("/code/files")
+    public BaseResponse<AppCodeFileListVO> listCodeFiles(@RequestParam Long appId,
+                                                         @RequestParam String codeDir) {
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID无效");
+        ThrowUtils.throwIf(StrUtil.isBlank(codeDir), ErrorCode.PARAMS_ERROR, "版本目录不能为空");
+        User loginUser = userService.getLoginUser();
+        List<String> files = appCodeFileService.listVueProjectFiles(appId, codeDir, loginUser);
+        AppCodeFileListVO vo = new AppCodeFileListVO();
+        vo.setFiles(files);
+        return ResultUtils.success(vo);
     }
 
     /**

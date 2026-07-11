@@ -181,6 +181,7 @@ CREATE TABLE IF NOT EXISTS t_app_version
     code_dir        VARCHAR(512) NOT NULL,
     model_type      VARCHAR(64)      NULL,
     build_status    VARCHAR(32)  NOT NULL DEFAULT 'pending',
+    build_error     TEXT             NULL,
     deploy_status   VARCHAR(32)  NOT NULL DEFAULT 'not_deployed',
     user_id         BIGINT       NOT NULL,
     create_time     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -206,6 +207,7 @@ COMMENT ON COLUMN t_app_version.version_num IS '版本号，从1递增';
 COMMENT ON COLUMN t_app_version.code_dir IS '代码目录，如 v1、v2';
 COMMENT ON COLUMN t_app_version.model_type IS '生成该版本使用的AI模型';
 COMMENT ON COLUMN t_app_version.build_status IS '构建状态：pending/building/success/failed';
+COMMENT ON COLUMN t_app_version.build_error IS '构建失败原因（npm 输出摘要）';
 COMMENT ON COLUMN t_app_version.deploy_status IS '部署状态：not_deployed/deploying/success/failed';
 COMMENT ON COLUMN t_app_version.user_id IS '创建用户id';
 COMMENT ON COLUMN t_app_version.create_time IS '创建时间';
@@ -213,6 +215,8 @@ COMMENT ON COLUMN t_app_version.update_time IS '更新时间';
 COMMENT ON COLUMN t_app_version.is_delete IS '是否删除';
 
 ALTER TABLE t_app_version ADD COLUMN IF NOT EXISTS build_status VARCHAR(32) NOT NULL DEFAULT 'pending';
+ALTER TABLE t_app_version ADD COLUMN IF NOT EXISTS build_error TEXT NULL;
 ALTER TABLE t_app_version ADD COLUMN IF NOT EXISTS deploy_status VARCHAR(32) NOT NULL DEFAULT 'not_deployed';
 COMMENT ON COLUMN t_app_version.build_status IS '构建状态：pending/building/success/failed';
+COMMENT ON COLUMN t_app_version.build_error IS '构建失败原因（npm 输出摘要）';
 COMMENT ON COLUMN t_app_version.deploy_status IS '部署状态：not_deployed/deploying/success/failed';

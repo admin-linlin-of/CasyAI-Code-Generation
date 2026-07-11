@@ -8,6 +8,16 @@ export const CodeGenTypeEnum = {
 
 const STATIC_BASE_URL = `${API_BASE_URL}/static`
 
+/**
+ * 拼静态资源目录名，与后端磁盘目录一致。
+ * 例：vue_project_433364534964891648_v1
+ * codeDir 为空时不拼（避免访问不存在的无版本目录）。
+ */
+export const buildDeployKey = (codeGenType: string, appId: string | number, codeDir?: string) => {
+  if (!codeDir?.trim()) return ''
+  return `${codeGenType}_${appId}_${codeDir}`
+}
+
 export const getStaticBaseUrl = (deployKey: string) => `${STATIC_BASE_URL}/${deployKey}/`
 
 export const getStaticPreviewUrl = (codeGenType: string, deployKey: string) => {

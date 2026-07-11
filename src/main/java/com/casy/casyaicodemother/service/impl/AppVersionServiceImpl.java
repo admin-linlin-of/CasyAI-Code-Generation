@@ -169,6 +169,18 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
 
     @Override
     public void updateBuildStatus(Long appId, String codeDir, VersionBuildStatusEnum buildStatus) {
+        updateBuildStatus(appId, codeDir, buildStatus, null);
+    }
+
+    /**
+     * 更新版本构建状态。
+     * <ul>
+     *   <li>BUILDING / SUCCESS → 清空 build_error</li>
+     *   <li>FAILED → 写入 build_error（为空时使用默认文案）</li>
+     * </ul>
+     */
+    @Override
+    public void updateBuildStatus(Long appId, String codeDir, VersionBuildStatusEnum buildStatus, String buildError) {
         if (appId == null || StrUtil.isBlank(codeDir) || buildStatus == null) {
             return;
         }
@@ -179,6 +191,11 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         AppVersion update = new AppVersion();
         update.setId(appVersion.getId());
         update.setBuildStatus(buildStatus.getValue());
+        if (buildStatus == VersionBuildStatusEnum.SUCCESS || buildStatus == VersionBuildStatusEnum.BUILDING) {
+            update.setBuildError(null);
+        } else if (buildStatus == VersionBuildStatusEnum.FAILED) {
+            update.setBuildError(StrUtil.blankToDefault(buildError, "打包失败，请查看服务端日志"));
+        }
         updateById(update);
     }
 

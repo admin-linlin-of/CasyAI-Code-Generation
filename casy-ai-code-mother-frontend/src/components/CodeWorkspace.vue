@@ -1,14 +1,43 @@
+<!--
+  CodeWorkspace — 右侧「代码」面板总容器（左树 + 右编辑器）
+
+  两种模式（由 AppChat 根据应用类型传入 mode）：
+
+  ┌─ mode=flat ─────────────────────────────────────────────┐
+  │  HTML / MULTI_FILE：固定 3 文件（index.html 等）         │
+  │  左侧：扁平 file-list                                    │
+  │  右侧：Tab + MonacoEditor（直接绑 content，无打字机）     │
+  └──────────────────────────────────────────────────────────┘
+
+  ┌─ mode=tree ─────────────────────────────────────────────┐
+  │  VUE_PROJECT：多目录多文件                               │
+  │  左侧：ProjectFileTree                                   │
+  │  右侧：CodeViewerPanel（Monaco + 打字机）                │
+  │  数据来自 useProjectFileStore（projectFiles / paths）    │
+  └──────────────────────────────────────────────────────────┘
+-->
 <template>
   <div class="code-workspace">
-    <!-- 左侧：虚拟文件树，点击切换当前编辑文件 -->
+    <!-- ── 左侧：文件列表 / 目录树 ── -->
     <aside class="code-workspace__tree">
       <div class="code-workspace__tree-title">文件</div>
-      <ul class="file-list">
+
+      <!-- Vue 项目：树形目录 -->
+      <ProjectFileTree
+        v-if="mode === 'tree'"
+        :paths="projectPaths"
+        :active-path="treeActivePath"
+        :generating-paths="generatingPaths"
+        @select="onTreeSelect"
+      />
+
+      <!-- HTML/MULTI_FILE：三文件扁平列表 -->
+      <ul v-else class="file-list">
         <li
           v-for="file in files"
           :key="file.path"
-          :class="['file-list__item', { 'file-list__item--active': file.path === activePath }]"
-          @click="activePath = file.path"
+          :class="['file-list__item', { 'file-list__item--active': file.path === flatActivePath }]"
+          @click="flatActivePath = file.path"
         >
           <FileOutlined class="file-list__icon" />
           <span class="file-list__name">{{ file.path }}</span>
@@ -16,26 +45,38 @@
       </ul>
     </aside>
 
-    <!-- 右侧：Tab 栏 + Monaco 编辑器 -->
+    <!-- ── 右侧：编辑器区域 ── -->
     <div class="code-workspace__editor">
-      <div class="code-workspace__tabs">
-        <span
-          v-for="file in files"
-          :key="file.path"
-          :class="['editor-tab', { 'editor-tab--active': file.path === activePath }]"
-          @click="activePath = file.path"
-        >
-          {{ file.path }}
-        </span>
-      </div>
-      <div class="code-workspace__monaco">
-        <MonacoEditor
-          v-if="activeFile"
-          :language="activeFile.language"
-          :model-value="activeFile.content"
+      <!-- Vue 项目：带打字机的 CodeViewerPanel -->
+      <template v-if="mode === 'tree'">
+        <CodeViewerPanel
+          :file="activeProjectFile"
+          :generating="generating"
           :read-only="readOnly"
         />
-      </div>
+      </template>
+
+      <!-- 传统三文件：Tab + Monaco 直出 -->
+      <template v-else>
+        <div class="code-workspace__tabs">
+          <span
+            v-for="file in files"
+            :key="file.path"
+            :class="['editor-tab', { 'editor-tab--active': file.path === flatActivePath }]"
+            @click="flatActivePath = file.path"
+          >
+            {{ file.path }}
+          </span>
+        </div>
+        <div class="code-workspace__monaco">
+          <MonacoEditor
+            v-if="activeFlatFile"
+            :language="activeFlatFile.language"
+            :model-value="activeFlatFile.content"
+            :read-only="readOnly"
+          />
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -43,39 +84,100 @@
 <script lang="ts" setup>
 import { computed, ref, watch } from 'vue'
 import { FileOutlined } from '@ant-design/icons-vue'
+import CodeViewerPanel from '@/components/CodeViewerPanel.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
+import ProjectFileTree from '@/components/ProjectFileTree.vue'
+import type { ProjectFile } from '@/utils/projectFiles'
 import type { VirtualFile } from '@/utils/virtualFiles'
 
 const props = withDefaults(
   defineProps<{
-    /** 虚拟文件列表，由 AppChat 从 AI 输出解析得到 */
-    files: VirtualFile[]
-    /** 是否只读，生成过程中为 true */
+    /** flat=三文件模式；tree=Vue 多文件目录树模式 */
+    mode?: 'flat' | 'tree'
+    /** flat 模式：虚拟文件列表（来自 AI 解析或静态目录） */
+    files?: VirtualFile[]
+    /** tree 模式：store 中的 ProjectFile 对象列表 */
+    projectFiles?: ProjectFile[]
+    /** tree 模式：扁平 path 列表，供 buildFileTree */
+    projectPaths?: string[]
+    /** tree 模式：当前选中文件，与 AppChat v-model:active-path 双向绑定 */
+    activePath?: string
+    /** 是否处于 SSE 生成中（传给 CodeViewerPanel 控制打字机） */
+    generating?: boolean
     readOnly?: boolean
   }>(),
   {
+    mode: 'flat',
+    files: () => [],
+    projectFiles: () => [],
+    projectPaths: () => [],
+    generating: false,
     readOnly: true,
   },
 )
 
-// 当前选中的文件路径，默认 index.html
-const activePath = ref('index.html')
+const emit = defineEmits<{
+  'update:activePath': [path: string]
+}>()
 
-// 根据 activePath 找到对应的虚拟文件对象
-const activeFile = computed(() =>
-  props.files.find((file) => file.path === activePath.value),
+/** flat 模式内部维护的当前文件 path */
+const flatActivePath = ref('index.html')
+
+/**
+ * tree 模式的 activePath 代理：
+ * get 读 props.activePath；set 通过 emit 通知 AppChat / store 更新
+ */
+const treeActivePath = computed({
+  get: () => props.activePath ?? '',
+  set: (path: string) => emit('update:activePath', path),
+})
+
+/** 从 projectFiles 筛出 status=generating 的 path，供树节点绿色高亮 */
+const generatingPaths = computed(
+  () => new Set(props.projectFiles.filter((f) => f.status === 'generating').map((f) => f.path)),
 )
 
-// 流式生成时若当前文件尚无内容，自动切到有内容的文件
+/** 当前选中的 ProjectFile 对象，传给 CodeViewerPanel */
+const activeProjectFile = computed(() =>
+  props.projectFiles.find((file) => file.path === treeActivePath.value),
+)
+
+/** flat 模式当前选中的 VirtualFile */
+const activeFlatFile = computed(() => props.files.find((file) => file.path === flatActivePath.value))
+
+/** 用户点击树节点 → 更新 activePath（会同步到 store） */
+const onTreeSelect = (path: string) => {
+  treeActivePath.value = path
+}
+
+/**
+ * flat 模式：流式生成时若当前文件仍空，自动切到第一个有内容的文件。
+ */
 watch(
   () => props.files,
   (files) => {
-    const current = files.find((file) => file.path === activePath.value)
+    if (props.mode !== 'flat') return
+    const current = files.find((file) => file.path === flatActivePath.value)
     if (current?.content.trim()) return
     const firstWithContent = files.find((file) => file.content.trim())
-    if (firstWithContent) activePath.value = firstWithContent.path
+    if (firstWithContent) flatActivePath.value = firstWithContent.path
   },
   { deep: true, immediate: true },
+)
+
+/**
+ * tree 模式：路径列表变化时，若当前选中 path 不存在，默认打开第一项。
+ * 场景：首次 refreshFromServer 或生成过程中新增文件。
+ */
+watch(
+  () => props.projectPaths,
+  (paths) => {
+    if (props.mode !== 'tree' || !paths.length) return
+    if (!treeActivePath.value || !paths.includes(treeActivePath.value)) {
+      treeActivePath.value = paths[0]!
+    }
+  },
+  { immediate: true },
 )
 </script>
 
@@ -87,7 +189,7 @@ watch(
 }
 
 .code-workspace__tree {
-  width: 160px;
+  width: 220px;
   flex-shrink: 0;
   border-right: 1px solid var(--border-color);
   display: flex;

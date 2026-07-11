@@ -73,6 +73,12 @@ public class AppVersion implements Serializable {
     private String buildStatus;
 
     /**
+     * 构建失败原因（npm 输出摘要）
+     */
+    @Column("build_error")
+    private String buildError;
+
+    /**
      * 部署状态：not_deployed/deploying/success/failed
      */
     @Column("deploy_status")

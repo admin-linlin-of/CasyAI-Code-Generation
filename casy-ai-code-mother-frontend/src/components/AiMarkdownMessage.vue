@@ -25,21 +25,11 @@
  * 若按 Markdown 长度追赶，几帧内就会显示完全部渲染结果，失去打字机效果。
  * 因此用 {@code displayLen} 跟踪 {@code props.content}（SSE 原文）的可见前缀长度。
  * <p>
- * <b>Vue 项目流式改造要点</b>（相对旧版）：
+ * <b>历史消息 vs 实时流</b>：
  * <ul>
- *   <li>旧版：{@code streaming=false} 时立刻 {@code displayLen = content.length}，流结束瞬间全文蹦出</li>
- *   <li>新版：{@code streaming=false} 后仍通过 {@code requestAnimationFrame} 继续追赶，
- *       直到 {@code displayLen >= content.length}，避免工具回调大块 SSE 一次性展示</li>
- *   <li>配合后端 {@code JsonMessageStreamHandler} 不再推送整文件内容，单次 SSE 块更小</li>
+ *   <li>历史（{@code loadChatHistory}）：{@code streaming} 始终为 false/undefined，{@code everStreamed} 为 false → 挂载即 {@code displayLen = content.length}，无打字机</li>
+ *   <li>实时 SSE（{@code startStream}）：{@code streaming=true} 时 {@code everStreamed=true} → 打字机；流结束后继续追到全文</li>
  * </ul>
- * <p>
- * <b>展示状态流转</b>：
- * <pre>
- * streaming=true, content=''     → waiting（三点加载）
- * streaming=true, content 增长   → typing + 每帧 displayLen += CHARS_PER_FRAME
- * streaming=false, 仍有未展示字符 → typing 继续（关键改动）
- * displayLen >= content.length   → 静止展示全文，光标消失
- * </pre>
  *
  * @see AppChat.vue#startStream
  * @see aiContentToMarkdown
@@ -64,6 +54,9 @@ const props = defineProps<{
  */
 const displayLen = ref(0)
 
+/** 本条消息是否经历过 streaming=true（区分历史加载与实时 SSE） */
+const everStreamed = ref(false)
+
 /** requestAnimationFrame 句柄；非 0 表示动画循环正在运行 */
 let rafId = 0
 
@@ -74,10 +67,11 @@ let rafId = 0
 const waiting = computed(() => !!props.streaming && props.content.length === 0)
 
 /**
- * 是否处于打字机追赶中。
- * 注意：不再依赖 streaming，流结束后若 displayLen 落后仍会返回 true。
+ * 是否处于打字机追赶中（仅实时流式消息；历史消息 everStreamed=false 不参与）。
  */
-const typing = computed(() => displayLen.value < props.content.length)
+const typing = computed(
+  () => everStreamed.value && displayLen.value < props.content.length,
+)
 
 /** 当前应展示的 SSE 原文前缀（打字机截断结果） */
 const visibleRaw = computed(() => props.content.slice(0, displayLen.value))
@@ -107,30 +101,49 @@ const tick = () => {
 
 /**
  * 若 displayLen 落后 content 且当前无 rAF 循环，则启动 tick。
- * streaming  true/false 均可调用（流结束后继续追赶依赖此方法）。
+ * 历史消息（never streamed）不启动动画。
  */
 const ensureAnim = () => {
+  if (!everStreamed.value) return
   if (displayLen.value < props.content.length && !rafId) {
     rafId = requestAnimationFrame(tick)
   }
 }
 
-/** content 有新 SSE 片段追加时，尝试启动/续跑打字机动画 */
+/** 历史消息：一次性展示全文，不跑打字机 */
+const showInstant = () => {
+  displayLen.value = props.content.length
+  stopAnim()
+}
+
+/** content 变化：历史直接全文；实时流则续跑打字机 */
 watch(
   () => props.content.length,
-  () => ensureAnim(),
+  () => {
+    if (!everStreamed.value) {
+      showInstant()
+      return
+    }
+    ensureAnim()
+  },
 )
 
 /**
- * streaming 状态变化：
- * - true：流进行中，确保动画运行
- * - false：done 事件触发；不立即 displayLen = content.length，仅 ensureAnim 继续追赶
+ * streaming 变化：
+ * - true：标记 everStreamed，启动打字机
+ * - false 且 everStreamed：流结束，继续追赶
+ * - false 且未 everStreamed：历史消息，直接全文
  */
 watch(
   () => props.streaming,
   (streaming) => {
     if (streaming) {
+      everStreamed.value = true
       ensureAnim()
+      return
+    }
+    if (!everStreamed.value) {
+      showInstant()
       return
     }
     ensureAnim()

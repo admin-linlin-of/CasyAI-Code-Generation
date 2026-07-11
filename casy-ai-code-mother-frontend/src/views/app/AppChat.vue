@@ -1,4 +1,8 @@
 ﻿<template>
+  <!--
+    应用对话页：左聊天 | 中代码/预览 | 右版本列表
+    脚本区见文件顶部 JSDoc 流程说明
+  -->
   <div class="app-chat-page">
     <header class="top-bar">
       <div class="top-bar__name">{{ appInfo?.appName || `应用 #${appId}` }}</div>
@@ -86,12 +90,21 @@
           <!-- 代码模式：Monaco + 文件树 -->
           <CodeWorkspace
             v-if="rightViewMode === 'code' && hasCodeContent"
+            :mode="isVueProject ? 'tree' : 'flat'"
             :files="displayVirtualFiles"
+            :project-files="projectFiles"
+            :project-paths="projectFilePaths"
+            v-model:active-path="projectActivePath"
+            :generating="generating"
             :read-only="generating"
           />
           <!-- Vue 项目：后端异步 npm build，轮询 dist 就绪后再加载 iframe -->
           <div v-else-if="rightViewMode === 'preview' && showPreview && selectedVersionBuildFailed" class="preview-building">
-            <a-empty description="项目打包失败">
+            <a-empty>
+              <template #description>
+                <div class="build-fail-title">项目打包失败</div>
+                <pre v-if="selectedVersionBuildError" class="build-error-text">{{ selectedVersionBuildError }}</pre>
+              </template>
               <a-button type="primary" :loading="retryingBuild" @click="retryBuild()">重新打包</a-button>
             </a-empty>
           </div>
@@ -155,6 +168,9 @@
               </div>
               <div v-else-if="isVersionBuildFailed(version)" class="version-item__building version-item__building--retry">
                 <span class="version-item__unavailable">打包失败</span>
+                <p v-if="version.buildError" class="version-item__error" :title="version.buildError">
+                  {{ version.buildError }}
+                </p>
                 <a-button
                   class="version-item__retry"
                   size="small"
@@ -254,22 +270,57 @@
 </template>
 
 <script lang="ts" setup>
+/**
+ * 应用对话 / 代码生成页（AppChat）。
+ *
+ * <h3>页面布局</h3>
+ * 左：聊天列表 + 输入框 | 中：代码 Monaco / iframe 预览 | 右：版本列表
+ *
+ * <h3>核心流程概览</h3>
+ * <pre>
+ * onMounted
+ *   → fetchAppInfo          应用元信息（codeGenType 决定是否 Vue 工程）
+ *   → loadVersions          版本列表 + 静态预览 URL
+ *   → loadChatHistory       历史对话（streaming=false，无打字机）
+ *   → [autoStart=1]         新建应用时自动 sendMessage
+ *
+ * sendMessage
+ *   → 追加 user 消息
+ *   → startStream           EventSource SSE 流式生成
+ *
+ * startStream（SSE）
+ *   → onmessage             累积 aiMsg.content / thinking；Vue 项目防抖刷新代码面板
+ *   → done                  结束流 → loadVersions → [Vue] buildVersion → 轮询打包 → 预览
+ *   → onerror               网络异常兜底
+ *
+ * 版本切换 selectVersion
+ *   → 重建 previewUrl → loadSavedCodeFiles
+ *
+ * doDeploy
+ *   → 部署当前选中版本到公网访问地址
+ * </pre>
+ *
+ * <h3>代码展示数据来源</h3>
+ * 优先从最新 AI 消息解析虚拟文件；解析不到则读 staticBaseUrl 下已落盘文件（loadSavedCodeFiles）。
+ */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { deleteApp, deployApp, getAppVoById, updateApp } from '@/api/appController'
-import { getAppVersionsByAppId, buildVersion, retryBuild } from '@/api/appVersionController'
+import { getAppVersionsByAppId, buildVersion, retryBuild as retryBuildApi } from '@/api/appVersionController'
 import { listAppChatHistoryByPage } from '@/api/chatHistoryController'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { CheckCircleOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons-vue'
 import request from '@/axios/request'
 import {
   CodeGenTypeEnum,
+  buildDeployKey,
   getStaticBaseUrl,
   getStaticPreviewUrl,
 } from '@/utils/previewUrl'
 import AiMarkdownMessage from '@/components/AiMarkdownMessage.vue'
 import CodeWorkspace from '@/components/CodeWorkspace.vue'
+import { useProjectFileStore } from '@/composables/useProjectFileStore'
 import { APP_TYPE_OPTIONS } from '@/constant/appType'
 import { APP_NOT_PUBLISH, APP_PUBLISHED } from '@/constant/constant'
 import {
@@ -279,6 +330,7 @@ import {
   type VirtualFile,
 } from '@/utils/virtualFiles'
 
+/** 单条聊天消息（内存态；历史从 ChatHistoryVO 映射，实时 SSE 单独构造） */
 type ChatMessage = {
   id?: number
   role: 'user' | 'ai'
@@ -291,15 +343,19 @@ type ChatMessage = {
 
 const HISTORY_PAGE_SIZE = 10
 
+// ─── 路由与应用上下文 ─────────────────────────────────────────
 const route = useRoute()
 const router = useRouter()
 const loginUserStore = useLoginUserStore()
+/** 路由 param.id，保持字符串避免雪花 ID 精度丢失 */
 const appId = computed(() => {
   const id = route.params.id
   return (Array.isArray(id) ? String(id[0]) : String(id)) ?? ''
 })
+/** 发送 / SSE 生成中 */
 const inputMessage = ref('')
 const generating = ref(false)
+/** 部署 / 下载 / 应用编辑 */
 const deploying = ref(false)
 const downloading = ref(false)
 const updating = ref(false)
@@ -329,19 +385,41 @@ const modelTypeOptions = [
   { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
 ]
 
+/** 当前应用详情；codeGenType 区分 HTML / MULTI_FILE / VUE_PROJECT */
 const appInfo = ref<API.AppVO>()
 const isVueProject = computed(() => appInfo.value?.codeGenType === CodeGenTypeEnum.VUE_PROJECT)
+
+/** Vue 项目：目录树 + Monaco 的统一文件状态（SSE t=file + HTTP 全量刷新） */
+const {
+  files: projectFiles,
+  filePaths: projectFilePaths,
+  activePath: projectActivePath,
+  hasContent: projectHasContent,
+  ingestFileEvent,
+  refreshFromServer: refreshProjectFiles,
+  reset: resetProjectFiles,
+} = useProjectFileStore()
+
+// ─── 聊天消息与 SSE ───────────────────────────────────────────
 const messages = ref<ChatMessage[]>([])
+
+// ─── 预览与静态资源 URL ───────────────────────────────────────
 const previewUrl = ref('')
 const staticBaseUrl = ref('')
+/** 是否展示右侧预览区（生成结束后或已有历史时为 true） */
 const showPreview = ref(false)
+/** Vue 项目：当前版本 npm build 轮询中 */
 const previewBuilding = ref(false)
 const retryingBuild = ref(false)
+/** 强制 iframe 刷新（版本打包成功后递增） */
 const previewRefreshKey = ref(0)
 const messageRef = ref<HTMLElement>()
+
+// ─── 对话历史分页 ─────────────────────────────────────────────
 const loadingHistory = ref(false)
 const loadingMoreHistory = ref(false)
 const historyHasMore = ref(false)
+/** 向上翻页游标：当前列表最早一条的 createTime */
 const historyCursor = ref<string>()
 let eventSource: EventSource | null = null
 let codeRefreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -356,14 +434,18 @@ const scheduleCodeRefresh = () => {
   }, 400)
 }
 
+// ─── 版本列表与打包状态 ───────────────────────────────────────
 const versionList = ref<API.AppVersion[]>([])
+/** 当前选中版本目录名，如 v1 */
 const selectedVersionCodeDir = ref('')
+/** 各版本 iframe 刷新 key（build success 后 bump） */
 const versionPreviewKeys = ref<Record<string, number>>({})
 
 const selectedVersion = computed(() =>
   versionList.value.find((v) => v.codeDir === selectedVersionCodeDir.value),
 )
 
+/** Vue 版本 build_status 辅助判断（pending/building/failed/success） */
 const isVersionBuildingStatus = (status?: string) => status === 'pending' || status === 'building'
 
 const isVersionBuilding = (version: API.AppVersion) =>
@@ -377,10 +459,14 @@ const isVersionPreviewReady = (version: API.AppVersion) =>
 
 const selectedVersionBuildFailed = computed(() => isVersionBuildFailed(selectedVersion.value || {}))
 
+/** 当前选中版本的打包失败原因，来自 t_app_version.build_error */
+const selectedVersionBuildError = computed(() => selectedVersion.value?.buildError?.trim() || '')
+
 const selectedVersionPreviewReady = computed(() =>
   !isVueProject.value || selectedVersion.value?.buildStatus === 'success',
 )
 
+// ─── 三栏布局拖拽 ─────────────────────────────────────────────
 const layoutRef = ref<HTMLElement>()
 const chatWidth = ref(420)
 const versionWidth = ref(152)
@@ -497,6 +583,8 @@ const formatVersionLabel = (version: API.AppVersion) => {
   return version.codeDir || '未知版本'
 }
 
+/** 是否为当前登录用户的应用（控制 autoStart 等） */
+/** 是否为当前登录用户的应用（控制 autoStart 等） */
 const isOwnApp = computed(() => {
   const loginUserId = loginUserStore.loginUser.id
   const ownerId = appInfo.value?.userId
@@ -511,6 +599,7 @@ const markVersionPreviewReady = (codeDir: string) => {
   previewRefreshKey.value++
 }
 
+/** 轮询版本 build_status，最长约 6 分钟，直到 success / failed */
 const pollVersionBuildStatus = async (codeDir: string) => {
   for (let i = 0; i < 120; i++) {
     const res = await getAppVersionsByAppId({ appid: appId.value })
@@ -523,7 +612,8 @@ const pollVersionBuildStatus = async (codeDir: string) => {
       return true
     }
     if (version.buildStatus === 'failed') {
-      message.error('项目打包失败')
+      // 优先展示后端写入的 npm 输出摘要
+      message.error(version.buildError?.trim() || '项目打包失败')
       return false
     }
     await new Promise((r) => setTimeout(r, 3000))
@@ -531,6 +621,7 @@ const pollVersionBuildStatus = async (codeDir: string) => {
   return false
 }
 
+/** Vue 生成/重试打包后：等待 dist 就绪再允许 iframe 预览 */
 const waitForVuePreviewReady = async (codeDir?: string) => {
   const dir = codeDir || selectedVersionCodeDir.value
   if (!isVueProject.value || !dir) return
@@ -545,12 +636,13 @@ const waitForVuePreviewReady = async (codeDir?: string) => {
   }
 }
 
+/** 版本打包失败后重新触发 /tAppVersion/build */
 const retryBuild = async (codeDir?: string) => {
   const dir = codeDir || selectedVersionCodeDir.value
   if (!isVueProject.value || !dir || generating.value || retryingBuild.value) return
   retryingBuild.value = true
   try {
-    const res = await retryBuild({ appId: appId.value, codeDir: dir })
+    const res = await retryBuildApi({ appId: appId.value, codeDir: dir })
     if (res.data.code !== 0) {
       message.error(res.data.message || '重新打包失败')
       return
@@ -567,6 +659,7 @@ const retryBuild = async (codeDir?: string) => {
   }
 }
 
+// ─── 右侧代码面板（Monaco 虚拟文件） ───────────────────────────
 /** 右侧面板视图：code = Monaco 代码，preview = iframe 预览 */
 type RightViewMode = 'code' | 'preview'
 const rightViewMode = ref<RightViewMode>('preview')
@@ -595,21 +688,34 @@ const displayVirtualFiles = computed(() => {
 })
 
 /** 是否已有可展示的代码（控制 CodeWorkspace 显示） */
-const hasCodeContent = computed(() => hasVirtualFileContent(displayVirtualFiles.value))
+const hasCodeContent = computed(() => {
+  if (isVueProject.value) {
+    return projectHasContent.value || projectFilePaths.value.length > 0
+  }
+  return hasVirtualFileContent(displayVirtualFiles.value)
+})
 
 const loadSavedCodeFiles = async () => {
+  if (isVueProject.value) {
+    if (!appId.value || !selectedVersionCodeDir.value || !staticBaseUrl.value) return
+    await refreshProjectFiles(appId.value, selectedVersionCodeDir.value, staticBaseUrl.value)
+    return
+  }
   if (!staticBaseUrl.value) return
   const files = await fetchSavedVirtualFiles(staticBaseUrl.value)
   if (files.length) savedVirtualFiles.value = files
 }
 
+/** ChatHistoryVO → 内存消息；streaming=false 供 AiMarkdownMessage 跳过打字机 */
 const toChatMessage = (item: API.ChatHistoryVO): ChatMessage => ({
   id: item.id,
   role: item.messageType === 'user' ? 'user' : 'ai',
   content: item.message || '',
   createTime: item.createTime,
+  streaming: false,
 })
 
+/** 合并分页结果；prepend=true 时 prepend 到列表头部（加载更早消息） */
 const applyHistoryRecords = (records: API.ChatHistoryVO[], prepend: boolean) => {
   // 关键：反转让老消息在前
   const sorted = [...records].reverse().map(toChatMessage)
@@ -619,6 +725,10 @@ const applyHistoryRecords = (records: API.ChatHistoryVO[], prepend: boolean) => 
   historyHasMore.value = records.length >= HISTORY_PAGE_SIZE
 }
 
+/**
+ * 加载对话历史（分页，按 create_time 降序取一页后反转成时间正序）。
+ * @param lastCreateTime 有值时为「加载更多」，取比游标更早的消息
+ */
 const loadChatHistory = async (lastCreateTime?: string) => {
   const loadingMore = Boolean(lastCreateTime)
   if (loadingMore) loadingMoreHistory.value = true
@@ -643,6 +753,7 @@ const loadChatHistory = async (lastCreateTime?: string) => {
   }
 }
 
+/** 向上加载更多历史，并保持滚动位置不跳动 */
 const loadMoreHistory = async () => {
   if (!historyHasMore.value || loadingMoreHistory.value || !historyCursor.value) return
   const el = messageRef.value
@@ -652,20 +763,24 @@ const loadMoreHistory = async () => {
   if (el) el.scrollTop = el.scrollHeight - prevHeight
 }
 
+/** 根据 codeGenType + appId + codeDir（如 v1）拼 deployKey，更新 previewUrl / staticBaseUrl */
 const buildPreviewUrl = (codeDir?: string) => {
   const codeGenType = appInfo.value?.codeGenType || 'multi_file'
   const dir = codeDir || selectedVersionCodeDir.value
-  const deployKey = dir ? `${codeGenType}_${appId.value}_${dir}` : `${codeGenType}_${appId.value}`
+  const deployKey = buildDeployKey(codeGenType, appId.value, dir)
+  if (!deployKey) return
   staticBaseUrl.value = getStaticBaseUrl(deployKey)
   previewUrl.value = getStaticPreviewUrl(codeGenType, deployKey)
 }
 
 const getVersionPreviewUrl = (version: API.AppVersion) => {
   const codeGenType = appInfo.value?.codeGenType || 'multi_file'
-  const deployKey = `${codeGenType}_${appId.value}_${version.codeDir}`
+  const deployKey = buildDeployKey(codeGenType, appId.value, version.codeDir)
+  if (!deployKey) return ''
   return getStaticPreviewUrl(codeGenType, deployKey)
 }
 
+/** 拉取版本列表；selectLatest 时选中最新版并重建预览 URL */
 const loadVersions = async (selectLatest = false) => {
   try {
     const res = await getAppVersionsByAppId({ appid: appId.value })
@@ -688,6 +803,7 @@ const loadVersions = async (selectLatest = false) => {
   }
 }
 
+/** 切换版本：更新预览 URL，清空 savedVirtualFiles 后重新拉取落盘代码 */
 const selectVersion = async (version: API.AppVersion) => {
   if (!version.codeDir || selectedVersionCodeDir.value === version.codeDir) return
   selectedVersionCodeDir.value = version.codeDir
@@ -710,11 +826,11 @@ const closeEventSource = () => {
   eventSource = null
 }
 
+// ─── 应用信息与 CRUD ───────────────────────────────────────────
 const fetchAppInfo = async () => {
   const res = await getAppVoById({ id: appId.value })
   if (res.data.code === 0 && res.data.data) {
     appInfo.value = res.data.data
-    buildPreviewUrl()
     return
   }
   message.error(res.data.message || '获取应用信息失败')
@@ -798,12 +914,24 @@ const openDeployUrl = () => {
   window.open(deployUrl.value, '_blank', 'noopener,noreferrer')
 }
 
-/** 通过 EventSource 接收生成流，data 为 {"c":"片段"}，done 事件表示结束 */
+// ─── SSE 流式代码生成 ─────────────────────────────────────────
+/**
+ * 建立 EventSource 连接 GET /app/chat/gen/code，流式接收 AI 输出。
+ *
+ * 数据格式：onmessage 的 event.data 为 JSON
+ *   - 普通文本：{"c":"片段"}
+ *   - 深度思考：{"c":"片段","t":"thinking"}
+ * 结束：自定义 SSE 事件 done
+ *
+ * Vue 项目 done 后额外：buildVersion → waitForVuePreviewReady → loadSavedCodeFiles
+ */
 const startStream = (messageText: string) => {
   generating.value = true
   showPreview.value = false
-  // 开始生成时自动切到代码视图，实时看 Monaco 流式输出
   rightViewMode.value = 'code'
+  if (isVueProject.value) {
+    resetProjectFiles()
+  }
   const aiMsg: ChatMessage = { role: 'ai', content: '', thinking: '', streaming: true }
   messages.value.push(aiMsg)
   const baseURL = request.defaults.baseURL ?? ''
@@ -814,24 +942,44 @@ const startStream = (messageText: string) => {
   eventSource = new EventSource(url.toString(), { withCredentials: true })
   let finished = false
 
+  /** 每收到一条 SSE data：thinking / file / 聊天文本 */
   eventSource.onmessage = (event) => {
     if (finished) return
     try {
-      // 后端包装为 JSON：普通内容 {"c":"..."}，深度思考 {"c":"...","t":"thinking"}
-      const data = JSON.parse(event.data) as { c?: string; t?: string }
+      const data = JSON.parse(event.data) as {
+        c?: string
+        t?: string
+        path?: string
+        content?: string
+        append?: boolean
+        done?: boolean
+      }
       if (data.t === 'thinking') {
         aiMsg.thinking = (aiMsg.thinking ?? '') + (data.c ?? '')
+      } else if (data.t === 'file' && isVueProject.value) {
+        ingestFileEvent({
+          path: data.path ?? '',
+          content: data.content ?? data.c ?? '',
+          append: data.append,
+          done: data.done,
+        })
       } else {
         aiMsg.content += data.c ?? ''
-        scheduleCodeRefresh()
+        if (!isVueProject.value) scheduleCodeRefresh()
       }
     } catch {
       aiMsg.content += event.data ?? ''
-      scheduleCodeRefresh()
+      if (!isVueProject.value) scheduleCodeRefresh()
     }
     scrollToBottom()
   }
 
+  /**
+   * 后端推送 done 事件表示本轮生成结束：
+   * 1. 关闭 streaming，断开 EventSource
+   * 2. 成功：刷新版本 → [Vue] 触发打包 → 轮询 dist → 加载落盘文件 → 展示预览
+   * 3. 失败（content 以「生成失败」开头）：仅滚到底部
+   */
   eventSource.addEventListener('done', async () => {
     if (finished) return
     finished = true
@@ -878,6 +1026,7 @@ const startStream = (messageText: string) => {
   }
 }
 
+/** 用户点击发送：入队 user 消息并启动 SSE */
 const sendMessage = () => {
   const messageText = inputMessage.value.trim()
   if (!messageText || generating.value) return
@@ -893,6 +1042,7 @@ const onPressEnter = (event: KeyboardEvent) => {
   sendMessage()
 }
 
+/** 部署当前选中版本到线上（/app/deploy） */
 const doDeploy = async () => {
   if (generating.value) {
     message.warning('请等待当前生成完成')
@@ -956,18 +1106,22 @@ const downloadCode = async () => {
   }
 }
 
+// ─── 生命周期 ─────────────────────────────────────────────────
 onMounted(async () => {
+  console.log("onMounted")
   await nextTick()
   initLayoutWidth()
   await fetchAppInfo()
   await loadVersions()
   await loadChatHistory()
+  // 已有历史：直接进预览并加载落盘代码
   if (messages.value.length > 0) {
     showPreview.value = true
     rightViewMode.value = 'preview'
     await loadSavedCodeFiles()
     await scrollToBottom()
   }
+  // 新建应用从列表页跳转：?autoStart=1&initPrompt=... 自动发起首轮生成
   if (
     route.query.autoStart === '1' &&
     isOwnApp.value &&
@@ -982,6 +1136,7 @@ onMounted(async () => {
   }
 })
 
+/** 离开页面：关闭 SSE，移除布局拖拽监听 */
 onBeforeUnmount(() => {
   closeEventSource()
   stopResize()
@@ -1199,6 +1354,30 @@ onBeforeUnmount(() => {
   justify-content: center;
   height: 100%;
   min-height: 240px;
+  padding: 16px;
+}
+
+.build-fail-title {
+  margin-bottom: 8px;
+  color: var(--text-main);
+  font-weight: 500;
+}
+
+.build-error-text {
+  max-width: min(720px, 90vw);
+  max-height: 240px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #cf1322;
+  background: rgba(255, 77, 79, 0.06);
+  border: 1px solid rgba(255, 77, 79, 0.2);
+  border-radius: 6px;
 }
 
 .preview-panel__body iframe {
@@ -1317,6 +1496,20 @@ onBeforeUnmount(() => {
 
 .version-item__unavailable {
   color: var(--text-secondary);
+}
+
+.version-item__error {
+  margin: 4px 0 0;
+  max-height: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #cf1322;
+  text-align: center;
 }
 
 .version-item__thumb iframe {
