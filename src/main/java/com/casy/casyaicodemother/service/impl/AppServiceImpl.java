@@ -6,12 +6,13 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import com.casy.casyaicodemother.ai.AiCodeGenTypeRoutingService;
 import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.constant.UserConstant;
 import com.casy.casyaicodemother.core.AiCodeGeneratorFacade;
 import com.casy.casyaicodemother.core.builder.VueProjectBuilder;
-import com.casy.casyaicodemother.core.vue.VueProjectVersionManager;
 import com.casy.casyaicodemother.core.handler.StreamHandlerExecutor;
+import com.casy.casyaicodemother.core.vue.VueProjectVersionManager;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.exception.ThrowUtils;
@@ -78,6 +79,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     @Resource
     private ScreenshotService screenshotService;
 
+    @Resource
+    private AiCodeGenTypeRoutingService aiCodeGenTypeRoutingService;
+
     @Override
     public long createApp(AppAddRequest appAddRequest, User loginUser) {
         ThrowUtils.throwIf(appAddRequest == null, ErrorCode.PARAMS_ERROR);
@@ -85,10 +89,16 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         ThrowUtils.throwIf(StrUtil.isBlank(initPrompt), ErrorCode.PARAMS_ERROR, "初始化提示词不能为空");
         String codeGenType = appAddRequest.getCodeGenType();
         if (StrUtil.isNotBlank(codeGenType)) {
-            ThrowUtils.throwIf(CodeGenTypeEnum.getEnumByValue(codeGenType) == null,
-                    ErrorCode.PARAMS_ERROR, "不存在生成类型");
+            if (StrUtil.isNotBlank(codeGenType)) {
+                ThrowUtils.throwIf(CodeGenTypeEnum.getEnumByValue(codeGenType) == null,
+                        ErrorCode.PARAMS_ERROR, "不存在生成类型");
+            } else {
+                codeGenType = CodeGenTypeEnum.MULTI_FILE.getValue();
+            }
         } else {
-            codeGenType = CodeGenTypeEnum.MULTI_FILE.getValue();
+            // 使用 AI 智能选择代码生成类型
+            CodeGenTypeEnum selectedCodeGenType = aiCodeGenTypeRoutingService.routeCodeGenType(initPrompt);
+            codeGenType = selectedCodeGenType.getValue();
         }
         App app = new App();
         app.setInitPrompt(initPrompt);
