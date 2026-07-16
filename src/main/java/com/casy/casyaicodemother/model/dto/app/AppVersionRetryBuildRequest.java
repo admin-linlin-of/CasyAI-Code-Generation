@@ -8,7 +8,7 @@ import java.io.Serializable;
 @Data
 public class AppVersionRetryBuildRequest implements Serializable {
 
-    private Long appId;
+    private String appId;
 
     private String codeDir;
 

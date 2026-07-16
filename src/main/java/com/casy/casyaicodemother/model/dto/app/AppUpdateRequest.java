@@ -12,7 +12,7 @@ public class AppUpdateRequest implements Serializable {
     /**
      * id
      */
-    private Long id;
+    private String id;
 
     /**
      * 应用名称

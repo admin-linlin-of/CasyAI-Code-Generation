@@ -106,7 +106,7 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
     @Override
     public Page<ChatHistoryVO> listAppChatHistoryByPage(ChatHistoryQueryRequest chatHistoryQueryRequest, User loginUser) {
         ThrowUtils.throwIf(chatHistoryQueryRequest == null, ErrorCode.PARAMS_ERROR);
-        Long appId = chatHistoryQueryRequest.getAppId();
+        Long appId = Long.valueOf(chatHistoryQueryRequest.getAppId());
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
         App app = appMapper.selectOneById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
@@ -195,11 +195,11 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         if (chatHistoryQueryRequest == null) {
             return queryWrapper;
         }
-        Long id = chatHistoryQueryRequest.getId();
+        Long id = Long.valueOf(chatHistoryQueryRequest.getId());
         String message = chatHistoryQueryRequest.getMessage();
         String messageType = chatHistoryQueryRequest.getMessageType();
-        Long appId = chatHistoryQueryRequest.getAppId();
-        Long userId = chatHistoryQueryRequest.getUserId();
+        Long appId = Long.valueOf(chatHistoryQueryRequest.getAppId());
+        Long userId = Long.valueOf(chatHistoryQueryRequest.getUserId());
         LocalDateTime lastCreateTime = chatHistoryQueryRequest.getLastCreateTime();
         String sortField = chatHistoryQueryRequest.getSortField();
         String sortOrder = chatHistoryQueryRequest.getSortOrder();

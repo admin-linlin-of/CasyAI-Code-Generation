@@ -5,6 +5,7 @@ import cn.dev33.satoken.annotation.SaCheckRole;
 import cn.dev33.satoken.annotation.SaIgnore;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import com.casy.casyaicodemother.ai.AiCodeModelTypeRoutingService;
 import com.casy.casyaicodemother.common.BaseResponse;
 import com.casy.casyaicodemother.common.DeleteRequest;
 import com.casy.casyaicodemother.common.ResultUtils;
@@ -56,6 +57,9 @@ public class AppController {
 
     @Resource
     private AppCodeFileService appCodeFileService;
+
+    @Resource
+    private AiCodeModelTypeRoutingService aiCodeModelTypeRoutingService;
 
     /**
      * 创建应用（须填写 initPrompt）
@@ -227,6 +231,9 @@ public class AppController {
         ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
         User loginUser = userService.getLoginUser();
         //前端使用 EventSource 对接目前的接口时，会出现空格丢失问题。
+        if (StrUtil.isBlank(modelType)) {
+            modelType = aiCodeModelTypeRoutingService.routeCodeModelType(message).getModelName();
+        }
         return appService.chatToGenCode(appId, message, modelType, loginUser)
                 .map(chunk -> {
                     // 深度思考已由 JsonMessageStreamHandler 包装为 {"c":"...","t":"thinking"}，直接透传
@@ -287,7 +294,8 @@ public class AppController {
     @PostMapping("/deploy")
     public BaseResponse<String> deployApp(@RequestBody AppDeployRequest appDeployRequest) {
         ThrowUtils.throwIf(appDeployRequest == null, ErrorCode.PARAMS_ERROR);
-        Long appId = appDeployRequest.getAppId();
+
+        Long appId = Long.valueOf(appDeployRequest.getAppId());
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
         // 获取当前登录用户
         User loginUser = userService.getLoginUser();

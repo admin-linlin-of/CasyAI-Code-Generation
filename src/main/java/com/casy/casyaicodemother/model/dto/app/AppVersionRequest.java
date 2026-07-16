@@ -11,17 +11,17 @@ import java.io.Serializable;
 @Data
 public class AppVersionRequest extends PageRequest implements Serializable {
 
-    private Long id;
+    private String id;
 
     /**
      * 应用id
      */
-    private Long appId;
+    private String appId;
 
     /**
      * 关联的AI对话消息id
      */
-    private Long chatHistoryId;
+    private String chatHistoryId;
 
     /**
      * 版本号，从1递增

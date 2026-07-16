@@ -128,10 +128,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     public boolean updateApp(AppUpdateRequest appUpdateRequest, User loginUser) {
         ThrowUtils.throwIf(appUpdateRequest == null || appUpdateRequest.getId() == null, ErrorCode.PARAMS_ERROR);
         ThrowUtils.throwIf(StrUtil.isBlank(appUpdateRequest.getAppName()), ErrorCode.PARAMS_ERROR, "应用名称不能为空");
-        App oldApp = getAppById(appUpdateRequest.getId());
+        App oldApp = getAppById(Long.parseLong(appUpdateRequest.getId()));
         checkAppAuth(oldApp, loginUser, "");
         App app = new App();
-        app.setId(appUpdateRequest.getId());
+        app.setId(Long.valueOf(appUpdateRequest.getId()));
         app.setAppName(appUpdateRequest.getAppName());
         if (appUpdateRequest.getAppTypes() != null) {
             validateAppTypes(appUpdateRequest.getAppTypes());
@@ -263,7 +263,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (appQueryRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
         }
-        Long id = appQueryRequest.getId();
+        Long id = Long.valueOf(StrUtil.isNotBlank(appQueryRequest.getId()) ? appQueryRequest.getId() : "0");
         String appName = appQueryRequest.getAppName();
         String cover = appQueryRequest.getCover();
         String initPrompt = appQueryRequest.getInitPrompt();

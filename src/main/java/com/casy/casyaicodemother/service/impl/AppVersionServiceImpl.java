@@ -5,7 +5,6 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.constant.UserConstant;
-import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.core.builder.VueProjectBuilder;
 import com.casy.casyaicodemother.core.vue.VueProjectVersionManager;
 import com.casy.casyaicodemother.exception.BusinessException;
@@ -71,7 +70,7 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         ThrowUtils.throwIf(appById == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
 
         AppVersionRequest appVersionRequest = new AppVersionRequest();
-        appVersionRequest.setAppId(appId);
+        appVersionRequest.setAppId(String.valueOf(appId));
         appVersionRequest.setSortField("version_num");
         appVersionRequest.setSortOrder("ascend");
         List<AppVersion> appVersions = appVersionMapper.selectListByQuery(getQueryWrapper(appVersionRequest));
@@ -139,7 +138,7 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
         checkAppVersionViewAuth(app, loginUser);
         AppVersionRequest appVersionRequest = new AppVersionRequest();
-        appVersionRequest.setAppId(appid);
+        appVersionRequest.setAppId(String.valueOf(appid));
         appVersionRequest.setSortField("version_num");
         appVersionRequest.setSortOrder("descend");
         return appVersionMapper.selectListByQuery(getQueryWrapper(appVersionRequest));
@@ -218,7 +217,7 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
     public String getLatestCodeDir(Long appId) {
         ThrowUtils.throwIf(appId == null, ErrorCode.PARAMS_ERROR);
         AppVersionRequest appVersionRequest = new AppVersionRequest();
-        appVersionRequest.setAppId(appId);
+        appVersionRequest.setAppId(String.valueOf(appId));
         appVersionRequest.setSortField("version_num");
         appVersionRequest.setSortOrder("descend");
         List<AppVersion> appVersions = appVersionMapper.selectListByQuery(getQueryWrapper(appVersionRequest));
@@ -273,12 +272,12 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         if (appVersionRequest == null) {
             return queryWrapper;
         }
-        Long id = appVersionRequest.getId();
+        Long id = Long.valueOf(appVersionRequest.getId());
         Integer versionNum = appVersionRequest.getVersionNum();
         String codeDir = appVersionRequest.getCodeDir();
         String modelType = appVersionRequest.getModelType();
-        Long appId = appVersionRequest.getAppId();
-        Long chatHistoryId = appVersionRequest.getChatHistoryId();
+        Long appId = Long.valueOf(appVersionRequest.getAppId());
+        Long chatHistoryId = Long.valueOf(appVersionRequest.getChatHistoryId());
         Long userId = appVersionRequest.getUserId();
         String sortField = appVersionRequest.getSortField();
         String sortOrder = appVersionRequest.getSortOrder();

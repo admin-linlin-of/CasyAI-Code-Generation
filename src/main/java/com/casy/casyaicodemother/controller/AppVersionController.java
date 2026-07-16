@@ -2,6 +2,7 @@ package com.casy.casyaicodemother.controller;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
 import cn.dev33.satoken.annotation.SaCheckRole;
+import cn.hutool.core.util.StrUtil;
 import com.casy.casyaicodemother.common.BaseResponse;
 import com.casy.casyaicodemother.common.ResultUtils;
 import com.casy.casyaicodemother.constant.UserConstant;
@@ -44,7 +45,7 @@ public class AppVersionController {
     public BaseResponse<Boolean> retryBuild(@RequestBody AppVersionRetryBuildRequest request) {
         ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
         User loginUser = userService.getLoginUser();
-        tAppVersionService.retryBuild(request.getAppId(), request.getCodeDir(), loginUser);
+        tAppVersionService.retryBuild(Long.valueOf(request.getAppId()), request.getCodeDir(), loginUser);
         return ResultUtils.success(true);
     }
 
@@ -54,7 +55,8 @@ public class AppVersionController {
     public BaseResponse<Boolean> buildVersion(@RequestBody AppVersionRetryBuildRequest request) {
         ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
         User loginUser = userService.getLoginUser();
-        tAppVersionService.buildVersion(request.getAppId(), request.getCodeDir(), loginUser);
+        Long appId = Long.valueOf(StrUtil.isNotBlank(request.getAppId()) ? request.getAppId() : "0");
+        tAppVersionService.buildVersion(appId, request.getCodeDir(), loginUser);
         return ResultUtils.success(true);
     }
 

@@ -16,11 +16,11 @@ public class ChatHistoryVO implements Serializable {
 
     private String messageType;
 
-    private Long appId;
+    private String appId;
 
-    private Long userId;
+    private String userId;
 
-    private Long parentId;
+    private String parentId;
 
     private LocalDateTime createTime;
 

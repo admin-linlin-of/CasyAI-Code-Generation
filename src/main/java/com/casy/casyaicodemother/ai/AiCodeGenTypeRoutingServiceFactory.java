@@ -30,4 +30,11 @@ public class AiCodeGenTypeRoutingServiceFactory {
                 .chatModel(chatModel)
                 .build();
     }
+
+    @Bean
+    public AiCodeModelTypeRoutingService aiCodeModelTypeRoutingService() {
+        return AiServices.builder(AiCodeModelTypeRoutingService.class)
+                .chatModel(chatModel)
+                .build();
+    }
 }

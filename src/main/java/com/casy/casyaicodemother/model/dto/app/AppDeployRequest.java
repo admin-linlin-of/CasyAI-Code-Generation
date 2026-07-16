@@ -11,7 +11,7 @@ public class AppDeployRequest implements Serializable {
     /**
      * 应用 id
      */
-    private Long appId;
+    private String appId;
 
     /**
      * 部署的版本目录，如 v1；为空时部署最新版本

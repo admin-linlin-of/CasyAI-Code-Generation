@@ -15,7 +15,7 @@ public class ChatHistoryQueryRequest extends PageRequest implements Serializable
     /**
      * id
      */
-    private Long id;
+    private String id;
 
     /**
      * 消息内容
@@ -30,12 +30,12 @@ public class ChatHistoryQueryRequest extends PageRequest implements Serializable
     /**
      * 应用id
      */
-    private Long appId;
+    private String appId;
 
     /**
      * 创建用户id
      */
-    private Long userId;
+    private String userId;
 
     /**
      * 游标查询 - 最后一条记录的创建时间

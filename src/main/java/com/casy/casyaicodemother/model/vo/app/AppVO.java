@@ -66,7 +66,7 @@ public class AppVO implements Serializable {
     /**
      * 创建用户id
      */
-    private Long userId;
+    private String userId;
 
     /**
      * 创建时间

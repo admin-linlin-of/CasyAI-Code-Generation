@@ -15,7 +15,7 @@ public class AppQueryRequest extends PageRequest implements Serializable {
     /**
      * id
      */
-    private Long id;
+    private String id;
 
     /**
      * 应用名称
