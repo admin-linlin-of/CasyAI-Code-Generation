@@ -167,15 +167,17 @@ const loginUserStore = useLoginUserStore()
 const isLogin = computed(() => Boolean(loginUserStore.loginUser.id))
 const creating = ref(false)
 const initPrompt = ref('')
-const codeGenType = ref('multi_file')
-const modelType = ref('deepseek-v4-flash')
+const codeGenType = ref('')
+const modelType = ref('')
 
 const codeGenTypeOptions = [
+  { value: '', label: '自动选择生成类型' },
   { value: 'multi_file', label: '多文件模式' },
   { value: 'html', label: 'HTML 模式' },
   { value: 'vue_project', label: 'Vue 工程模式' },
 ]
 const modelTypeOptions = [
+  { value: '', label: '自动选择模型' },
   { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
   { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
   { value: 'gpt-5.5', label: 'GPT 5.5' },
@@ -197,7 +199,7 @@ const goodPageSize = ref(8)
 const goodSearchName = ref('')
 
 const trimmedPrompt = computed(() => initPrompt.value.trim())
-const toAppId = (id?: string) => {
+const toAppId = (id?: string | number) => {
   if (id === undefined || id === null || id === '') return undefined
   return String(id)
 }

@@ -5,7 +5,13 @@
   -->
   <div class="app-chat-page">
     <header class="top-bar">
-      <div class="top-bar__name">{{ appInfo?.appName || `应用 #${appId}` }}</div>
+      <div class="top-bar__main">
+        <div class="top-bar__name">{{ appInfo?.appName || `应用 #${appId}` }}</div>
+        <div class="top-bar__meta">
+          <a-tag>{{ currentCodeGenTypeLabel }}</a-tag>
+          <a-tag>{{ currentModelTypeLabel }}</a-tag>
+        </div>
+      </div>
       <a-space>
         <a-select v-model:value="modelType" :options="modelTypeOptions" style="width: 180px" />
         <a-button @click="openDetailModal">详情</a-button>
@@ -194,7 +200,9 @@
             </div>
             <div class="version-item__meta">
               <span class="version-item__label">{{ formatVersionLabel(version) }}</span>
-              <span v-if="version.modelType" class="version-item__model">{{ version.modelType }}</span>
+              <span v-if="version.modelType" class="version-item__model">
+                {{ modelTypeLabelMap[version.modelType] || version.modelType }}
+              </span>
             </div>
           </div>
           <a-empty v-if="versionList.length === 0" description="暂无版本" />
@@ -375,19 +383,35 @@ const detailPublished = computed({
     detailForm.isPublish = checked ? APP_PUBLISHED : APP_NOT_PUBLISH
   },
 })
-const modelType = ref(
-  typeof route.query.modelType === 'string' ? route.query.modelType : 'deepseek-v4-flash',
-)
+const modelType = ref(typeof route.query.modelType === 'string' ? route.query.modelType : '')
 const modelTypeOptions = [
+  { value: '', label: '自动选择模型' },
   { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
   { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
   { value: 'gpt-5.5', label: 'GPT 5.5' },
   { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
 ]
+const modelTypeLabelMap = Object.fromEntries(
+  modelTypeOptions.map((option) => [option.value, option.label]),
+) as Record<string, string>
+const codeGenTypeLabelMap: Record<string, string> = {
+  [CodeGenTypeEnum.HTML]: 'HTML 模式',
+  [CodeGenTypeEnum.MULTI_FILE]: '多文件模式',
+  [CodeGenTypeEnum.VUE_PROJECT]: 'Vue 工程模式',
+}
 
 /** 当前应用详情；codeGenType 区分 HTML / MULTI_FILE / VUE_PROJECT */
 const appInfo = ref<API.AppVO>()
 const isVueProject = computed(() => appInfo.value?.codeGenType === CodeGenTypeEnum.VUE_PROJECT)
+const currentCodeGenTypeLabel = computed(() => {
+  const codeGenType = appInfo.value?.codeGenType
+  if (!codeGenType) return '生成类型：自动选择中'
+  return `生成类型：${codeGenTypeLabelMap[codeGenType] || codeGenType}`
+})
+const currentModelTypeLabel = computed(() => {
+  const currentModelType = selectedVersion.value?.modelType || modelType.value
+  return `模型：${modelTypeLabelMap[currentModelType] || currentModelType || '自动选择'}`
+})
 
 /** Vue 项目：目录树 + Monaco 的统一文件状态（SSE t=file + HTTP 全量刷新） */
 const {
@@ -602,7 +626,7 @@ const markVersionPreviewReady = (codeDir: string) => {
 /** 轮询版本 build_status，最长约 6 分钟，直到 success / failed */
 const pollVersionBuildStatus = async (codeDir: string) => {
   for (let i = 0; i < 120; i++) {
-    const res = await getAppVersionsByAppId({ appid: appId.value })
+    const res = await getAppVersionsByAppId({ appid: appIdNumber.value })
     const list = Array.isArray(res.data) ? res.data : []
     versionList.value = list
     const version = list.find((v) => v.codeDir === codeDir)
@@ -783,7 +807,7 @@ const getVersionPreviewUrl = (version: API.AppVersion) => {
 /** 拉取版本列表；selectLatest 时选中最新版并重建预览 URL */
 const loadVersions = async (selectLatest = false) => {
   try {
-    const res = await getAppVersionsByAppId({ appid: appId.value })
+    const res = await getAppVersionsByAppId({ appid: appIdNumber.value })
     const list = Array.isArray(res.data) ? res.data : []
     versionList.value = list
     if (list.length) {
@@ -793,7 +817,7 @@ const loadVersions = async (selectLatest = false) => {
         !selectedVersionCodeDir.value ||
         !list.some((v) => v.codeDir === selectedVersionCodeDir.value)
       ) {
-        selectedVersionCodeDir.value = latest.codeDir || ''
+        selectedVersionCodeDir.value = latest?.codeDir || ''
         savedVirtualFiles.value = []
       }
       buildPreviewUrl(selectedVersionCodeDir.value)
@@ -828,7 +852,7 @@ const closeEventSource = () => {
 
 // ─── 应用信息与 CRUD ───────────────────────────────────────────
 const fetchAppInfo = async () => {
-  const res = await getAppVoById({ id: appId.value })
+  const res = await getAppVoById({ id: appIdNumber.value })
   if (res.data.code === 0 && res.data.data) {
     appInfo.value = res.data.data
     return
@@ -852,7 +876,7 @@ const doUpdateApp = async () => {
   updating.value = true
   try {
     const res = await updateApp({
-      id: appId.value,
+      id: appIdNumber.value,
       appName,
       appTypes: detailForm.appTypes,
       isPublish: detailForm.isPublish,
@@ -883,7 +907,7 @@ const confirmDeleteApp = () => {
     async onOk() {
       deleting.value = true
       try {
-        const res = await deleteApp({ id: appId.value })
+        const res = await deleteApp({ id: appIdNumber.value })
         if (res.data.code === 0) {
           message.success('删除成功')
           detailVisible.value = false
@@ -1050,7 +1074,7 @@ const doDeploy = async () => {
   }
   deploying.value = true
   try {
-    const res = await deployApp({ appId: appId.value, codeDir: selectedVersionCodeDir.value })
+    const res = await deployApp({ appId: appIdNumber.value, codeDir: selectedVersionCodeDir.value })
     if (res.data.code === 0 && res.data.data) {
       deployUrl.value = res.data.data
       deploySuccessVisible.value = true
@@ -1160,9 +1184,33 @@ onBeforeUnmount(() => {
   background: var(--bg-card);
 }
 
+.top-bar__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .top-bar__name {
   font-size: 18px;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.top-bar__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.top-bar__meta :deep(.ant-tag) {
+  margin-inline-end: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  border-color: var(--border-color);
 }
 
 .core-layout {

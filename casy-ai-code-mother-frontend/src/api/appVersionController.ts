@@ -2,6 +2,21 @@
 /* eslint-disable */
 import request from '@/axios/request'
 
+/** 打包指定版本 POST /tAppVersion/build */
+export async function buildVersion(
+  body: API.AppVersionRetryBuildRequest,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseBoolean>('/tAppVersion/build', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
 /** 根据主键获取应用代码版本 GET /tAppVersion/getInfo/${param0} */
 export async function getInfo1(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
@@ -90,21 +105,6 @@ export async function retryBuild(
   options?: { [key: string]: any }
 ) {
   return request<API.BaseResponseBoolean>('/tAppVersion/retryBuild', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    data: body,
-    ...(options || {}),
-  })
-}
-
-/** 打包指定版本 POST /tAppVersion/build */
-export async function buildVersion(
-  body: API.AppVersionRetryBuildRequest,
-  options?: { [key: string]: any }
-) {
-  return request<API.BaseResponseBoolean>('/tAppVersion/build', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

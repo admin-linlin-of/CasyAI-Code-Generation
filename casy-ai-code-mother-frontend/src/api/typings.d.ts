@@ -34,8 +34,12 @@ declare namespace API {
     isPublish?: number
   }
 
+  type AppCodeFileListVO = {
+    files?: string[]
+  }
+
   type AppDeployRequest = {
-    appId?: number
+    appId?: string
     codeDir?: string
   }
 
@@ -44,7 +48,7 @@ declare namespace API {
     pageSize?: number
     sortField?: string
     sortOrder?: string
-    id?: number
+    id?: string
     appName?: string
     cover?: string
     initPrompt?: string
@@ -57,7 +61,7 @@ declare namespace API {
   }
 
   type AppUpdateRequest = {
-    id?: number
+    id?: string
     appName?: string
     appTypes?: string[]
     isPublish?: number
@@ -84,9 +88,9 @@ declare namespace API {
     pageSize?: number
     sortField?: string
     sortOrder?: string
-    id?: number
-    appId?: number
-    chatHistoryId?: number
+    id?: string
+    appId?: string
+    chatHistoryId?: string
     versionNum?: number
     codeDir?: string
     modelType?: string
@@ -109,7 +113,7 @@ declare namespace API {
     deployedTime?: string
     priority?: number
     isPublish?: number
-    userId?: number
+    userId?: string
     createTime?: string
     updateTime?: string
     user?: UserVO
@@ -118,6 +122,12 @@ declare namespace API {
   type BaseResponseApp = {
     code?: number
     data?: App
+    message?: string
+  }
+
+  type BaseResponseAppCodeFileListVO = {
+    code?: number
+    data?: AppCodeFileListVO
     message?: string
   }
 
@@ -192,11 +202,11 @@ declare namespace API {
     pageSize?: number
     sortField?: string
     sortOrder?: string
-    id?: number
+    id?: string
     message?: string
     messageType?: string
-    appId?: number
-    userId?: number
+    appId?: string
+    userId?: string
     lastCreateTime?: string
   }
 
@@ -204,9 +214,9 @@ declare namespace API {
     id?: number
     message?: string
     messageType?: string
-    appId?: number
-    userId?: number
-    parentId?: number
+    appId?: string
+    userId?: string
+    parentId?: string
     createTime?: string
     app?: AppVO
     user?: UserVO
@@ -218,27 +228,13 @@ declare namespace API {
     modelType: string
   }
 
-  type listCodeFilesParams = {
-    appId: number | string
-    codeDir: string
-  }
-
-  type AppCodeFileListVO = {
-    files?: string[]
-  }
-
-  type BaseResponseAppCodeFileListVO = {
-    code?: number
-    data?: AppCodeFileListVO
-    message?: string
-  }
-
   type DeleteRequest = {
     id?: number
   }
 
   type downloadAppCodeParams = {
     appId: number
+    version: string
   }
 
   type getAppByIdParams = {
@@ -267,6 +263,11 @@ declare namespace API {
 
   type getUserVOByIdParams = {
     id: number
+  }
+
+  type listCodeFilesParams = {
+    appId: number
+    codeDir: string
   }
 
   type LoginUserVO = {
