@@ -1,6 +1,6 @@
 declare namespace API {
   type App = {
-    id?: number
+    id?: string
     appName?: string
     cover?: string
     initPrompt?: string
@@ -10,7 +10,7 @@ declare namespace API {
     deployedTime?: string
     priority?: number
     isPublish?: number
-    userId?: number
+    userId?: string
     editTime?: string
     createTime?: string
     updateTime?: string
@@ -26,7 +26,7 @@ declare namespace API {
   }
 
   type AppAdminUpdateRequest = {
-    id?: number
+    id?: string
     appName?: string
     cover?: string
     priority?: number
@@ -56,7 +56,7 @@ declare namespace API {
     appTypes?: string[]
     deployKey?: string
     priority?: number
-    userId?: number
+    userId?: string
     isPublish?: number
   }
 
@@ -68,16 +68,16 @@ declare namespace API {
   }
 
   type AppVersion = {
-    id?: number
-    appId?: number
-    chatHistoryId?: number
+    id?: string
+    appId?: string
+    chatHistoryId?: string
     versionNum?: number
     codeDir?: string
     modelType?: string
     buildStatus?: string
     buildError?: string
     deployStatus?: string
-    userId?: number
+    userId?: string
     createTime?: string
     updateTime?: string
     isDelete?: number
@@ -94,7 +94,7 @@ declare namespace API {
     versionNum?: number
     codeDir?: string
     modelType?: string
-    userId?: number
+    userId?: string
   }
 
   type AppVersionRetryBuildRequest = {
@@ -103,7 +103,7 @@ declare namespace API {
   }
 
   type AppVO = {
-    id?: number
+    id?: string
     appName?: string
     cover?: string
     initPrompt?: string
@@ -151,7 +151,7 @@ declare namespace API {
 
   type BaseResponseLong = {
     code?: number
-    data?: number
+    data?: string
     message?: string
   }
 
@@ -211,7 +211,7 @@ declare namespace API {
   }
 
   type ChatHistoryVO = {
-    id?: number
+    id?: string
     message?: string
     messageType?: string
     appId?: string
@@ -223,55 +223,55 @@ declare namespace API {
   }
 
   type chatToGenCodeParams = {
-    appId: number
+    appId: string
     message: string
     modelType: string
   }
 
   type DeleteRequest = {
-    id?: number
+    id?: string
   }
 
   type downloadAppCodeParams = {
-    appId: number
+    appId: string
     version: string
   }
 
   type getAppByIdParams = {
-    id: number
+    id: string
   }
 
   type getAppVersionsByAppIdParams = {
-    appid: number
+    appid: string
   }
 
   type getAppVOByIdParams = {
-    id: number
+    id: string
   }
 
   type getInfo1Params = {
-    id: number
+    id: string
   }
 
   type getInfoParams = {
-    id: number
+    id: string
   }
 
   type getUserByIdParams = {
-    id: number
+    id: string
   }
 
   type getUserVOByIdParams = {
-    id: number
+    id: string
   }
 
   type listCodeFilesParams = {
-    appId: number
+    appId: string
     codeDir: string
   }
 
   type LoginUserVO = {
-    id?: number
+    id?: string
     userAccount?: string
     userName?: string
     userAvatar?: string
@@ -288,28 +288,28 @@ declare namespace API {
 
   type PageAppVersion = {
     records?: AppVersion[]
-    pageNumber?: number
-    pageSize?: number
-    totalPage?: number
-    totalRow?: number
+    pageNumber?: string
+    pageSize?: string
+    totalPage?: string
+    totalRow?: string
     optimizeCountQuery?: boolean
   }
 
   type PageAppVO = {
     records?: AppVO[]
-    pageNumber?: number
-    pageSize?: number
-    totalPage?: number
-    totalRow?: number
+    pageNumber?: string
+    pageSize?: string
+    totalPage?: string
+    totalRow?: string
     optimizeCountQuery?: boolean
   }
 
   type PageChatHistoryVO = {
     records?: ChatHistoryVO[]
-    pageNumber?: number
-    pageSize?: number
-    totalPage?: number
-    totalRow?: number
+    pageNumber?: string
+    pageSize?: string
+    totalPage?: string
+    totalRow?: string
     optimizeCountQuery?: boolean
   }
 
@@ -319,28 +319,28 @@ declare namespace API {
 
   type PageUser = {
     records?: User[]
-    pageNumber?: number
-    pageSize?: number
-    totalPage?: number
-    totalRow?: number
+    pageNumber?: string
+    pageSize?: string
+    totalPage?: string
+    totalRow?: string
     optimizeCountQuery?: boolean
   }
 
   type PageUserVO = {
     records?: UserVO[]
-    pageNumber?: number
-    pageSize?: number
-    totalPage?: number
-    totalRow?: number
+    pageNumber?: string
+    pageSize?: string
+    totalPage?: string
+    totalRow?: string
     optimizeCountQuery?: boolean
   }
 
   type remove1Params = {
-    id: number
+    id: string
   }
 
   type removeParams = {
-    id: number
+    id: string
   }
 
   type ServerSentEventString = true
@@ -350,7 +350,7 @@ declare namespace API {
   }
 
   type User = {
-    id?: number
+    id?: string
     userAccount?: string
     userPassword?: string
     userName?: string
@@ -359,9 +359,9 @@ declare namespace API {
     userRole?: string
     vipExpireTime?: string
     vipCode?: string
-    vipNumber?: number
+    vipNumber?: string
     shareCode?: string
-    inviteUser?: number
+    inviteUser?: string
     editTime?: string
     createTime?: string
     updateTime?: string
@@ -387,7 +387,7 @@ declare namespace API {
     pageSize?: number
     sortField?: string
     sortOrder?: string
-    id?: number
+    id?: string
     userName?: string
     userAccount?: string
     userProfile?: string
@@ -401,7 +401,7 @@ declare namespace API {
   }
 
   type UserUpdateRequest = {
-    id?: number
+    id?: string
     userName?: string
     userAvatar?: string
     userProfile?: string
@@ -409,7 +409,7 @@ declare namespace API {
   }
 
   type UserVO = {
-    id?: number
+    id?: string
     userAccount?: string
     userName?: string
     userAvatar?: string

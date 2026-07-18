@@ -39,11 +39,7 @@
           >
             <div class="message-item__content">
               <!-- AI 深度思考区域：流式展示 reasoning 内容 -->
-              <details
-                v-if="msg.role === 'ai' && msg.thinking"
-                class="message-item__thinking"
-                open
-              >
+              <details v-if="msg.role === 'ai' && msg.thinking" class="message-item__thinking" open>
                 <summary>深度思考</summary>
                 <pre class="message-item__thinking-body">{{ msg.thinking }}</pre>
               </details>
@@ -59,6 +55,16 @@
           <a-empty v-if="messages.length === 0" description="发送消息开始生成" />
         </div>
         <div class="input-area">
+          <a-alert
+            v-if="selectedVisualElement"
+            class="visual-element-alert"
+            type="info"
+            show-icon
+            closable
+            message="已选中页面元素"
+            :description="selectedVisualElementLabel"
+            @close="clearSelectedVisualElement"
+          />
           <a-textarea
             v-model:value="inputMessage"
             :maxlength="1200"
@@ -68,7 +74,18 @@
             @pressEnter="onPressEnter"
           />
           <div class="input-area__ops">
-            <a-button :loading="generating" type="primary" @click="sendMessage">发送</a-button>
+            <a-button
+              html-type="button"
+              :disabled="!canUseVisualEditor"
+              :type="visualEditorEnabled ? 'primary' : 'default'"
+              @click="toggleVisualEditor"
+            >
+              <template #icon><EditOutlined /></template>
+              {{ visualEditorEnabled ? '退出编辑' : '可视化编辑' }}
+            </a-button>
+            <a-button html-type="button" :loading="generating" type="primary" @click="sendMessage"
+              >发送</a-button
+            >
           </div>
         </div>
       </section>
@@ -105,23 +122,35 @@
             :read-only="generating"
           />
           <!-- Vue 项目：后端异步 npm build，轮询 dist 就绪后再加载 iframe -->
-          <div v-else-if="rightViewMode === 'preview' && showPreview && selectedVersionBuildFailed" class="preview-building">
+          <div
+            v-else-if="rightViewMode === 'preview' && showPreview && selectedVersionBuildFailed"
+            class="preview-building"
+          >
             <a-empty>
               <template #description>
                 <div class="build-fail-title">项目打包失败</div>
-                <pre v-if="selectedVersionBuildError" class="build-error-text">{{ selectedVersionBuildError }}</pre>
+                <pre v-if="selectedVersionBuildError" class="build-error-text">{{
+                  selectedVersionBuildError
+                }}</pre>
               </template>
-              <a-button type="primary" :loading="retryingBuild" @click="retryBuild()">重新打包</a-button>
+              <a-button type="primary" :loading="retryingBuild" @click="retryBuild()"
+                >重新打包</a-button
+              >
             </a-empty>
           </div>
-          <div v-else-if="rightViewMode === 'preview' && showPreview && previewBuilding" class="preview-building">
+          <div
+            v-else-if="rightViewMode === 'preview' && showPreview && previewBuilding"
+            class="preview-building"
+          >
             <a-spin tip="项目打包中，请稍候..." />
           </div>
           <iframe
             v-else-if="rightViewMode === 'preview' && showPreview && selectedVersionPreviewReady"
+            ref="previewIframeRef"
             :key="`${previewUrl}-${previewRefreshKey}`"
             :src="previewUrl"
             title="app-preview"
+            @load="handlePreviewIframeLoad"
           />
           <a-empty
             v-else
@@ -172,9 +201,16 @@
               <div v-if="isVersionBuilding(version)" class="version-item__building">
                 <a-spin size="small" tip="打包中" />
               </div>
-              <div v-else-if="isVersionBuildFailed(version)" class="version-item__building version-item__building--retry">
+              <div
+                v-else-if="isVersionBuildFailed(version)"
+                class="version-item__building version-item__building--retry"
+              >
                 <span class="version-item__unavailable">打包失败</span>
-                <p v-if="version.buildError" class="version-item__error" :title="version.buildError">
+                <p
+                  v-if="version.buildError"
+                  class="version-item__error"
+                  :title="version.buildError"
+                >
                   {{ version.buildError }}
                 </p>
                 <a-button
@@ -225,7 +261,9 @@
       <div class="detail-modal">
         <div class="detail-row">
           <span class="detail-label">创建者：</span>
-          <span>{{ appInfo?.user?.userName || appInfo?.user?.userAccount || appInfo?.userId || '-' }}</span>
+          <span>{{
+            appInfo?.user?.userName || appInfo?.user?.userAccount || appInfo?.userId || '-'
+          }}</span>
         </div>
         <div class="detail-row">
           <span class="detail-label">创建时间：</span>
@@ -311,14 +349,23 @@
  * <h3>代码展示数据来源</h3>
  * 优先从最新 AI 消息解析虚拟文件；解析不到则读 staticBaseUrl 下已落盘文件（loadSavedCodeFiles）。
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { deleteApp, deployApp, getAppVoById, updateApp } from '@/api/appController'
-import { getAppVersionsByAppId, buildVersion, retryBuild as retryBuildApi } from '@/api/appVersionController'
+import {
+  getAppVersionsByAppId,
+  buildVersion,
+  retryBuild as retryBuildApi,
+} from '@/api/appVersionController'
 import { listAppChatHistoryByPage } from '@/api/chatHistoryController'
 import { useLoginUserStore } from '@/stores/loginUser'
-import { CheckCircleOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons-vue'
+import {
+  CheckCircleOutlined,
+  EditOutlined,
+  LeftOutlined,
+  RightOutlined,
+} from '@ant-design/icons-vue'
 import request from '@/axios/request'
 import {
   CodeGenTypeEnum,
@@ -337,10 +384,16 @@ import {
   parseAiContentToVirtualFiles,
   type VirtualFile,
 } from '@/utils/virtualFiles'
+import {
+  appendSelectedElementToPrompt,
+  createVisualEditorController,
+  formatSelectedElementLabel,
+  type VisualEditorSelectedElement,
+} from '@/utils/visualEditor'
 
 /** 单条聊天消息（内存态；历史从 ChatHistoryVO 映射，实时 SSE 单独构造） */
 type ChatMessage = {
-  id?: number
+  id?: string | number
   role: 'user' | 'ai'
   content: string
   /** AI 深度思考内容（reasoning 流） */
@@ -358,7 +411,8 @@ const loginUserStore = useLoginUserStore()
 /** 路由 param.id，保持字符串避免雪花 ID 精度丢失 */
 const appId = computed(() => {
   const id = route.params.id
-  return (Array.isArray(id) ? String(id[0]) : String(id)) ?? ''
+  if (Array.isArray(id)) return id[0] ? String(id[0]) : ''
+  return id ? String(id) : ''
 })
 /** 发送 / SSE 生成中 */
 const inputMessage = ref('')
@@ -412,6 +466,10 @@ const currentModelTypeLabel = computed(() => {
   const currentModelType = selectedVersion.value?.modelType || modelType.value
   return `模型：${modelTypeLabelMap[currentModelType] || currentModelType || '自动选择'}`
 })
+const autoStartPrompt = computed(() => {
+  if (route.query.autoStart !== '1') return ''
+  return typeof route.query.initPrompt === 'string' ? route.query.initPrompt.trim() : ''
+})
 
 /** Vue 项目：目录树 + Monaco 的统一文件状态（SSE t=file + HTTP 全量刷新） */
 const {
@@ -438,6 +496,19 @@ const retryingBuild = ref(false)
 /** 强制 iframe 刷新（版本打包成功后递增） */
 const previewRefreshKey = ref(0)
 const messageRef = ref<HTMLElement>()
+const previewIframeRef = ref<HTMLIFrameElement>()
+
+// ─── 预览可视化编辑 ───────────────────────────────────────────
+/** 是否处于可视化编辑模式；开启后 iframe 内 hover / click 会被选择脚本接管 */
+const visualEditorEnabled = ref(false)
+/** iframe 通过 postMessage 回传的当前选中元素，发送消息后会自动清空 */
+const selectedVisualElement = ref<VisualEditorSelectedElement | null>(null)
+let visualEditorController: ReturnType<typeof createVisualEditorController> | null = null
+
+/** Alert 展示文案保持简短，完整结构信息会在发送时拼进提示词 */
+const selectedVisualElementLabel = computed(() =>
+  selectedVisualElement.value ? formatSelectedElementLabel(selectedVisualElement.value) : '',
+)
 
 // ─── 对话历史分页 ─────────────────────────────────────────────
 const loadingHistory = ref(false)
@@ -486,8 +557,8 @@ const selectedVersionBuildFailed = computed(() => isVersionBuildFailed(selectedV
 /** 当前选中版本的打包失败原因，来自 t_app_version.build_error */
 const selectedVersionBuildError = computed(() => selectedVersion.value?.buildError?.trim() || '')
 
-const selectedVersionPreviewReady = computed(() =>
-  !isVueProject.value || selectedVersion.value?.buildStatus === 'success',
+const selectedVersionPreviewReady = computed(
+  () => !isVueProject.value || selectedVersion.value?.buildStatus === 'success',
 )
 
 // ─── 三栏布局拖拽 ─────────────────────────────────────────────
@@ -565,10 +636,7 @@ const onResizeMove = (event: MouseEvent) => {
     stopResize()
     return
   }
-  versionWidth.value = Math.max(
-    MIN_VERSION_WIDTH,
-    Math.min(getMaxVersionWidth(), rawVersionWidth),
-  )
+  versionWidth.value = Math.max(MIN_VERSION_WIDTH, Math.min(getMaxVersionWidth(), rawVersionWidth))
 }
 
 const stopResize = () => {
@@ -608,11 +676,10 @@ const formatVersionLabel = (version: API.AppVersion) => {
 }
 
 /** 是否为当前登录用户的应用（控制 autoStart 等） */
-/** 是否为当前登录用户的应用（控制 autoStart 等） */
 const isOwnApp = computed(() => {
   const loginUserId = loginUserStore.loginUser.id
   const ownerId = appInfo.value?.userId
-  return loginUserId != null && ownerId != null && loginUserId === ownerId
+  return loginUserId != null && ownerId != null && String(loginUserId) === String(ownerId)
 })
 
 const getVersionPreviewKey = (version: API.AppVersion) =>
@@ -626,7 +693,7 @@ const markVersionPreviewReady = (codeDir: string) => {
 /** 轮询版本 build_status，最长约 6 分钟，直到 success / failed */
 const pollVersionBuildStatus = async (codeDir: string) => {
   for (let i = 0; i < 120; i++) {
-    const res = await getAppVersionsByAppId({ appid: appIdNumber.value })
+    const res = await getAppVersionsByAppId({ appid: appId.value })
     const list = Array.isArray(res.data) ? res.data : []
     versionList.value = list
     const version = list.find((v) => v.codeDir === codeDir)
@@ -691,6 +758,49 @@ const rightViewOptions = [
   { value: 'code', label: '代码' },
   { value: 'preview', label: '预览' },
 ]
+
+/** 只有主预览 iframe 真正渲染时才允许进入编辑模式，避免用户在代码/构建状态下误操作 */
+const canUseVisualEditor = computed(
+  () =>
+    rightViewMode.value === 'preview' &&
+    showPreview.value &&
+    selectedVersionPreviewReady.value &&
+    Boolean(previewUrl.value) &&
+    !generating.value,
+)
+
+const handlePreviewIframeLoad = () => {
+  visualEditorController?.handleIframeLoad()
+}
+
+const setVisualEditorEnabled = (enabled: boolean) => {
+  if (enabled && !canUseVisualEditor.value) return
+  visualEditorEnabled.value = enabled
+  visualEditorController?.setEnabled(enabled)
+  if (!enabled) {
+    visualEditorController?.clearSelectedInIframe()
+  }
+}
+
+const toggleVisualEditor = () => {
+  setVisualEditorEnabled(!visualEditorEnabled.value)
+}
+
+const clearSelectedVisualElement = () => {
+  selectedVisualElement.value = null
+  visualEditorController?.clearSelectedInIframe()
+}
+
+const resetVisualEditor = () => {
+  selectedVisualElement.value = null
+  setVisualEditorEnabled(false)
+}
+
+watch(canUseVisualEditor, (canUse) => {
+  if (!canUse && visualEditorEnabled.value) {
+    resetVisualEditor()
+  }
+})
 
 /** 从后端静态目录加载的代码（刷新页面或 SSE 解析失败时使用） */
 const savedVirtualFiles = ref<VirtualFile[]>([])
@@ -807,7 +917,7 @@ const getVersionPreviewUrl = (version: API.AppVersion) => {
 /** 拉取版本列表；selectLatest 时选中最新版并重建预览 URL */
 const loadVersions = async (selectLatest = false) => {
   try {
-    const res = await getAppVersionsByAppId({ appid: appIdNumber.value })
+    const res = await getAppVersionsByAppId({ appid: appId.value })
     const list = Array.isArray(res.data) ? res.data : []
     versionList.value = list
     if (list.length) {
@@ -850,9 +960,27 @@ const closeEventSource = () => {
   eventSource = null
 }
 
+/**
+ * 构造 SSE 地址。
+ *
+ * axios 的 baseURL 在开发环境通常是 `/api`，这种相对路径不能直接作为
+ * `new URL(path, base)` 的 base 参数，否则会抛出 `Invalid URL`，表现为点击发送后
+ * 没有任何 Network 请求。这里先把相对 baseURL 解析到当前站点 origin 下，兼容
+ * `/api`、`/api/`、`http://host/api` 三种配置。
+ */
+const buildSseUrl = () => {
+  const baseURL = request.defaults.baseURL || '/'
+  const normalizedBase = baseURL.endsWith('/') ? baseURL : `${baseURL}/`
+  return new URL('app/chat/gen/code', new URL(normalizedBase, window.location.origin))
+}
+
 // ─── 应用信息与 CRUD ───────────────────────────────────────────
 const fetchAppInfo = async () => {
-  const res = await getAppVoById({ id: appIdNumber.value })
+  if (!appId.value) {
+    message.error('应用ID不存在')
+    return
+  }
+  const res = await getAppVoById({ id: appId.value })
   if (res.data.code === 0 && res.data.data) {
     appInfo.value = res.data.data
     return
@@ -876,7 +1004,7 @@ const doUpdateApp = async () => {
   updating.value = true
   try {
     const res = await updateApp({
-      id: appIdNumber.value,
+      id: appId.value,
       appName,
       appTypes: detailForm.appTypes,
       isPublish: detailForm.isPublish,
@@ -907,7 +1035,7 @@ const confirmDeleteApp = () => {
     async onOk() {
       deleting.value = true
       try {
-        const res = await deleteApp({ id: appIdNumber.value })
+        const res = await deleteApp({ id: appId.value })
         if (res.data.code === 0) {
           message.success('删除成功')
           detailVisible.value = false
@@ -958,8 +1086,7 @@ const startStream = (messageText: string) => {
   }
   const aiMsg: ChatMessage = { role: 'ai', content: '', thinking: '', streaming: true }
   messages.value.push(aiMsg)
-  const baseURL = request.defaults.baseURL ?? ''
-  const url = new URL('app/chat/gen/code', baseURL.endsWith('/') ? baseURL : `${baseURL}/`)
+  const url = buildSseUrl()
   url.searchParams.set('appId', String(appId.value))
   url.searchParams.set('message', messageText)
   url.searchParams.set('modelType', modelType.value)
@@ -1054,10 +1181,13 @@ const startStream = (messageText: string) => {
 const sendMessage = () => {
   const messageText = inputMessage.value.trim()
   if (!messageText || generating.value) return
+  const selectedElement = selectedVisualElement.value
+  const promptText = appendSelectedElementToPrompt(messageText, selectedElement)
   messages.value.push({ role: 'user', content: messageText })
   inputMessage.value = ''
+  resetVisualEditor()
   scrollToBottom()
-  startStream(messageText)
+  startStream(promptText)
 }
 
 const onPressEnter = (event: KeyboardEvent) => {
@@ -1074,7 +1204,7 @@ const doDeploy = async () => {
   }
   deploying.value = true
   try {
-    const res = await deployApp({ appId: appIdNumber.value, codeDir: selectedVersionCodeDir.value })
+    const res = await deployApp({ appId: appId.value, codeDir: selectedVersionCodeDir.value })
     if (res.data.code === 0 && res.data.data) {
       deployUrl.value = res.data.data
       deploySuccessVisible.value = true
@@ -1132,10 +1262,22 @@ const downloadCode = async () => {
 
 // ─── 生命周期 ─────────────────────────────────────────────────
 onMounted(async () => {
-  console.log("onMounted")
+  console.log('onMounted')
   await nextTick()
+  visualEditorController = createVisualEditorController({
+    getIframe: () => previewIframeRef.value,
+    onSelected: (element) => {
+      selectedVisualElement.value = element
+    },
+  })
   initLayoutWidth()
   await fetchAppInfo()
+  if (!appInfo.value) return
+  if (autoStartPrompt.value && isOwnApp.value) {
+    inputMessage.value = autoStartPrompt.value
+    sendMessage()
+    return
+  }
   await loadVersions()
   await loadChatHistory()
   // 已有历史：直接进预览并加载落盘代码
@@ -1146,23 +1288,14 @@ onMounted(async () => {
     await scrollToBottom()
   }
   // 新建应用从列表页跳转：?autoStart=1&initPrompt=... 自动发起首轮生成
-  if (
-    route.query.autoStart === '1' &&
-    isOwnApp.value &&
-    messages.value.length === 0
-  ) {
-    const initPrompt =
-      typeof route.query.initPrompt === 'string' ? route.query.initPrompt.trim() : ''
-    if (initPrompt) {
-      inputMessage.value = initPrompt
-      sendMessage()
-    }
-  }
 })
 
 /** 离开页面：关闭 SSE，移除布局拖拽监听 */
 onBeforeUnmount(() => {
+  visualEditorController?.destroy()
+  visualEditorController = null
   closeEventSource()
+  resetVisualEditor()
   stopResize()
 })
 </script>
@@ -1325,10 +1458,19 @@ onBeforeUnmount(() => {
   border-top: 1px solid var(--border-color);
 }
 
+.visual-element-alert {
+  margin-bottom: 10px;
+}
+
+.visual-element-alert :deep(.ant-alert-description) {
+  word-break: break-word;
+}
+
 .input-area__ops {
   margin-top: 10px;
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
 }
 
 .resize-handle {
@@ -1501,7 +1643,9 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   border: 1px solid var(--border-color);
   overflow: hidden;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
   background: var(--bg-card);
   flex-shrink: 0;
 }
@@ -1604,7 +1748,9 @@ onBeforeUnmount(() => {
   gap: 6px;
   padding: 10px 0;
   font-size: 12px;
-  transition: border-color 0.2s, color 0.2s;
+  transition:
+    border-color 0.2s,
+    color 0.2s;
 }
 
 .version-panel-expand span {
@@ -1660,7 +1806,7 @@ onBeforeUnmount(() => {
 
 .deploy-success__link {
   margin-bottom: 24px;
-  display:flex;
+  display: flex;
 }
 
 .deploy-success__ops {

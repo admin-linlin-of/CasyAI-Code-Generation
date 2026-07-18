@@ -138,10 +138,10 @@ const doTableChange = (page: { current: number; pageSize: number }) => {
   fetchData()
 }
 
-const doDelete = async (id?: number) => {
+const doDelete = async (id?: string | number) => {
   if (!id) return
-  const res = await remove1({ id })
-  if (res.data === true || res.data?.code === 0) {
+  const res = await remove1({ id: String(id) })
+  if (res.data === true) {
     message.success('删除成功')
     fetchData()
     return

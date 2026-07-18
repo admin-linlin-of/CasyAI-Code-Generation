@@ -183,7 +183,7 @@ const submitEdit = async () => {
 
 const doDelete = async (id?: number) => {
   if (!id) return
-  const res = await deleteUser({ id })
+  const res = await deleteUser({ id: String(id) })
   if (res.data.code === 0) {
     message.success('删除成功')
     fetchData()

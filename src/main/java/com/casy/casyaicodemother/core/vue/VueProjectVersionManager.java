@@ -152,6 +152,11 @@ public class VueProjectVersionManager {
         return null;
     }
 
+    /**
+     * 解析版本目录比如 v1
+     * @param projectPath
+     * @return
+     */
     public String extractCodeDirFromProjectPath(String projectPath) {
         if (projectPath == null) {
             return null;

@@ -30,6 +30,7 @@ import com.casy.casyaicodemother.model.enums.VersionDeployStatusEnum;
 import com.casy.casyaicodemother.model.vo.app.AppVO;
 import com.casy.casyaicodemother.model.vo.user.UserVO;
 import com.casy.casyaicodemother.service.*;
+import com.casy.casyaicodemother.util.NumberUtils;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
@@ -128,10 +129,11 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     public boolean updateApp(AppUpdateRequest appUpdateRequest, User loginUser) {
         ThrowUtils.throwIf(appUpdateRequest == null || appUpdateRequest.getId() == null, ErrorCode.PARAMS_ERROR);
         ThrowUtils.throwIf(StrUtil.isBlank(appUpdateRequest.getAppName()), ErrorCode.PARAMS_ERROR, "应用名称不能为空");
-        App oldApp = getAppById(Long.parseLong(appUpdateRequest.getId()));
+        Long appId = NumberUtils.parseRequiredLong(appUpdateRequest.getId());
+        App oldApp = getAppById(appId);
         checkAppAuth(oldApp, loginUser, "");
         App app = new App();
-        app.setId(Long.valueOf(appUpdateRequest.getId()));
+        app.setId(appId);
         app.setAppName(appUpdateRequest.getAppName());
         if (appUpdateRequest.getAppTypes() != null) {
             validateAppTypes(appUpdateRequest.getAppTypes());
@@ -263,7 +265,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (appQueryRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
         }
-        Long id = Long.valueOf(StrUtil.isNotBlank(appQueryRequest.getId()) ? appQueryRequest.getId() : "0");
+        Long id = NumberUtils.parseNullableLong(appQueryRequest.getId());
         String appName = appQueryRequest.getAppName();
         String cover = appQueryRequest.getCover();
         String initPrompt = appQueryRequest.getInitPrompt();

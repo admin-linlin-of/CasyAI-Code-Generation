@@ -19,6 +19,7 @@ import com.casy.casyaicodemother.model.vo.chathistory.ChatHistoryVO;
 import com.casy.casyaicodemother.model.vo.user.UserVO;
 import com.casy.casyaicodemother.service.ChatHistoryService;
 import com.casy.casyaicodemother.service.UserService;
+import com.casy.casyaicodemother.util.NumberUtils;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
@@ -106,7 +107,7 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
     @Override
     public Page<ChatHistoryVO> listAppChatHistoryByPage(ChatHistoryQueryRequest chatHistoryQueryRequest, User loginUser) {
         ThrowUtils.throwIf(chatHistoryQueryRequest == null, ErrorCode.PARAMS_ERROR);
-        Long appId = Long.valueOf(chatHistoryQueryRequest.getAppId());
+        Long appId = NumberUtils.parseRequiredLong(chatHistoryQueryRequest.getAppId());
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
         App app = appMapper.selectOneById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
@@ -195,11 +196,11 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         if (chatHistoryQueryRequest == null) {
             return queryWrapper;
         }
-        Long id = Long.valueOf(chatHistoryQueryRequest.getId());
+        Long id = NumberUtils.parseNullableLong(chatHistoryQueryRequest.getId());
         String message = chatHistoryQueryRequest.getMessage();
         String messageType = chatHistoryQueryRequest.getMessageType();
-        Long appId = Long.valueOf(chatHistoryQueryRequest.getAppId());
-        Long userId = Long.valueOf(chatHistoryQueryRequest.getUserId());
+        Long appId = NumberUtils.parseNullableLong(chatHistoryQueryRequest.getAppId());
+        Long userId = NumberUtils.parseNullableLong(chatHistoryQueryRequest.getUserId());
         LocalDateTime lastCreateTime = chatHistoryQueryRequest.getLastCreateTime();
         String sortField = chatHistoryQueryRequest.getSortField();
         String sortOrder = chatHistoryQueryRequest.getSortOrder();

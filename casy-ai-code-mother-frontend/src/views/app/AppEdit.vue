@@ -91,7 +91,7 @@ const isPublished = computed({
     formState.isPublish = checked ? APP_PUBLISHED : APP_NOT_PUBLISH
   },
 })
-const ownerId = ref<number>()
+const ownerId = ref<string | number>()
 
 const isAdmin = computed(() => {
   const roles = loginUserStore.loginUser.userRole?.split(',').map((role) => role.trim()) ?? []
@@ -109,7 +109,7 @@ const fetchData = async () => {
     formState.appTypes = app.appTypes ? [...app.appTypes] : []
     formState.isPublish = app.isPublish ?? APP_NOT_PUBLISH
     ownerId.value = app.userId
-    if (!isAdmin.value && ownerId.value !== loginUserStore.loginUser.id) {
+    if (!isAdmin.value && String(ownerId.value) !== String(loginUserStore.loginUser.id)) {
       message.error('无权编辑该应用')
       router.replace('/')
     }

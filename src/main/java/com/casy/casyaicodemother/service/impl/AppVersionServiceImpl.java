@@ -21,6 +21,7 @@ import com.casy.casyaicodemother.model.enums.VersionBuildStatusEnum;
 import com.casy.casyaicodemother.model.enums.VersionDeployStatusEnum;
 import com.casy.casyaicodemother.service.AppService;
 import com.casy.casyaicodemother.service.AppVersionService;
+import com.casy.casyaicodemother.util.NumberUtils;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
@@ -272,12 +273,12 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         if (appVersionRequest == null) {
             return queryWrapper;
         }
-        Long id = Long.valueOf(appVersionRequest.getId());
+        Long id = NumberUtils.parseNullableLong(appVersionRequest.getId());
         Integer versionNum = appVersionRequest.getVersionNum();
         String codeDir = appVersionRequest.getCodeDir();
         String modelType = appVersionRequest.getModelType();
-        Long appId = Long.valueOf(appVersionRequest.getAppId());
-        Long chatHistoryId = Long.valueOf(appVersionRequest.getChatHistoryId());
+        Long appId = NumberUtils.parseNullableLong(appVersionRequest.getAppId());
+        Long chatHistoryId = NumberUtils.parseNullableLong(appVersionRequest.getChatHistoryId());
         Long userId = appVersionRequest.getUserId();
         String sortField = appVersionRequest.getSortField();
         String sortOrder = appVersionRequest.getSortOrder();
