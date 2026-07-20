@@ -1,5 +1,6 @@
 package com.casy.casyaicodemother.ai.tools;
 
+import cn.hutool.json.JSONObject;
 import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.core.CodeGenContextHolder;
 import dev.langchain4j.agent.tool.P;
@@ -20,7 +21,7 @@ import java.nio.file.Paths;
  */
 @Slf4j
 @Component
-public class FileDeleteTool {
+public class FileDeleteTool extends BaseTool{
 
     @Tool("删除指定路径的文件")
     public String deleteFile(
@@ -74,5 +75,21 @@ public class FileDeleteTool {
             }
         }
         return false;
+    }
+
+    @Override
+    public String getToolName() {
+        return "deleteFile";
+    }
+
+    @Override
+    public String getDisplayName() {
+        return "删除文件";
+    }
+
+    @Override
+    public String generateToolExecutedResult(JSONObject arguments) {
+        String relativeFilePath = arguments.getStr("relativeFilePath");
+        return String.format("[工具调用] %s %s", getDisplayName(), relativeFilePath);
     }
 }

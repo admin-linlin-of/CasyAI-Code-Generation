@@ -1,5 +1,6 @@
 package com.casy.casyaicodemother.ai.tools;
 
+import cn.hutool.json.JSONObject;
 import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.core.CodeGenContextHolder;
 import dev.langchain4j.agent.tool.P;
@@ -15,27 +16,19 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 
-/**
- * 文件修改工具
- * 支持 AI 通过工具调用的方式修改文件内容
- */
 @Slf4j
 @Component
-public class FileModifyTool {
+public class FileModifyTool extends BaseTool {
 
-    @Tool("修改文件内容，用新内容替换指定的旧内容")
+    @Tool("Modify file content by replacing old content with new content")
     public String modifyFile(
-            @P("文件的相对路径")
-            String relativeFilePath,
-            @P("要替换的旧内容")
-            String oldContent,
-            @P("替换后的新内容")
-            String newContent,
+            @P("Relative file path") String relativeFilePath,
+            @P("Old content to replace") String oldContent,
+            @P("New replacement content") String newContent,
             @ToolMemoryId Long appId
     ) {
         try {
             Path path = Paths.get(relativeFilePath);
-            // 获取当前编辑的版本
             String versionDir = CodeGenContextHolder.getVersionDir(appId);
             if (!path.isAbsolute()) {
                 String projectDirName = "vue_project_" + appId + File.separator + versionDir;
@@ -43,23 +36,39 @@ public class FileModifyTool {
                 path = projectRoot.resolve(relativeFilePath);
             }
             if (!Files.exists(path) || !Files.isRegularFile(path)) {
-                return "错误：文件不存在或不是文件 - " + relativeFilePath;
+                return "Error: file does not exist or is not a regular file - " + relativeFilePath;
             }
             String originalContent = Files.readString(path);
             if (!originalContent.contains(oldContent)) {
-                return "警告：文件中未找到要替换的内容，文件未修改 - " + relativeFilePath;
+                return "Warning: old content was not found, file unchanged - " + relativeFilePath;
             }
             String modifiedContent = originalContent.replace(oldContent, newContent);
             if (originalContent.equals(modifiedContent)) {
-                return "信息：替换后文件内容未发生变化 - " + relativeFilePath;
+                return "Info: file content did not change after replacement - " + relativeFilePath;
             }
             Files.writeString(path, modifiedContent, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-            log.info("成功修改文件: {}", path.toAbsolutePath());
-            return "文件修改成功: " + relativeFilePath;
+            log.info("Successfully modified file: {}", path.toAbsolutePath());
+            return "File modified successfully: " + relativeFilePath;
         } catch (IOException e) {
-            String errorMessage = "修改文件失败: " + relativeFilePath + ", 错误: " + e.getMessage();
+            String errorMessage = "Failed to modify file: " + relativeFilePath + ", error: " + e.getMessage();
             log.error(errorMessage, e);
             return errorMessage;
         }
+    }
+
+    @Override
+    public String getToolName() {
+        return "modifyFile";
+    }
+
+    @Override
+    public String getDisplayName() {
+        return "modify file";
+    }
+
+    @Override
+    public String generateToolExecutedResult(JSONObject arguments) {
+        String relativeFilePath = arguments.getStr("relativeFilePath");
+        return String.format("[Tool] %s `%s`", getDisplayName(), relativeFilePath);
     }
 }

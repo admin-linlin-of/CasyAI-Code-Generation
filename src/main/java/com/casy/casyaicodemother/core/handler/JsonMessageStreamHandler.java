@@ -3,27 +3,21 @@ package com.casy.casyaicodemother.core.handler;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
-import com.casy.casyaicodemother.ai.model.AiResponseMessage;
-import com.casy.casyaicodemother.ai.model.AiThinkingMessage;
-import com.casy.casyaicodemother.ai.model.StreamMessage;
-import com.casy.casyaicodemother.ai.model.ToolExecutedMessage;
-import com.casy.casyaicodemother.ai.model.ToolRequestMessage;
+import com.casy.casyaicodemother.ai.model.*;
+import com.casy.casyaicodemother.ai.tools.BaseTool;
+import com.casy.casyaicodemother.ai.tools.ToolManager;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.model.entity.User;
 import com.casy.casyaicodemother.model.enums.StreamMessageTypeEnum;
 import com.casy.casyaicodemother.service.ChatHistoryService;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * JSON 消息流处理器
@@ -33,15 +27,18 @@ import java.util.Set;
 @Component
 public class JsonMessageStreamHandler {
 
+    @Resource
+    private ToolManager toolManager;
+
     /**
      * 处理 TokenStream（VUE_PROJECT）
      * 解析 JSON 消息并重组为完整的响应格式
      *
-     * @param originFlux            原始流
-     * @param chatHistoryService    聊天历史服务
-     * @param appId                 应用ID
-     * @param userMessageId         父消息ID
-     * @param loginUser             登录用户
+     * @param originFlux         原始流
+     * @param chatHistoryService 聊天历史服务
+     * @param appId              应用ID
+     * @param userMessageId      父消息ID
+     * @param loginUser          登录用户
      * @return 处理后的流
      */
     public Flux<String> handle(Flux<String> originFlux,
@@ -77,9 +74,9 @@ public class JsonMessageStreamHandler {
     /**
      * 解析 TokenStream 消息块，可能产生多条 SSE 输出（如聊天摘要 + 代码面板 file 事件）。
      *
-     * @param chunk 消息块
+     * @param chunk                    消息块
      * @param chatHistoryStringBuilder 对话记收集器
-     * @param seenToolIds 已经出现过的工具
+     * @param seenToolIds              已经出现过的工具
      * @return ai消息
      */
     private List<String> handleJsonMessageChunks(String chunk, StringBuilder chatHistoryStringBuilder, Set<String> seenToolIds) {
@@ -106,11 +103,18 @@ public class JsonMessageStreamHandler {
             case TOOL_REQUEST -> {
                 ToolRequestMessage toolRequestMessage = JSONUtil.toBean(chunk, ToolRequestMessage.class);
                 String toolId = toolRequestMessage.getId();
+                String toolName = toolRequestMessage.getName();
                 // 检查是否是第一次看到这个工具 ID
                 if (toolId != null && !seenToolIds.contains(toolId)) {
-                    // 第一次调用这个工具，记录 ID 并完整返回工具信息
+                    // 第一次调用这个工具，记录 ID 并返回工具信息
                     seenToolIds.add(toolId);
-                    yield List.of("\n\n[选择工具] 写入文件\n\n");
+                    // 根据工具名称获取工具实例
+                    BaseTool tool = toolManager.getTool(toolName);
+                    // 返回格式化的工具调用信息
+                    String toolRequestResponse = tool == null
+                            ? String.format("\n\n[Tool] %s\n\n", StrUtil.blankToDefault(toolName, "unknown"))
+                            : tool.generateToolRequestResponse();
+                    yield List.of(toolRequestResponse);
                 }
                 yield List.of();
             }
@@ -132,29 +136,32 @@ public class JsonMessageStreamHandler {
      * </ol>
      * 两条输出由上层 {@link #handle} 的 {@code concatMap} 依次推送给前端，Controller 对含 {@code "t"} 的 JSON 原样透传。
      *
-     * @param chunk                      TokenStream 原始 JSON 块（type=TOOL_EXECUTED）
-     * @param chatHistoryStringBuilder   对话历史收集器，仅追加聊天摘要，不含文件正文
+     * @param chunk                    TokenStream 原始 JSON 块（type=TOOL_EXECUTED）
+     * @param chatHistoryStringBuilder 对话历史收集器，仅追加聊天摘要，不含文件正文
      * @return 1~2 条 SSE 字符串：必有聊天摘要；成功且有路径时追加 file 事件
      */
     private List<String> buildToolExecutedOutputs(String chunk, StringBuilder chatHistoryStringBuilder) {
         // ── 步骤 1：反序列化工具执行结果 ──
         // ToolExecutedMessage 含 failed 标志；arguments 为 writeFile 入参 JSON 字符串
         ToolExecutedMessage toolExecutedMessage = JSONUtil.toBean(chunk, ToolExecutedMessage.class);
-        JSONObject jsonObject = JSONUtil.parseObj(toolExecutedMessage.getArguments());
+        String toolName = toolExecutedMessage.getName();
+        JSONObject jsonObject = parseToolArguments(toolExecutedMessage.getArguments());
+        BaseTool tool = toolManager.getTool(toolName);
 
         // ── 步骤 2：提取 writeFile 参数 ──
         // relativeFilePath：相对项目根的路径，如 src/App.vue
         // content：本次写入的文本（大文件可能分块，见 append）
         // append：true 表示追加到已有文件，false 表示覆盖
         String relativeFilePath = jsonObject.getStr("relativeFilePath");
-        String content = jsonObject.getStr("content", "");
-        boolean append = Boolean.TRUE.equals(jsonObject.getBool("append"));
         boolean failed = Boolean.TRUE.equals(toolExecutedMessage.getFailed());
 
         // ── 步骤 3：构造聊天区摘要（不含 content，避免 SSE 块过大） ──
         String status = failed ? "失败" : "成功";
         String chatOutput = String.format("\n\n[工具调用] 写入文件 `%s` %s\n\n", relativeFilePath, status);
         // 写入历史：刷新页面后聊天区仍能看到工具调用记录
+        String result = buildToolExecutedResult(tool, toolName, jsonObject, toolExecutedMessage, failed);
+        String tagName = getToolExecutedTagName(toolName);
+        chatOutput = String.format("\n\n<%s>%s</%s>\n\n", tagName, result, tagName);
         chatHistoryStringBuilder.append(chatOutput);
 
         // ── 步骤 4：组装 SSE 输出列表（至少 1 条聊天摘要） ──
@@ -163,8 +170,10 @@ public class JsonMessageStreamHandler {
 
         // ── 步骤 5：成功时追加代码预览专用 file 事件 ──
         // 失败或无路径时不推 file 事件，前端代码面板不做无效更新
-        if (!failed && StrUtil.isNotBlank(relativeFilePath)) {
+        if (!failed && "writeFile".equals(toolName) && StrUtil.isNotBlank(relativeFilePath)) {
             // LinkedHashMap 保证 JSON 字段顺序稳定，便于调试
+            String content = jsonObject.getStr("content", "");
+            boolean append = Boolean.TRUE.equals(jsonObject.getBool("append"));
             Map<String, Object> fileEvent = new LinkedHashMap<>();
             fileEvent.put("t", "file");           // 事件类型，AppController 识别后原样透传
             fileEvent.put("path", relativeFilePath);
@@ -174,5 +183,46 @@ public class JsonMessageStreamHandler {
             outputs.add(JSONUtil.toJsonStr(fileEvent)); // 「双路」= 同一条 SSE 连接、两次 onmessage，两种用途。用 List 只是 Java 里把两条字符串一起返回，后面 concatMap 会拆成两次推送。
         }
         return outputs;
+    }
+
+    private JSONObject parseToolArguments(String arguments) {
+        if (StrUtil.isBlank(arguments)) {
+            return new JSONObject();
+        }
+        try {
+            return JSONUtil.parseObj(arguments);
+        } catch (Exception e) {
+            log.warn("工具参数解析失败，arguments={}", arguments, e);
+            return new JSONObject();
+        }
+    }
+
+    private String buildToolExecutedResult(BaseTool tool,
+                                           String toolName,
+                                           JSONObject arguments,
+                                           ToolExecutedMessage toolExecutedMessage,
+                                           boolean failed) {
+        String result;
+        if (tool == null) {
+            result = String.format("[工具调用] %s", StrUtil.blankToDefault(toolName, "unknown"));
+        } else {
+            result = tool.generateToolExecutedResult(arguments);
+        }
+        if (failed) {
+            String errorMessage = StrUtil.blankToDefault(toolExecutedMessage.getResult(), "工具执行失败");
+            return result + "\n" + errorMessage;
+        }
+        return result;
+    }
+
+    private String getToolExecutedTagName(String toolName) {
+        return switch (StrUtil.blankToDefault(toolName, "")) {
+            case "writeFile" -> "fileWrite";
+            case "modifyFile" -> "fileModify";
+            case "readFile" -> "fileRead";
+            case "deleteFile" -> "fileDelete";
+            case "readDir" -> "dirRead";
+            default -> "toolCall";
+        };
     }
 }

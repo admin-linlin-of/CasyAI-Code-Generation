@@ -1,5 +1,6 @@
 package com.casy.casyaicodemother.ai.tools;
 
+import cn.hutool.json.JSONObject;
 import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.core.CodeGenContextHolder;
 import dev.langchain4j.agent.tool.P;
@@ -20,7 +21,7 @@ import java.nio.file.Paths;
  */
 @Slf4j
 @Component
-public class FileReadTool {
+public class FileReadTool extends BaseTool{
 
     @Tool("读取指定路径的文件内容")
     public String readFile(
@@ -46,5 +47,21 @@ public class FileReadTool {
             log.error(errorMessage, e);
             return errorMessage;
         }
+    }
+
+    @Override
+    public String getToolName() {
+        return "readFile";
+    }
+
+    @Override
+    public String getDisplayName() {
+        return "读取文件";
+    }
+
+    @Override
+    public String generateToolExecutedResult(JSONObject arguments) {
+        String relativeFilePath = arguments.getStr("relativeFilePath");
+        return String.format("[工具调用] %s %s", getDisplayName(), relativeFilePath);
     }
 }
