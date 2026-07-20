@@ -66,7 +66,7 @@ public class AiCodeGeneratorFacade {
      * @param codeGenTypeEnum 生成类型
      * @return 保存的目录
      */
-    public Flux<String> generateAndSaveCodeStream(String userMessage, CodeGenTypeEnum codeGenTypeEnum, ModelTypeEnum modelTypeEnum, Long appId, Long userMessageId) {
+    public Flux<String> generateAndSaveCodeStream(String userMessage, CodeGenTypeEnum codeGenTypeEnum, ModelTypeEnum modelTypeEnum, Long appId, Long userMessageId, String versionDir) {
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
         }
@@ -82,7 +82,7 @@ public class AiCodeGeneratorFacade {
             case VUE_PROJECT -> {
                 // 流开始前：把 modelType、userMessageId 放进 CodeGenContextHolder，
                 // 供 FileWriteTool 首次写文件时 createCodeVersion 使用（工具本身只能拿到 appId）
-                CodeGenContextHolder.set(appId, modelTypeEnum, userMessageId);
+                CodeGenContextHolder.set(appId, modelTypeEnum, userMessageId, versionDir);
                 TokenStream tokenStream = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId).generateVueProjectCodeStream(appId, userMessage);
                 // 流结束（成功/失败/取消）后清理上下文，避免内存泄漏
                 yield processTokenStream(tokenStream).doFinally(signal -> CodeGenContextHolder.remove(appId));

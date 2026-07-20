@@ -37,8 +37,8 @@ public class CodeGenContextHolder {
     /**
      * 在 VUE_PROJECT 流式生成开始前调用，保存 modelType 和 userMessageId 供后续创建版本使用。
      */
-    public static void set(Long appId, ModelTypeEnum modelType, Long userMessageId) {
-        CONTEXT_MAP.put(appId, new CodeGenContext(modelType, userMessageId));
+    public static void set(Long appId, ModelTypeEnum modelType, Long userMessageId, String versionDir) {
+        CONTEXT_MAP.put(appId, new CodeGenContext(modelType, userMessageId, versionDir));
     }
 
     /**
@@ -96,9 +96,10 @@ public class CodeGenContextHolder {
         /** 懒创建后的版本目录名，如 v1 */
         private volatile String versionDir;
 
-        private CodeGenContext(ModelTypeEnum modelType, Long userMessageId) {
+        private CodeGenContext(ModelTypeEnum modelType, Long userMessageId, String versionDir) {
             this.modelType = modelType;
             this.userMessageId = userMessageId;
+            this.versionDir = versionDir;
         }
     }
 }

@@ -136,9 +136,10 @@ public interface AppService extends IService<App> {
      * @param message 用户提示词
      * @param modelType 模型类型
      * @param loginUser 登录用户
+     * @param versionDir 版本目录，于用在修改时指定目录
      * @return AI响应流
      */
-    Flux<String> chatToGenCode(Long appId, String message, String modelType, User loginUser);
+    Flux<String> chatToGenCode(Long appId, String message, String modelType, User loginUser, String versionDir);
 
     /**
      * 部署应用

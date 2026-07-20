@@ -1,7 +1,6 @@
 package com.casy.casyaicodemother.ai;
 
-import com.casy.casyaicodemother.ai.tools.FileWriteTool;
-import com.casy.casyaicodemother.ai.tools.RepairingToolExecutor;
+import com.casy.casyaicodemother.ai.tools.*;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
@@ -47,21 +46,31 @@ import java.util.stream.Collectors;
 @Slf4j
 public class AiCodeGeneratorServiceFactory {
 
-    private final Cache<String, AiCodeGeneratorService> serviceCache = Caffeine.newBuilder()
-            .maximumSize(1000)
-            .expireAfterWrite(Duration.ofMinutes(30))
-            .expireAfterAccess(Duration.ofMinutes(10))
-            .removalListener((key, value, cause) -> {
-                log.info("AI 服务实例被移除，appId: {}, 原因: {}", key, cause);
-            })
-            .build();
+    private final Cache<String, AiCodeGeneratorService> serviceCache = Caffeine.newBuilder().maximumSize(1000).expireAfterWrite(Duration.ofMinutes(30)).expireAfterAccess(Duration.ofMinutes(10)).removalListener((key, value, cause) -> {
+        log.info("AI 服务实例被移除，appId: {}, 原因: {}", key, cause);
+    }).build();
     @Resource
     private RedisChatMemoryStore redisChatMemoryStore;
     @Resource
     private ChatHistoryService chatHistoryService;
-    /** 必须注入 Spring Bean，不能用 new FileWriteTool()，否则 @Resource AppVersionService 不会生效 */
+    /**
+     * 必须注入 Spring Bean，不能用 new FileWriteTool()，否则 @Resource AppVersionService 不会生效
+     */
     @Resource
     private FileWriteTool fileWriteTool;
+
+    @Resource
+    private FileDeleteTool fileDeleteTool;
+
+    @Resource
+    private FileDirReadTool fileDirReadTool;
+
+    @Resource
+    private FileModifyTool fileModifyTool;
+
+    @Resource
+    private FileReadTool fileReadTool;
+
     /**
      * Spring 自动收集容器中所有 ModelProvider Bean（各 *ModelConfig 注册）。
      * 新增模型时此字段无需修改，符合开闭原则。
@@ -78,8 +87,7 @@ public class AiCodeGeneratorServiceFactory {
      */
     @PostConstruct
     public void init() {
-        providerMap = modelProviders.stream()
-                .collect(Collectors.toMap(ModelProvider::getType, Function.identity()));
+        providerMap = modelProviders.stream().collect(Collectors.toMap(ModelProvider::getType, Function.identity()));
     }
 
     /**
@@ -104,41 +112,27 @@ public class AiCodeGeneratorServiceFactory {
         if (provider == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的模型类型：" + modelType.getModelName());
         }
-        MessageWindowChatMemory chatMemory = MessageWindowChatMemory
-                .builder()
-                .id(appId)
-                .chatMemoryStore(redisChatMemoryStore)
-                .maxMessages(20)
-                .build();
+        MessageWindowChatMemory chatMemory = MessageWindowChatMemory.builder().id(appId).chatMemoryStore(redisChatMemoryStore).maxMessages(20).build();
         chatHistoryService.loadChatHistoryToMemory(appId, chatMemory, 20);
         // 根据代码生成类型选择不同的模型配置，vue工程项目需要用到工具
         return switch (codeGenType) {
             // Vue 项目生成使用pro模型
-            case VUE_PROJECT -> AiServices.builder(AiCodeGeneratorService.class)
-                    .streamingChatModel(provider.getStreamingChatModel())
-                    .chatMemoryProvider(memoryId -> chatMemory)
-                    // 用 RepairingToolExecutor 包装默认执行器，在 Jackson 解析前先尝试修复 LLM 返回的非法 tool arguments JSON
-                    .tools(wrapToolsWithRepair(fileWriteTool))
-                    // 修复仍失败时，将错误文本回传 LLM 让其自行纠正（而非直接中断流式生成）
-                    .toolArgumentsErrorHandler((error, context) -> ToolErrorHandlerResult.text(
-                            "工具参数 JSON 解析失败：" + error.getMessage()
-                                    + "。请确保 content 中双引号转义为 \\\"，换行用 \\n；单块不超过1500字符，大文件分块 append=false/true 写入。"))
-                    // hallucinatedToolNameStrategy（幻觉工具名称策略）配置了找不到工具时的处理策略，可以让框架帮我们处理 AI 出现幻觉的情况，比如告诉 AI “找不到工具”
-                    // TODO 注意‍‍！这里最好做一些调整，防止 AI 一直无限循环调用工具，包括：
-                    // TODO 调大对话记忆的容量，否则 AI 会中途断片儿，忘记已经生成了哪些文件
-                    // TODO 尝试换其他的 AI 大模型、优化提示词
-                    .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(
-                            toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name()
-                    ))
-                    .build();
+            case VUE_PROJECT ->
+                    AiServices.builder(AiCodeGeneratorService.class).streamingChatModel(provider.getStreamingChatModel()).chatMemoryProvider(memoryId -> chatMemory)
+                            // 用 RepairingToolExecutor 包装默认执行器，在 Jackson 解析前先尝试修复 LLM 返回的非法 tool arguments JSON
+                            .tools(wrapToolsWithRepair(fileWriteTool), wrapToolsWithRepair(fileDeleteTool), wrapToolsWithRepair(fileDirReadTool), wrapToolsWithRepair(fileModifyTool), wrapToolsWithRepair(fileReadTool))
+                            // 修复仍失败时，将错误文本回传 LLM 让其自行纠正（而非直接中断流式生成）
+                            .toolArgumentsErrorHandler((error, context) -> ToolErrorHandlerResult.text("工具参数 JSON 解析失败：" + error.getMessage() + "。请确保 content 中双引号转义为 \\\"，换行用 \\n；单块不超过1500字符，大文件分块 append=false/true 写入。")) // TODO 这个提示在多个工具时就不合适了
+                            // hallucinatedToolNameStrategy（幻觉工具名称策略）配置了找不到工具时的处理策略，可以让框架帮我们处理 AI 出现幻觉的情况，比如告诉 AI “找不到工具”
+                            // TODO 注意‍‍！这里最好做一些调整，防止 AI 一直无限循环调用工具，包括：
+                            // TODO 调大对话记忆的容量，否则 AI 会中途断片儿，忘记已经生成了哪些文件
+                            // TODO 尝试换其他的 AI 大模型、优化提示词
+                            .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name())).build();
             // HTML 和多文件生成使用默认模型
-            case HTML, MULTI_FILE -> AiServices.builder(AiCodeGeneratorService.class)
-                    .chatModel(provider.getChatModel())
-                    .streamingChatModel(provider.getStreamingChatModel())
-                    .chatMemory(chatMemory)
-                    .build();
-            default -> throw new BusinessException(ErrorCode.SYSTEM_ERROR,
-                    "不支持的代码生成类型: " + codeGenType.getValue());
+            case HTML, MULTI_FILE ->
+                    AiServices.builder(AiCodeGeneratorService.class).chatModel(provider.getChatModel()).streamingChatModel(provider.getStreamingChatModel()).chatMemory(chatMemory).build();
+            default ->
+                    throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型: " + codeGenType.getValue());
         };
     }
 
@@ -153,11 +147,7 @@ public class AiCodeGeneratorServiceFactory {
      * 包装后在真正执行工具前先做 JSON 容错修复。
      */
     private List<AiServiceTool> wrapToolsWithRepair(Object toolBean) {
-        return ToolService.findTools(toolBean).stream()
-                .map(tool -> tool.toBuilder()
-                        .toolExecutor(new RepairingToolExecutor(tool.toolExecutor()))
-                        .build())
-                .toList();
+        return ToolService.findTools(toolBean).stream().map(tool -> tool.toBuilder().toolExecutor(new RepairingToolExecutor(tool.toolExecutor())).build()).toList();
     }
 
     /**
