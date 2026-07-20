@@ -251,6 +251,87 @@ onBeforeUnmount(stopAnim)
   background: rgba(22, 119, 255, 0.08);
 }
 
+.ai-markdown__body :deep(.ai-tool-call) {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  margin: 2px 0;
+  padding: 6px 9px;
+  border: 1px solid rgba(22, 119, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(22, 119, 255, 0.07);
+  color: var(--text-main);
+  vertical-align: middle;
+}
+
+.ai-markdown__body :deep(.ai-tool-call__icon) {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #1677ff;
+  box-shadow: 0 0 0 0 rgba(22, 119, 255, 0.38);
+  animation: ai-tool-pulse 1.15s ease-out infinite;
+}
+
+.ai-markdown__body :deep(.ai-tool-call__label) {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1677ff;
+}
+
+.ai-markdown__body :deep(.ai-tool-call__content) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ai-markdown__body :deep(.ai-tool-call--file-modify) {
+  border-color: rgba(250, 173, 20, 0.28);
+  background: rgba(250, 173, 20, 0.08);
+}
+
+.ai-markdown__body :deep(.ai-tool-call--file-modify .ai-tool-call__icon) {
+  background: #faad14;
+  box-shadow: 0 0 0 0 rgba(250, 173, 20, 0.38);
+}
+
+.ai-markdown__body :deep(.ai-tool-call--file-modify .ai-tool-call__label) {
+  color: #ad6800;
+}
+
+.ai-markdown__body :deep(.ai-tool-call--file-delete) {
+  border-color: rgba(255, 77, 79, 0.26);
+  background: rgba(255, 77, 79, 0.07);
+}
+
+.ai-markdown__body :deep(.ai-tool-call--file-delete .ai-tool-call__icon) {
+  background: #ff4d4f;
+  box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.36);
+}
+
+.ai-markdown__body :deep(.ai-tool-call--file-delete .ai-tool-call__label) {
+  color: #cf1322;
+}
+
+.ai-markdown__body :deep(.ai-tool-call--file-read),
+.ai-markdown__body :deep(.ai-tool-call--dir-read) {
+  border-color: rgba(82, 196, 26, 0.28);
+  background: rgba(82, 196, 26, 0.07);
+}
+
+.ai-markdown__body :deep(.ai-tool-call--file-read .ai-tool-call__icon),
+.ai-markdown__body :deep(.ai-tool-call--dir-read .ai-tool-call__icon) {
+  background: #52c41a;
+  box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.36);
+}
+
+.ai-markdown__body :deep(.ai-tool-call--file-read .ai-tool-call__label),
+.ai-markdown__body :deep(.ai-tool-call--dir-read .ai-tool-call__label) {
+  color: #389e0d;
+}
+
 .ai-markdown__cursor {
   display: inline-block;
   width: 2px;
@@ -264,6 +345,15 @@ onBeforeUnmount(stopAnim)
 @keyframes ai-cursor-blink {
   50% {
     opacity: 0;
+  }
+}
+
+@keyframes ai-tool-pulse {
+  70% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 </style>

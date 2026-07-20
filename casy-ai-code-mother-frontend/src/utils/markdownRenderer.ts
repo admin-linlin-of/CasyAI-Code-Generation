@@ -32,11 +32,38 @@ const md = new MarkdownIt({
   },
 })
 
-/** 将 Markdown 字符串转为可安全插入 v-html 的 HTML */
+// 后端会把工具执行摘要输出成轻量标签，例如 <fileWrite>...</fileWrite>。
+// markdown-it 开启了 html=false，因此这些标签会先被安全转义；
+// 这里再通过白名单把固定工具标签转换成前端样式化的工具徽标。
+const TOOL_TAGS: Record<string, { label: string; className: string }> = {
+  fileWrite: { label: '写入', className: 'file-write' },
+  fileModify: { label: '修改', className: 'file-modify' },
+  fileRead: { label: '读取', className: 'file-read' },
+  fileDelete: { label: '删除', className: 'file-delete' },
+  dirRead: { label: '目录', className: 'dir-read' },
+  toolCall: { label: '工具', className: 'tool-call' },
+}
+const DEFAULT_TOOL_TAG = { label: '工具', className: 'tool-call' }
+
+// 只匹配 TOOL_TAGS 中声明过的已转义标签，避免用户或模型输出的任意 HTML 被激活，
+// 同时允许我们约定好的工具标记渲染成动态徽标。
+const TOOL_TAG_PATTERN =
+  /&lt;(fileWrite|fileModify|fileRead|fileDelete|dirRead|toolCall)&gt;([\s\S]*?)&lt;\/\1&gt;/g
+
+// 将白名单工具标签转换为 span，具体视觉效果由 AiMarkdownMessage.vue 中的样式控制。
+// 标签内部内容已经经过 Markdown 渲染和 DOMPurify 清洗。
+function renderToolTags(html: string): string {
+  return html.replace(TOOL_TAG_PATTERN, (_, tagName: string, content: string) => {
+    const config = TOOL_TAGS[tagName] ?? DEFAULT_TOOL_TAG
+    return `<span class="ai-tool-call ai-tool-call--${config.className}"><span class="ai-tool-call__icon" aria-hidden="true"></span><span class="ai-tool-call__label">${config.label}</span><span class="ai-tool-call__content">${content}</span></span>`
+  })
+}
+
 export function renderMarkdown(markdown: string): string {
   if (!markdown) return ''
-  return DOMPurify.sanitize(md.render(markdown), {
+  const html = DOMPurify.sanitize(md.render(markdown), {
     ADD_TAGS: ['pre', 'code'],
     ADD_ATTR: ['class'],
   })
+  return renderToolTags(html)
 }
