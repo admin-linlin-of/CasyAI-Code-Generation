@@ -43,13 +43,25 @@
                 <summary>深度思考</summary>
                 <pre class="message-item__thinking-body">{{ msg.thinking }}</pre>
               </details>
-              <!-- AI 消息：Markdown + 高亮 + 打字机；用户消息：纯文本 -->
+              <!-- AI 消息：Markdown + 高亮 + 打字机；用户消息：纯文本 + 粘贴图片缩略图 -->
               <AiMarkdownMessage
                 v-if="msg.role === 'ai'"
                 :content="msg.content"
                 :streaming="msg.streaming"
               />
-              <template v-else>{{ msg.content }}</template>
+              <template v-else>
+                <!-- 用户气泡内展示本轮粘贴并上传成功的图片 -->
+                <div v-if="msg.images?.length" class="message-item__images">
+                  <img
+                    v-for="(img, imgIdx) in msg.images"
+                    :key="imgIdx"
+                    :src="img"
+                    class="message-item__image"
+                    alt="粘贴图片"
+                  />
+                </div>
+                <span v-if="msg.content">{{ msg.content }}</span>
+              </template>
             </div>
           </div>
           <a-empty v-if="messages.length === 0" description="发送消息开始生成" />
@@ -65,13 +77,37 @@
             :description="selectedVisualElementLabel"
             @close="clearSelectedVisualElement"
           />
+          <!-- 粘贴图片预览条：位于输入框上方，可删除；上传中显示遮罩 -->
+          <div v-if="pendingImages.length" class="paste-image-preview">
+            <div
+              v-for="item in pendingImages"
+              :key="item.id"
+              class="paste-image-preview__item"
+              :class="{ 'paste-image-preview__item--uploading': item.uploading }"
+            >
+              <img :src="item.previewUrl" alt="预览" />
+              <button
+                type="button"
+                class="paste-image-preview__remove"
+                title="移除"
+                @click="removePendingImage(item.id)"
+              >
+                ×
+              </button>
+              <div v-if="item.uploading" class="paste-image-preview__mask">上传中</div>
+              <div v-else-if="item.error" class="paste-image-preview__mask paste-image-preview__mask--error">
+                失败
+              </div>
+            </div>
+          </div>
           <a-textarea
             v-model:value="inputMessage"
             :maxlength="1200"
             :rows="3"
-            placeholder="继续描述你的页面需求..."
+            placeholder="继续描述你的页面需求...（可 Ctrl+V 粘贴图片）"
             show-count
             @pressEnter="onPressEnter"
+            @paste="onPasteImage"
           />
           <div class="input-area__ops">
             <a-button
@@ -353,6 +389,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { deleteApp, deployApp, getAppVoById, updateApp } from '@/api/appController'
+import { uploadImage } from '@/api/fileController'
 import {
   getAppVersionsByAppId,
   buildVersion,
@@ -396,10 +433,25 @@ type ChatMessage = {
   id?: string | number
   role: 'user' | 'ai'
   content: string
+  /** 用户本轮粘贴上传的图片 URL（仅前端展示，历史消息无此字段） */
+  images?: string[]
   /** AI 深度思考内容（reasoning 流） */
   thinking?: string
   createTime?: string
   streaming?: boolean
+}
+
+/**
+ * 输入框待发送的粘贴图片项：
+ * - previewUrl：本地 blob 预览
+ * - url：上传成功后的 OSS 地址
+ */
+type PendingImage = {
+  id: string
+  previewUrl: string
+  url?: string
+  uploading: boolean
+  error?: boolean
 }
 
 const HISTORY_PAGE_SIZE = 10
@@ -416,6 +468,8 @@ const appId = computed(() => {
 })
 /** 发送 / SSE 生成中 */
 const inputMessage = ref('')
+/** 输入框上方：粘贴待发的图片列表 */
+const pendingImages = ref<PendingImage[]>([])
 const generating = ref(false)
 /** 部署 / 下载 / 应用编辑 */
 const deploying = ref(false)
@@ -1180,14 +1234,96 @@ const startStream = (messageText: string) => {
 /** 用户点击发送：入队 user 消息并启动 SSE */
 const sendMessage = () => {
   const messageText = inputMessage.value.trim()
-  if (!messageText || generating.value) return
+  // 允许「仅图片」或「文字+图片」发送
+  const readyImages = pendingImages.value.filter((p) => p.url && !p.uploading && !p.error)
+  const hasUploading = pendingImages.value.some((p) => p.uploading)
+  if (hasUploading) {
+    message.warning('图片上传中，请稍候')
+    return
+  }
+  if ((!messageText && readyImages.length === 0) || generating.value) return
+
+  // 图片 URL 拼进用户提示词正文，展示与发给 AI 的内容保持一致
+  const imageLines = readyImages.length
+    ? readyImages.map((p) => `[图片]${p.url}`).join('\n')
+    : ''
+  const userPrompt = [messageText, imageLines].filter(Boolean).join('\n')
+
   const selectedElement = selectedVisualElement.value
-  const promptText = appendSelectedElementToPrompt(messageText, selectedElement)
-  messages.value.push({ role: 'user', content: messageText })
+  const promptText = appendSelectedElementToPrompt(userPrompt, selectedElement)
+
+  messages.value.push({
+    role: 'user',
+    content: userPrompt,
+    images: readyImages.map((p) => p.url!),
+  })
   inputMessage.value = ''
+  clearPendingImages()
   resetVisualEditor()
   scrollToBottom()
   startStream(promptText)
+}
+
+/**
+ * 输入框粘贴：若剪贴板含图片则拦截默认粘贴、本地预览并上传 OSS。
+ */
+const onPasteImage = async (event: ClipboardEvent) => {
+  const items = event.clipboardData?.items
+  if (!items?.length) return
+
+  const imageFiles: File[] = []
+  for (const item of Array.from(items)) {
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile()
+      if (file) imageFiles.push(file)
+    }
+  }
+  if (!imageFiles.length) return
+
+  // 有图片时阻止把二进制当文本粘进 textarea
+  event.preventDefault()
+  for (const file of imageFiles) {
+    await addAndUploadImage(file)
+  }
+}
+
+/** 本地预览 + 调用 /file/upload 上传 */
+const addAndUploadImage = async (file: File) => {
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const previewUrl = URL.createObjectURL(file)
+  pendingImages.value.push({ id, previewUrl, uploading: true })
+  const patch = (partial: Partial<PendingImage>) => {
+    const target = pendingImages.value.find((p) => p.id === id)
+    if (target) Object.assign(target, partial)
+  }
+  try {
+    const res = await uploadImage(file)
+    if (res.data.code === 0 && res.data.data) {
+      patch({ url: res.data.data, uploading: false })
+      return
+    }
+    patch({ uploading: false, error: true })
+    message.error(res.data.message || '图片上传失败')
+  } catch {
+    patch({ uploading: false, error: true })
+    message.error('图片上传失败')
+  }
+}
+
+/** 移除单张待发图片并释放 blob URL */
+const removePendingImage = (id: string) => {
+  const idx = pendingImages.value.findIndex((p) => p.id === id)
+  if (idx < 0) return
+  URL.revokeObjectURL(pendingImages.value[idx].previewUrl)
+  pendingImages.value.splice(idx, 1)
+}
+
+/** 发送后清空全部预览并释放资源 */
+const clearPendingImages = () => {
+  for (const item of pendingImages.value) {
+    URL.revokeObjectURL(item.previewUrl)
+  }
+  pendingImages.value = []
 }
 
 const onPressEnter = (event: KeyboardEvent) => {
@@ -1296,6 +1432,7 @@ onBeforeUnmount(() => {
   visualEditorController = null
   closeEventSource()
   resetVisualEditor()
+  clearPendingImages()
   stopResize()
 })
 </script>
@@ -1464,6 +1601,78 @@ onBeforeUnmount(() => {
 
 .visual-element-alert :deep(.ant-alert-description) {
   word-break: break-word;
+}
+
+/* 输入框上方：粘贴图片缩略图条 */
+.paste-image-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.paste-image-preview__item {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: #f5f5f5;
+}
+
+.paste-image-preview__item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.paste-image-preview__remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 14px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.paste-image-preview__mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 12px;
+}
+
+.paste-image-preview__mask--error {
+  background: rgba(255, 77, 79, 0.75);
+}
+
+/* 用户气泡内已发送图片 */
+.message-item__images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.message-item__image {
+  max-width: 160px;
+  max-height: 120px;
+  border-radius: 4px;
+  object-fit: cover;
+  display: block;
 }
 
 .input-area__ops {
