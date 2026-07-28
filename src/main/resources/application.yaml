@@ -7,6 +7,11 @@ spring:
     active: local
   application:
     name: casy-ai-code-mother
+  # 聊天粘贴图片上传：单文件 ≤5MB
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 10MB
   mvc:
     async:
       # 前端 SSE 最长等待；需不小于 langchain4j.http-client.read-timeout

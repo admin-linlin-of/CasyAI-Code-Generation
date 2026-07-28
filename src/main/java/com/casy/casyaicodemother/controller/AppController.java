@@ -227,7 +227,7 @@ public class AppController {
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
                                                        @RequestParam String message,
                                                        @RequestParam String modelType,
-                                                       @RequestParam String versionDir) {
+                                                       @RequestParam(required = false) String versionDir) {
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID无效");
         ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
         User loginUser = userService.getLoginUser();
