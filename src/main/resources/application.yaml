@@ -56,6 +56,12 @@ spring:
     properties:
       hibernate.format_sql: true # 格式化 SQL
 
+# Mermaid CLI：指向本机 Chrome/Chromium，避免下载 Puppeteer 自带浏览器
+# Windows 示例：C:/Program Files/Google/Chrome/Application/chrome.exe
+# Linux 示例：/usr/bin/chromium 或 /usr/bin/google-chrome
+mermaid:
+  chrome-path: C:/Program Files/Google/Chrome/Application/chrome.exe
+
 # LangChain4j 调用模型 API 的 HTTP 超时（流式读超时须覆盖长生成，避免 60s 报 closed）
 langchain4j:
   http-client:

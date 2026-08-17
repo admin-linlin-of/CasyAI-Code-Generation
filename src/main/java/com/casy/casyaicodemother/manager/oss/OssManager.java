@@ -36,6 +36,7 @@ public class OssManager {
      * @return 上传结果
      */
     public PutObjectResult putObject(String key, File file) {
+        key = normalizeKey(key);
         try (InputStream inputStream = new FileInputStream(file)) {
             PutObjectRequest request = PutObjectRequest.newBuilder()
                     .bucket(ossClientConfig.getBucket())
@@ -78,10 +79,9 @@ public class OssManager {
      * @return 文件的访问URL，失败返回null
      */
     public String uploadFile(String key, File file) {
-        // 上传文件
+        key = normalizeKey(key);
         PutObjectResult result = putObject(key, file);
         if (result != null) {
-            // 构建访问URL
             String url = buildFileUrl(key);
             log.info("文件上传COS成功: {} -> {}", file.getName(), url);
             return url;
@@ -98,5 +98,15 @@ public class OssManager {
         }
         return String.format("https://%s.oss-%s.aliyuncs.com/%s",
                 ossClientConfig.getBucket(), ossClientConfig.getRegion(), key);
+    }
+
+    private static String normalizeKey(String key) {
+        if (!StringUtils.hasText(key)) {
+            return key;
+        }
+        while (key.startsWith("/")) {
+            key = key.substring(1);
+        }
+        return key;
     }
 }
