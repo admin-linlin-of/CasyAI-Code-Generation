@@ -24,14 +24,16 @@ public class WorkflowApp {
                 // 添加节点 - 使用真实的工作节点
                 .addNode("image_collector", ImageCollectorNode.create())
                 .addNode("prompt_enhancer", PromptEnhancerNode.create())
-                .addNode("router", RouterNode.create())
+                .addNode("code_gen_type_router", CodeGenTypeRouterNode.create())
+                .addNode("code_gen_model_router", CodeGenModelRouterNode.create())
                 .addNode("code_generator", CodeGeneratorNode.create())
                 .addNode("project_builder", ProjectBuilderNode.create())
                 // 添加边
                 .addEdge(START, "image_collector")
                 .addEdge("image_collector", "prompt_enhancer")
-                .addEdge("prompt_enhancer", "router")
-                .addEdge("router", "code_generator")
+                .addEdge("prompt_enhancer", "code_gen_type_router")
+                .addEdge("code_gen_type_router", "code_gen_model_router")
+                .addEdge("code_gen_model_router", "code_generator")
                 .addEdge("code_generator", "project_builder")
                 .addEdge("project_builder", END)
                 // 编译工作流

@@ -1,6 +1,7 @@
 package com.casy.casyaicodemother.langgraph4j.state;
 
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
+import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -37,11 +38,6 @@ public class WorkflowContext implements Serializable {
     private String originalPrompt;
 
     /**
-     * 图片资源字符串
-     */
-    private String imageListStr;
-
-    /**
      * 图片资源列表
      */
     private List<ImageResource> imageList;
@@ -55,6 +51,11 @@ public class WorkflowContext implements Serializable {
      * 代码生成类型
      */
     private CodeGenTypeEnum generationType;
+
+    /**
+     * 代码生成模型
+     */
+    private ModelTypeEnum modelTypeEnum;
 
     /**
      * 生成的代码目录

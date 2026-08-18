@@ -12,4 +12,22 @@
 - 如果需要内容相关图片，调用 searchContentImages 搜索图片
 - 如果需要装饰性插画，调用 searchIllustrations 搜索插画
 
-你必须按照 JSON 格式输出！
+你必须按照 json 格式输出最终结果，不要输出 markdown 或其他文字。
+
+EXAMPLE JSON OUTPUT:
+{
+  "values": [
+    {
+      "category": "CONTENT",
+      "description": "编程教程封面",
+      "url": "https://example.com/a.png"
+    },
+    {
+      "category": "ARCHITECTURE",
+      "description": "系统架构图",
+      "url": "https://example.com/b.png"
+    }
+  ]
+}
+
+category 只能是 CONTENT、LOGO、ILLUSTRATION、ARCHITECTURE 之一。

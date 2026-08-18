@@ -1,10 +1,8 @@
-package com.casy.casyaicodemother.ai;
+package com.casy.casyaicodemother.langgraph4j.ai;
 
-import com.casy.casyaicodemother.langgraph4j.state.ImageResource;
+import com.casy.casyaicodemother.langgraph4j.state.ImageCollectionResult;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
-
-import java.util.List;
 
 /**
  * 图片收集 AI 服务接口
@@ -17,5 +15,5 @@ public interface ImageCollectionService {
      * AI 会根据需求自主选择调用相应的工具
      */
     @SystemMessage(fromResource = "prompt/image-collection-system-prompt.txt")
-    List<ImageResource> collectImages(@UserMessage String userPrompt);
+    ImageCollectionResult collectImages(@UserMessage String userPrompt);
 }

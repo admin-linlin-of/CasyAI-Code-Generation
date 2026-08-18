@@ -21,6 +21,7 @@ public class GptModelConfig {
     ChatModel gptChatModel(GptModelProperties g, LangChain4jHttpClientFactory httpClientFactory) {
         return OpenAiChatModel.builder()
                 .httpClientBuilder(httpClientFactory.jdkHttpClientBuilder())
+                .timeout(httpClientFactory.requestTimeout())
                 .baseUrl(g.getBaseUrl())
                 .apiKey(g.getApiKey())
                 .modelName(g.getModelName())
@@ -36,6 +37,7 @@ public class GptModelConfig {
     StreamingChatModel gptStreamingChatModel(GptModelProperties g, LangChain4jHttpClientFactory httpClientFactory) {
         return OpenAiStreamingChatModel.builder()
                 .httpClientBuilder(httpClientFactory.jdkHttpClientBuilder())
+                .timeout(httpClientFactory.requestTimeout())
                 .baseUrl(g.getBaseUrl())
                 .apiKey(g.getApiKey())
                 .modelName(g.getModelName())
