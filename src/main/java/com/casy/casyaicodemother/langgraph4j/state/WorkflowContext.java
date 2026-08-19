@@ -58,6 +58,16 @@ public class WorkflowContext implements Serializable {
     private ModelTypeEnum modelTypeEnum;
 
     /**
+     * 真实应用 ID。代码保存、版本记录、Redis 对话记忆都依赖它，不能用 0 等占位值。
+     */
+    private Long appId;
+
+    /**
+     * 触发本次生成的用户消息 ID，写入 t_app_version.chat_history_id；测试场景可为空。
+     */
+    private Long userMessageId;
+
+    /**
      * 生成的代码目录
      */
     private String generatedCodeDir;

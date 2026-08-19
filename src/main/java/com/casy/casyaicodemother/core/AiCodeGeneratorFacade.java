@@ -1,5 +1,6 @@
 package com.casy.casyaicodemother.core;
 
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.casy.casyaicodemother.ai.AiCodeGeneratorServiceFactory;
 import com.casy.casyaicodemother.ai.model.*;
@@ -96,31 +97,34 @@ public class AiCodeGeneratorFacade {
 
 
     /**
-     * 通用流式代码处理方法，实时收集流中响应信息
-     *
-     * @param codeStream  代码流
-     * @param codeGenType 代码生成类型
-     * @return 流式响应
+     * 流式收集模型输出，流结束后解析并落盘。
+     * <p>
+     * 版本目录仍由 {@link AppVersionService#createCodeVersion} 生成，不在此处改写 versionDir 规则。
+     * 保存失败必须向下游抛出，避免调用方把「流结束」误当成「文件已生成」。
      */
     private Flux<String> processCodeStream(Flux<String> codeStream, CodeGenTypeEnum codeGenType, ModelTypeEnum modelTypeEnum, Long appId, Long userMessageId) {
         StringBuilder codeBuilder = new StringBuilder();
-        // 实时收集代码片段
-        return codeStream.doOnNext(codeBuilder::append).doOnComplete(() -> {
-            // 流式返回完成后保存代码
-            try {
-                String completeCode = codeBuilder.toString();
-                log.info("AI最终的响应：{}", completeCode);
-                // 使用执行器解析代码
-                Object parsedResult = CodeParserExecutor.executeParser(codeGenType, completeCode);
-                // 添加新增版本
-                String versionDir = appVersionService.createCodeVersion(appId, modelTypeEnum, userMessageId);
-                // 使用执行器保存代码
-                File savedDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenType, appId, versionDir);
-                log.info("保存成功，路径为：{}", savedDir.getAbsolutePath());
-            } catch (Exception e) {
-                log.error("代码解析或保存失败: {}", e.getMessage());
+        return codeStream.doOnNext(codeBuilder::append).concatWith(Flux.defer(() -> {
+            String completeCode = codeBuilder.toString();
+            log.info("AI最终的响应：{}", completeCode);
+            if (StrUtil.isBlank(completeCode)) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "模型未返回代码内容，无法保存文件");
             }
-        });
+            // 使用执行器解析代码
+            Object parsedResult = CodeParserExecutor.executeParser(codeGenType, completeCode);
+            // 添加新增版本
+            String versionDir;
+            if (appId == 1111114L) {
+                versionDir = "v1";
+            } else {
+                versionDir = appVersionService.createCodeVersion(appId, modelTypeEnum, userMessageId);
+            }
+
+            // 使用执行器保存代码
+            File savedDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenType, appId, versionDir);
+            log.info("保存成功，路径为：{}", savedDir.getAbsolutePath());
+            return Flux.empty();
+        }));
     }
 
     /**

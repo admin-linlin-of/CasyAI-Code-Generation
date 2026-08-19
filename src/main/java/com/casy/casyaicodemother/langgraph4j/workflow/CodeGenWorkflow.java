@@ -51,14 +51,20 @@ public class CodeGenWorkflow {
     }
 
     /**
-     * 执行工作流
+     * 执行工作流。
+     *
+     * @param originalPrompt 用户原始需求
+     * @param appId          数据库中已存在的应用 ID，禁止传 0 或空
      */
-    public WorkflowContext executeWorkflow(String originalPrompt) {
+    public WorkflowContext executeWorkflow(String originalPrompt, Long appId) {
+        if (appId == null || appId <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "必须传入真实 appId");
+        }
         CompiledGraph<MessagesState<String>> workflow = createWorkflow();
 
-        // 初始化 WorkflowContext
         WorkflowContext initialContext = WorkflowContext.builder()
                 .originalPrompt(originalPrompt)
+                .appId(appId)
                 .currentStep("初始化")
                 .build();
 
