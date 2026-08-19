@@ -113,6 +113,7 @@ knife4j:
 #      api-key: ${key}
 #      model-name: deepseek-v4-flash
 #      max-tokens: 8192
+#      thinking-enabled: false
 #      #      strict-json-schema: true
 #      #      response-format: json_object
 #      log-requests: true
@@ -122,6 +123,7 @@ knife4j:
 #      api-key: ${key}
 #      model-name: deepseek-v4-flash
 #      max-tokens: 8192
+#      thinking-enabled: false
 #      #      strict-json-schema: true
 #      #      response-format: json_object
 #      log-requests: true
@@ -142,6 +144,7 @@ knife4j:
 #    api-key: ${key}
 #    model-name: deepseek-v4-pro
 #    max-tokens: 8192
+#    thinking-enabled: true
 #    log-requests: true
 #    log-responses: true
 #  claude:

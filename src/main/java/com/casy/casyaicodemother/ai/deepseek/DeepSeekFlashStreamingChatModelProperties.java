@@ -3,9 +3,9 @@ package com.casy.casyaicodemother.ai.deepseek;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-@ConfigurationProperties(prefix = "ai.deepseek")
 @Data
-public class DeepSeekV4ProModelProperties {
+@ConfigurationProperties(prefix = "langchain4j.open-ai.streaming-chat-model")
+public class DeepSeekFlashStreamingChatModelProperties {
     private String baseUrl;
     private String apiKey;
     private String modelName;
@@ -14,7 +14,6 @@ public class DeepSeekV4ProModelProperties {
     private Boolean logResponses;
     private Boolean strictJsonSchema;
     private String responseFormat;
-    /** 是否开启 DeepSeek 思考；默认 true */
-    private Boolean thinkingEnabled = true;
+    /** 为空则回退 chat-model.thinking-enabled */
+    private Boolean thinkingEnabled;
 }
-

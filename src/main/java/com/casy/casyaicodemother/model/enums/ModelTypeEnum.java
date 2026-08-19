@@ -34,4 +34,22 @@ public enum ModelTypeEnum {
         }
         return null;
     }
+
+    /**
+     * 兼容前端传调用名（gpt-5.5）或枚举名（GPT）。
+     */
+    public static ModelTypeEnum fromCodeOrModelName(String value) {
+        ModelTypeEnum byName = getEnumByModelName(value);
+        if (byName != null) {
+            return byName;
+        }
+        if (ObjUtil.isEmpty(value)) {
+            return null;
+        }
+        try {
+            return ModelTypeEnum.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
 }

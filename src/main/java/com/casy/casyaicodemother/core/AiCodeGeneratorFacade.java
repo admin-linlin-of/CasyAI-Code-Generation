@@ -114,7 +114,7 @@ public class AiCodeGeneratorFacade {
             Object parsedResult = CodeParserExecutor.executeParser(codeGenType, completeCode);
             // 添加新增版本
             String versionDir;
-            if (appId == 1111114L) {
+            if (appId == 741582369L) {
                 versionDir = "v1";
             } else {
                 versionDir = appVersionService.createCodeVersion(appId, modelTypeEnum, userMessageId);

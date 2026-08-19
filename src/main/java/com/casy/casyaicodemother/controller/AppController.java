@@ -21,6 +21,7 @@ import com.casy.casyaicodemother.model.vo.app.AppCodeFileListVO;
 import com.casy.casyaicodemother.model.vo.app.AppVO;
 import com.casy.casyaicodemother.service.AppCodeFileService;
 import com.casy.casyaicodemother.service.AppService;
+import com.casy.casyaicodemother.service.AiModelCatalogService;
 import com.casy.casyaicodemother.service.ProjectDownloadService;
 import com.casy.casyaicodemother.service.UserService;
 import com.mybatisflex.core.paginate.Page;
@@ -60,6 +61,9 @@ public class AppController {
 
     @Resource
     private AiCodeModelTypeRoutingService aiCodeModelTypeRoutingService;
+
+    @Resource
+    private AiModelCatalogService aiModelCatalogService;
 
     /**
      * 创建应用（须填写 initPrompt）
@@ -232,8 +236,12 @@ public class AppController {
         ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
         User loginUser = userService.getLoginUser();
         //前端使用 EventSource 对接目前的接口时，会出现空格丢失问题。
+        // 未指定则走动态路由；指定了则必须是 t_ai_model 中当前启用的模型
         if (StrUtil.isBlank(modelType)) {
-            modelType = aiCodeModelTypeRoutingService.routeCodeModelType(message).getModelName();
+            modelType = aiModelCatalogService.resolveEnabledOrDefault(
+                    aiCodeModelTypeRoutingService.routeCodeModelType(message)).getModelName();
+        } else {
+            aiModelCatalogService.requireEnabled(modelType);
         }
         return appService.chatToGenCode(appId, message, modelType, loginUser, versionDir)
                 .map(chunk -> {

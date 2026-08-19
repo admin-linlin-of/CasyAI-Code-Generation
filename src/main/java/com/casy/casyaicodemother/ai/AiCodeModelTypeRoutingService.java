@@ -1,22 +1,14 @@
 package com.casy.casyaicodemother.ai;
 
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
-import dev.langchain4j.service.SystemMessage;
 
 /**
- * AI代码生成类型智能路由服务
- * 使用结构化输出直接返回枚举类型
- *
- * @author yupi
+ * 按用户需求选择代码生成模型。
+ * <p>
+ * System prompt 不再写死在注解里，由工厂每次调用前从 t_ai_model 拼装，
+ * 这样停用 GPT 后路由模型看不到该选项。
  */
 public interface AiCodeModelTypeRoutingService {
 
-    /**
-     * 根据用户需求智能选择代码生成类型
-     *
-     * @param userPrompt 用户输入的需求描述
-     * @return 推荐的代码生成类型
-     */
-    @SystemMessage(fromResource = "prompt/codegen-routing-model-prompt.txt")
     ModelTypeEnum routeCodeModelType(String userPrompt);
 }

@@ -13,12 +13,16 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @Configuration
 @EnableConfigurationProperties(DeepSeekV4ProModelProperties.class)
 public class DeepSeekV4ProModelConfig {
 
     @Bean("deepSeekV4ProChatModel")
     ChatModel deepSeekV4ProChatModel(DeepSeekV4ProModelProperties g, LangChain4jHttpClientFactory httpClientFactory) {
+        boolean thinking = !Boolean.FALSE.equals(g.getThinkingEnabled());
         return OpenAiChatModel.builder()
                 .httpClientBuilder(httpClientFactory.jdkHttpClientBuilder())
                 .timeout(httpClientFactory.requestTimeout())
@@ -30,11 +34,14 @@ public class DeepSeekV4ProModelConfig {
                 .logResponses(g.getLogResponses())
                 .strictJsonSchema(g.getStrictJsonSchema())
                 .responseFormat(g.getResponseFormat())
+                .returnThinking(thinking)
+                .customParameters(thinkingParams(thinking))
                 .build();
     }
 
     @Bean("deepSeekV4ProStreamingChatModel")
     StreamingChatModel deepSeekV4ProStreamingChatModel(DeepSeekV4ProModelProperties g, LangChain4jHttpClientFactory httpClientFactory) {
+        boolean thinking = !Boolean.FALSE.equals(g.getThinkingEnabled());
         return OpenAiStreamingChatModel.builder()
                 .httpClientBuilder(httpClientFactory.jdkHttpClientBuilder())
                 .timeout(httpClientFactory.requestTimeout())
@@ -46,9 +53,15 @@ public class DeepSeekV4ProModelConfig {
                 .logResponses(g.getLogResponses())
                 .strictJsonSchema(g.getStrictJsonSchema())
                 .responseFormat(g.getResponseFormat())
-                // 解析 API 返回的 reasoning_content，触发 onPartialThinking 回调
-                .returnThinking(true)
+                .returnThinking(thinking)
+                .customParameters(thinkingParams(thinking))
                 .build();
+    }
+
+    private static Map<String, Object> thinkingParams(boolean enabled) {
+        Map<String, Object> params = new HashMap<>();
+        params.put("thinking", Map.of("type", enabled ? "enabled" : "disabled"));
+        return params;
     }
 
     /** 注册 DeepSeek V4 Pro 模型策略 */

@@ -83,6 +83,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     @Resource
     private AiCodeGenTypeRoutingService aiCodeGenTypeRoutingService;
 
+    @Resource
+    private AiModelCatalogService aiModelCatalogService;
+
     @Override
     public long createApp(AppAddRequest appAddRequest, User loginUser) {
         ThrowUtils.throwIf(appAddRequest == null, ErrorCode.PARAMS_ERROR);
@@ -321,10 +324,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型");
         }
-        ModelTypeEnum modelTypeEnum = ModelTypeEnum.getEnumByModelName(modelType);
-        if (modelTypeEnum == null) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的AI模型");
-        }
+        // 指定模型必须在目录中且 enabled=1，避免前端绕过路由仍打到已停用的 GPT
+        ModelTypeEnum modelTypeEnum = aiModelCatalogService.requireEnabled(modelType);
         // 5. 通过校验后，添加用户消息到对话历史
         long userMessageId = chatHistoryService.saveUserMessage(appId, message, loginUser);
         // 6. 调用 AI 生成代码

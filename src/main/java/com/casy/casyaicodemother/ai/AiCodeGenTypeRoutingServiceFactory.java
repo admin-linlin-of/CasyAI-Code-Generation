@@ -1,5 +1,6 @@
 package com.casy.casyaicodemother.ai;
 
+import com.casy.casyaicodemother.service.AiModelCatalogService;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.service.AiServices;
 import jakarta.annotation.Resource;
@@ -31,10 +32,14 @@ public class AiCodeGenTypeRoutingServiceFactory {
                 .build();
     }
 
+    /**
+     * 模型路由：每次请求用当前启用模型生成 system prompt，避免静态 prompt 仍推荐已停用模型。
+     */
     @Bean
-    public AiCodeModelTypeRoutingService aiCodeModelTypeRoutingService() {
+    public AiCodeModelTypeRoutingService aiCodeModelTypeRoutingService(AiModelCatalogService aiModelCatalogService) {
         return AiServices.builder(AiCodeModelTypeRoutingService.class)
                 .chatModel(chatModel)
+                .systemMessageProvider(ignored -> aiModelCatalogService.buildRoutingPrompt()) // 用返回值当 system prompt，相当于动态的 @SystemMessage
                 .build();
     }
 }

@@ -220,3 +220,50 @@ ALTER TABLE t_app_version ADD COLUMN IF NOT EXISTS deploy_status VARCHAR(32) NOT
 COMMENT ON COLUMN t_app_version.build_status IS '构建状态：pending/building/success/failed';
 COMMENT ON COLUMN t_app_version.build_error IS '构建失败原因（npm 输出摘要）';
 COMMENT ON COLUMN t_app_version.deploy_status IS '部署状态：not_deployed/deploying/success/failed';
+
+CREATE TABLE IF NOT EXISTS t_ai_model
+(
+    id            BIGINT       NOT NULL PRIMARY KEY,
+    model_code    VARCHAR(64)  NOT NULL,
+    model_name    VARCHAR(128) NOT NULL,
+    enabled       SMALLINT     NOT NULL DEFAULT 1,
+    is_default    SMALLINT     NOT NULL DEFAULT 0,
+    sort_order    INT          NOT NULL DEFAULT 100,
+    description   TEXT         NULL,
+    routing_rule  TEXT         NULL,
+    create_time   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_delete     SMALLINT     NOT NULL DEFAULT 0,
+    CONSTRAINT uk_ai_model_code UNIQUE (model_code)
+);
+
+CREATE TRIGGER update_ai_model_modtime
+    BEFORE UPDATE ON t_ai_model
+    FOR EACH ROW
+EXECUTE FUNCTION update_modified_column();
+
+COMMENT ON TABLE t_ai_model IS '可用 AI 模型目录，enabled=0 时路由和指定模型都会跳过';
+COMMENT ON COLUMN t_ai_model.model_code IS '与 ModelTypeEnum 枚举名一致，如 GPT、DEEPSEEKFLASH';
+COMMENT ON COLUMN t_ai_model.model_name IS '实际调用名，如 gpt-5.5';
+COMMENT ON COLUMN t_ai_model.enabled IS '1 可用，0 停用';
+COMMENT ON COLUMN t_ai_model.is_default IS '路由失败或选中已停用模型时的回退，启用中应只有一条为 1';
+COMMENT ON COLUMN t_ai_model.sort_order IS '越小越便宜，多条件命中时按此优先';
+COMMENT ON COLUMN t_ai_model.description IS '写入路由 prompt 的模型说明';
+COMMENT ON COLUMN t_ai_model.routing_rule IS '写入路由 prompt 的选择规则';
+
+INSERT INTO t_ai_model (id, model_code, model_name, enabled, is_default, sort_order, description, routing_rule)
+VALUES
+    (1, 'DEEPSEEKFLASH', 'deepseek-v4-flash', 1, 1, 10,
+     '默认高性价比模型。适合简单、明确、低风险的需求，例如静态页面、登录页、展示页、小组件、样式微调、简单表单、少量原生 JavaScript 交互。',
+     '如果用户需求简单、边界清晰、只需要快速生成普通页面或小功能，选择 DEEPSEEKFLASH。'),
+    (2, 'DEEPSEEKPRO', 'deepseek-v4-pro', 1, 0, 20,
+     '强推理模型。适合中高复杂度需求，例如复杂业务逻辑、多状态交互、数据处理、代码重构、Bug 修复、性能优化、需要更强逻辑推理或更稳定工程质量的任务。',
+     '如果用户需求包含算法、复杂条件分支、状态管理、异步流程、数据校验、错误处理、性能优化、复杂 Bug 排查，选择 DEEPSEEKPRO。'),
+    (3, 'GPT', 'gpt-5.5', 0, 0, 30,
+     '通用强能力模型。适合需要较好综合能力、产品理解、创意设计、自然语言表达、前端体验打磨、复杂但不极端的 Web 应用生成任务。',
+     '如果用户强调视觉效果、交互体验、产品感、文案质量、页面创意，或需求属于中等复杂度的完整应用，选择 GPT。'),
+    (4, 'CLAUDESONNET', 'claude-sonnet-4-6', 1, 0, 40,
+     '长上下文与复杂工程模型。适合大型 Vue 项目、多文件项目、跨模块修改、架构设计、复杂组件协作、长需求说明、需要保持上下文一致性和代码可维护性的任务。',
+     '如果用户需求涉及 Vue 项目、多个页面、多个组件、路由、状态管理、复杂文件结构、持续迭代已有项目、长上下文理解，选择 CLAUDESONNET。')
+ON CONFLICT (model_code) DO NOTHING;
+

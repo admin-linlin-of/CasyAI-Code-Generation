@@ -1,5 +1,7 @@
 package com.casy.casyaicodemother.langgraph4j.state;
 
+import com.casy.casyaicodemother.ai.model.ImageCollectionPlan;
+import com.casy.casyaicodemother.langgraph4j.model.QualityResult;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import lombok.AllArgsConstructor;
@@ -81,6 +83,25 @@ public class WorkflowContext implements Serializable {
      * 错误信息
      */
     private String errorMessage;
+
+    /**
+     * 质量检查结果
+     */
+    private QualityResult qualityResult;
+
+    /**
+     * 图片收集计划
+     */
+    private ImageCollectionPlan imageCollectionPlan;
+
+    /**
+     * 并发图片收集的中间结果字段
+     */
+    private List<ImageResource> contentImages;
+    private List<ImageResource> illustrations;
+    private List<ImageResource> diagrams;
+    private List<ImageResource> logos;
+
 
     @Serial
     private static final long serialVersionUID = 1L;

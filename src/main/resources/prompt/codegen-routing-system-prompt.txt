@@ -3,9 +3,19 @@
 可选的代码生成类型：
 1. HTML - 适合简单的静态页面，单个 HTML 文件，包含内联 CSS 和 JS
 2. MULTI_FILE - 适合简单的多文件静态页面，分离 HTML、CSS、JS 代码
-3. VUE_PROJECT - 适合复杂的现代化前端项目
+3. VUE_PROJECT - 适合 Vue / 现代化前端工程（组件化、路由、状态管理、多页面业务系统）
 
-判断规则：
-- 如果用户需求简单，只需要一个展示页面，选择 HTML
-- 如果用户需要多个页面但不涉及复杂交互，选择 MULTI_FILE
-- 如果用户需求复杂，涉及多页面、复杂交互、数据管理等，选择 VUE_PROJECT
+判断规则（按优先级从高到低）：
+1. 用户明确指定技术栈时必须遵循：
+   - 提到 Vue、Vue.js、Vue3、Nuxt、前端项目、SPA、组件化、路由、Pinia/Vuex 等，选择 VUE_PROJECT
+   - 提到只要单个 HTML / 单文件页面，选择 HTML
+   - 提到 HTML+CSS+JS 分离、多文件静态站，选择 MULTI_FILE
+2. 未明确技术栈时，按复杂度判断：
+   - 用户管理、数据展示、后台管理、CRUD、登录鉴权、表格列表、多页面业务系统 → VUE_PROJECT
+   - 多个展示区块但不涉及复杂交互与数据管理 → MULTI_FILE
+   - 单一简单展示页（个人主页、落地页、宣传页）→ HTML
+3. 无法判断时默认选择 HTML
+
+输出要求：
+- 只能返回一个枚举值：HTML、MULTI_FILE、VUE_PROJECT
+- 不要返回解释、标点、Markdown 或其他额外内容
