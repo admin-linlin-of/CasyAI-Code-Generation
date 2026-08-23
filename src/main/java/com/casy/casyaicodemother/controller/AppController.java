@@ -231,7 +231,8 @@ public class AppController {
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
                                                        @RequestParam String message,
                                                        @RequestParam String modelType,
-                                                       @RequestParam(required = false) String versionDir) {
+                                                       @RequestParam(required = false) String versionDir,
+                                                       @RequestParam(required = false, defaultValue = "false") Boolean agent) {
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID无效");
         ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
         User loginUser = userService.getLoginUser();
@@ -243,7 +244,7 @@ public class AppController {
         } else {
             aiModelCatalogService.requireEnabled(modelType);
         }
-        return appService.chatToGenCode(appId, message, modelType, loginUser, versionDir)
+        return appService.chatToGenCode(appId, message, modelType, loginUser, versionDir, agent)
                 .map(chunk -> {
                     // 深度思考已由 JsonMessageStreamHandler 包装为 {"c":"...","t":"thinking"}，直接透传
                     String jsonData;

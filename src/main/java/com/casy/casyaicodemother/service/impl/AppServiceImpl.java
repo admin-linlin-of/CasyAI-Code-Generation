@@ -11,11 +11,13 @@ import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.constant.UserConstant;
 import com.casy.casyaicodemother.core.AiCodeGeneratorFacade;
 import com.casy.casyaicodemother.core.builder.VueProjectBuilder;
+import com.casy.casyaicodemother.core.handler.SimpleTextStreamHandler;
 import com.casy.casyaicodemother.core.handler.StreamHandlerExecutor;
 import com.casy.casyaicodemother.core.vue.VueProjectVersionManager;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.exception.ThrowUtils;
+import com.casy.casyaicodemother.langgraph4j.workflow.CodeGenConcurrentWorkflow;
 import com.casy.casyaicodemother.mapper.AppMapper;
 import com.casy.casyaicodemother.model.dto.app.AppAddRequest;
 import com.casy.casyaicodemother.model.dto.app.AppAdminUpdateRequest;
@@ -309,7 +311,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      * @return 消息流
      */
     @Override
-    public Flux<String> chatToGenCode(Long appId, String message, String modelType, User loginUser, String versionDir) {
+    public Flux<String> chatToGenCode(Long appId, String message, String modelType, User loginUser, String versionDir, Boolean agent) {
         // 1. 参数校验
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
         ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");   // 1.参数校验
@@ -328,8 +330,14 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         ModelTypeEnum modelTypeEnum = aiModelCatalogService.requireEnabled(modelType);
         // 5. 通过校验后，添加用户消息到对话历史
         long userMessageId = chatHistoryService.saveUserMessage(appId, message, loginUser);
-        // 6. 调用 AI 生成代码
-        Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, modelTypeEnum, appId, userMessageId, versionDir);
+        // 6. 根据 agent 选择生成方式
+        Flux<String> codeStream;
+        if (Boolean.TRUE.equals(agent)) {
+            codeStream = new CodeGenConcurrentWorkflow().executeWorkflowWithFlux(
+                    message, appId, loginUser.getId(), codeGenTypeEnum, modelTypeEnum, userMessageId, versionDir);
+            return new SimpleTextStreamHandler().handle(codeStream, chatHistoryService, appId, userMessageId, loginUser);
+        }
+        codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, modelTypeEnum, appId, userMessageId, versionDir);
         return streamHandlerExecutor.doExecute(codeStream, chatHistoryService, appId, userMessageId, loginUser, codeGenTypeEnum);
     }
 

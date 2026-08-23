@@ -23,6 +23,11 @@ public class ChatHistorySaveNode {
         return node_async(state -> {
             WorkflowContext context = WorkflowContext.getContext(state);
             log.info("执行节点: 保存用户消息");
+            if (context.getUserMessageId() != null && context.getUserMessageId() > 0) {
+                context.setCurrentStep("保存用户消息");
+                log.info("已有 userMessageId={}，跳过重复写入", context.getUserMessageId());
+                return WorkflowContext.saveContext(context);
+            }
             Long appId = context.getAppId();
             Long userId = context.getUserId();
             ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "工作流缺少真实 appId");

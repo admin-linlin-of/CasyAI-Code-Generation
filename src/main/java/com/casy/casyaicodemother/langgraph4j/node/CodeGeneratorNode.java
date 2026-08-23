@@ -45,14 +45,13 @@ public class CodeGeneratorNode {
             AiCodeGeneratorFacade codeGeneratorFacade = SpringContextUtil.getBean(AiCodeGeneratorFacade.class);
             log.info("开始生成代码，类型: {} ({})，appId: {}", generationType.getValue(), generationType.getText(), appId);
 
-            // versionDir 传 null：HTML/MULTI_FILE 由 processCodeStream 内 createCodeVersion 分配；
-            // VUE_PROJECT 由 CodeGenContextHolder 在首次写文件时 createCodeVersion，不能写死 v1。
+            // 多次对话可指定已有版本目录；为空则 HTML/MULTI_FILE 在 processCodeStream 内 createCodeVersion，
+            // VUE_PROJECT 由 CodeGenContextHolder 首次写文件时创建，不能写死 v1。
+            String specifiedVersionDir = StrUtil.isBlank(context.getVersionDir()) ? null : context.getVersionDir();
             Flux<String> codeStream = codeGeneratorFacade.generateAndSaveCodeStream(
-                    userMessage, generationType, generationModel, appId, userMessageId, null);
-            // 保存失败会从 Flux 抛出，不再像 doOnComplete 吞异常那样假装成功
+                    userMessage, generationType, generationModel, appId, userMessageId, specifiedVersionDir);
             codeStream.blockLast(Duration.ofMinutes(10));
 
-            // 真正的版本号以 createCodeVersion 写入的记录为准，不能用节点里拼的 v1
             AppVersionService appVersionService = SpringContextUtil.getBean(AppVersionService.class);
             String versionDir = appVersionService.getLatestCodeDir(appId);
             String generatedCodeDir = resolveGeneratedCodeDir(generationType, appId, versionDir);

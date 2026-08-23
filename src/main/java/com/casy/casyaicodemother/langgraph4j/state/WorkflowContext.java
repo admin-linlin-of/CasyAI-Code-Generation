@@ -72,6 +72,10 @@ public class WorkflowContext implements Serializable {
      */
     private Long userMessageId;
     /**
+     * 已有版本目录（如 v2）。多次对话指定后生成节点写入该目录；为空则自行创建版本。
+     */
+    private String versionDir;
+    /**
      * 生成的代码目录
      */
     private String generatedCodeDir;

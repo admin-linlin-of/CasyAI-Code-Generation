@@ -29,8 +29,9 @@ public class WorkflowSseController {
      * SSE 流式执行工作流
      */
     @GetMapping(value = "/execute-sse", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter executeWorkflowWithSse(@RequestParam String prompt) {
-        log.info("收到 SSE 工作流执行请求: {}", prompt);
-        return new CodeGenConcurrentWorkflow().executeWorkflowWithSse(prompt);
+    public SseEmitter executeWorkflowWithSse(@RequestParam String prompt,
+                                             @RequestParam(required = false) Long appId) {
+        log.info("收到 SSE 工作流执行请求: prompt={}, appId={}", prompt, appId);
+        return new CodeGenConcurrentWorkflow().executeWorkflowWithSse(prompt, appId);
     }
 }
