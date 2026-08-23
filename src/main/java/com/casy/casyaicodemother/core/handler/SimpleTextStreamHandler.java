@@ -31,7 +31,12 @@ public class SimpleTextStreamHandler {
                                User loginUser) {
         StringBuilder aiResponseBuilder = new StringBuilder();
         return originFlux
-                .doOnNext(aiResponseBuilder::append)
+                .doOnNext(chunk -> {
+                    if (chunk != null && chunk.contains("\"t\":\"ping\"")) {
+                        return;
+                    }
+                    aiResponseBuilder.append(chunk);
+                })
                 // 流结束后统一收尾：空响应写入错误并推送到 SSE，避免 doOnComplete 抛异常导致前端收不到错误
                 .concatWith(Mono.defer(() -> {
                     String aiResponse = aiResponseBuilder.toString();

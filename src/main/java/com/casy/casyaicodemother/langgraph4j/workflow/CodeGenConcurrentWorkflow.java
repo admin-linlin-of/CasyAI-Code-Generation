@@ -47,6 +47,8 @@ public class CodeGenConcurrentWorkflow {
                     .addNode("code_repair", CodeRepairNode.create())
                     .addNode("code_quality_check", CodeQualityCheckNode.create())
                     .addNode("project_builder", ProjectBuilderNode.create())
+                    // 图末尾只负责确认截图任务已提交，真正截图在虚拟线程，不挡主流程
+                    .addNode("site_preview", SitePreviewNode.create())
 
                     // 添加并发图片收集节点
                     .addNode("content_image_collector", ContentImageCollectorNode.create())
@@ -80,21 +82,22 @@ public class CodeGenConcurrentWorkflow {
                     .addEdge("code_generator", "code_quality_check")
                     .addEdge("code_repair", "code_quality_check")
 
-                    // 质检条件边：失败走修复节点，满 3 次则放弃
+                    // HTML/多文件质检通过后 skip_build，Vue 走 project_builder；两者最后都进 site_preview
                     .addConditionalEdges("code_quality_check",
                             edge_async(this::routeAfterQualityCheck),
                             Map.of(
                                     "build", "project_builder",
-                                    "skip_build", END,
+                                    "skip_build", "site_preview",
                                     "repair", "code_repair"
                             ))
-                    // 打包失败走修复节点，满 3 次结束
+                    // Vue 打包成功进预览节点；失败且未满 3 次回修复
                     .addConditionalEdges("project_builder",
                             edge_async(this::routeAfterBuild),
                             Map.of(
-                                    "ok", END,
+                                    "ok", "site_preview",
                                     "repair", "code_repair"
                             ))
+                    .addEdge("site_preview", END)
                     .compile();
         } catch (GraphStateException e) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "并发工作流创建失败");
@@ -179,7 +182,12 @@ public class CodeGenConcurrentWorkflow {
 
 
     /**
-     * 执行工作流（Flux 流式输出）。聊天接口会把每个 chunk 再包成 {"c":...}，因此这里只推纯文本进度，不要写 SSE 帧。
+     * 对话页用的工作流流式输出。
+     * <p>
+     * AppController 会把每个 chunk 再包成 {@code {"c":...}}，这里只推纯文本，不要写 SSE 帧。
+     * 每个节点结束后 {@link WorkflowChatEmitter#emitChunked} 立刻推进度，避免整段攒到最后才刷。
+     * 截图在后台跑，图结束后最多再等 20s，好把封面 Markdown 写进本轮对话。
+     * </p>
      */
     public Flux<String> executeWorkflowWithFlux(String originalPrompt) {
         return executeWorkflowWithFlux(originalPrompt, null, null, null, null, null, null);
@@ -190,33 +198,50 @@ public class CodeGenConcurrentWorkflow {
                                                 Long userMessageId, String versionDir) {
         return Flux.create(sink -> {
             Thread.startVirtualThread(() -> {
+                // DevTools 下虚拟线程要带上加载 WorkflowContext 的 ClassLoader，否则 state 反序列化会 ClassCast
                 Thread.currentThread().setContextClassLoader(WorkflowContext.class.getClassLoader());
+                WorkflowChatEmitter.bind(sink);
                 try {
                     CompiledGraph<MessagesState<String>> workflow = createWorkflow();
                     WorkflowContext initialContext = buildInitialContext(
                             originalPrompt, appId, userId, generationType, modelTypeEnum, userMessageId, versionDir);
-                    sink.next("开始执行代码生成工作流\n");
+                    WorkflowChatEmitter.emitChunked("## 代码生成工作流\n正在分析需求并收集素材，请稍候…\n");
                     GraphRepresentation graph = workflow.getGraph(GraphRepresentation.Type.MERMAID);
                     log.info("工作流图:\n{}", graph.content());
 
                     int stepCounter = 1;
+                    WorkflowContext lastContext = initialContext;
                     for (NodeOutput<MessagesState<String>> step : workflow.stream(
                             Map.of(WorkflowContext.WORKFLOW_CONTEXT_KEY, initialContext))) {
+                        if (sink.isCancelled()) {
+                            break;
+                        }
                         log.info("--- 第 {} 步完成 ---", stepCounter);
                         WorkflowContext currentContext = WorkflowContext.getContext(step.state());
                         if (currentContext != null) {
-                            sink.next("步骤 " + stepCounter + " 完成：" + currentContext.getCurrentStep() + "\n");
+                            lastContext = currentContext;
+                            WorkflowChatEmitter.emitChunked(WorkflowChatEmitter.formatStep(stepCounter, currentContext));
                             log.info("当前步骤上下文: {}", currentContext);
                         }
                         stepCounter++;
                     }
-                    sink.next("代码生成工作流执行完成！\n");
+                    // 截图任务多半已在代码生成/构建时提交；这里只是收口写进对话
+                    Long previewAppId = appId != null ? appId : lastContext.getAppId();
+                    String coverUrl = SitePreviewNode.awaitCover(previewAppId, 20);
+                    if (coverUrl != null && !coverUrl.isBlank()) {
+                        WorkflowChatEmitter.emitChunked("\n### 网站预览图\n![网站预览](" + coverUrl + ")\n");
+                    } else {
+                        WorkflowChatEmitter.emitChunked("\n网站预览图仍在后台生成，完成后会更新应用封面。\n");
+                    }
+                    WorkflowChatEmitter.emitChunked("\n**工作流执行完成。**\n");
                     log.info("代码生成工作流执行完成！");
                     sink.complete();
                 } catch (Exception e) {
                     log.error("工作流执行失败: {}", e.getMessage(), e);
-                    sink.next("工作流执行失败：" + e.getMessage() + "\n");
+                    WorkflowChatEmitter.emitChunked("\n工作流执行失败：" + e.getMessage() + "\n");
                     sink.error(e);
+                } finally {
+                    WorkflowChatEmitter.unbind();
                 }
             });
         });

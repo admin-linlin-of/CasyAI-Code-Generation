@@ -13,6 +13,7 @@ import com.mybatisflex.core.service.IService;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 应用 服务层。
@@ -141,6 +142,16 @@ public interface AppService extends IService<App> {
      * @return AI响应流
      */
     Flux<String> chatToGenCode(Long appId, String message, String modelType, User loginUser, String versionDir, Boolean agent);
+
+    /**
+     * 后台截网页并更新应用封面，不阻塞调用方。
+     * 工作流在代码落盘/Vue 打包后提交；部署成功后也会走同一套逻辑。
+     *
+     * @param appId  应用 ID
+     * @param webUrl 可供无头 Chrome 打开的地址（本机 static 预览或部署域名）
+     * @return 封面图 URL；失败为 null
+     */
+    CompletableFuture<String> generateAppCoverAsync(Long appId, String webUrl);
 
     /**
      * 部署应用

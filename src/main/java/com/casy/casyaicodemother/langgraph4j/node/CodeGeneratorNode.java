@@ -10,6 +10,7 @@ import com.casy.casyaicodemother.langgraph4j.state.WorkflowContext;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import com.casy.casyaicodemother.service.AppVersionService;
+import com.casy.casyaicodemother.langgraph4j.workflow.WorkflowChatEmitter;
 import com.casy.casyaicodemother.util.SpringContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.AsyncNodeAction;
@@ -50,7 +51,19 @@ public class CodeGeneratorNode {
             String specifiedVersionDir = StrUtil.isBlank(context.getVersionDir()) ? null : context.getVersionDir();
             Flux<String> codeStream = codeGeneratorFacade.generateAndSaveCodeStream(
                     userMessage, generationType, generationModel, appId, userMessageId, specifiedVersionDir);
-            codeStream.blockLast(Duration.ofMinutes(10));
+            // 代码流本身不进对话（避免把 HTML 源码刷到左侧）。先提示「正在生成」，
+            // 再每 1.6s 推一个点，避免长节点期间 SSE 完全静默。
+            WorkflowChatEmitter.emitChunked("\n代码生成中，模型正在输出…\n");
+            java.util.concurrent.atomic.AtomicLong lastBeat = new java.util.concurrent.atomic.AtomicLong(System.currentTimeMillis());
+            codeStream
+                    .doOnNext(chunk -> {
+                        long now = System.currentTimeMillis();
+                        if (now - lastBeat.get() >= 1600) {
+                            lastBeat.set(now);
+                            WorkflowChatEmitter.emitPing();
+                        }
+                    })
+                    .blockLast(Duration.ofMinutes(10));
 
             AppVersionService appVersionService = SpringContextUtil.getBean(AppVersionService.class);
             String versionDir = appVersionService.getLatestCodeDir(appId);
@@ -59,6 +72,11 @@ public class CodeGeneratorNode {
 
             context.setCurrentStep("代码生成");
             context.setGeneratedCodeDir(generatedCodeDir);
+            // HTML / 多文件写盘后静态预览已可访问，立刻后台截封面，与后续质检并行。
+            // Vue 要等 npm build 出 dist，改在 ProjectBuilderNode 成功后再 submit。
+            if (generationType != CodeGenTypeEnum.VUE_PROJECT) {
+                SitePreviewNode.submit(appId, generatedCodeDir, generationType);
+            }
             return WorkflowContext.saveContext(context);
         });
     }

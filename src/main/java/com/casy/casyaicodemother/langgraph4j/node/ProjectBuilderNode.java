@@ -5,14 +5,14 @@ import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.langgraph4j.model.QualityResult;
 import com.casy.casyaicodemother.langgraph4j.state.WorkflowContext;
+import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.util.SpringContextUtil;
-
-import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.AsyncNodeAction;
 import org.bsc.langgraph4j.prebuilt.MessagesState;
 
 import java.io.File;
+import java.util.List;
 
 import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
@@ -41,6 +41,8 @@ public class ProjectBuilderNode {
                     // 构建成功，返回 dist 目录路径
                     buildResultDir = generatedCodeDir + File.separator + "dist";
                     log.info("Vue 项目构建成功，dist 目录: {}", buildResultDir);
+                    // dist 已就绪，后台截预览图，不在本节点里等 Chrome
+                    SitePreviewNode.submit(context.getAppId(), generatedCodeDir, CodeGenTypeEnum.VUE_PROJECT);
                 } else {
                     // 打包失败回写质检结果，工作流走代码修复节点
                     markBuildFailed(context, "Vue 项目 npm run build 失败");

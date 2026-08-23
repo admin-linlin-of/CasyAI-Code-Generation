@@ -46,6 +46,7 @@ import reactor.core.publisher.Flux;
 import java.io.File;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static com.casy.casyaicodemother.constant.AppConstant.APP_PUBLISHED;
@@ -416,23 +417,34 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     }
 
     /**
-     * 异步生成应用截图并更新封面
-     *
-     * @param appId  应用ID
-     * @param appDeployUrl 应用访问URL
+     * 虚拟线程里截图并写 {@code t_app.cover}。
+     * 先 sleep 2s：静态资源刚写盘/刚构建完，Chrome 立刻打开容易白屏。
+     * 失败只打 warn，不抛给工作流主链路。
      */
+    @Override
+    public CompletableFuture<String> generateAppCoverAsync(Long appId, String webUrl) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                Thread.sleep(2000);
+                String screenshotUrl = screenshotService.generateAndUploadScreenshot(webUrl);
+                if (StrUtil.isBlank(screenshotUrl)) {
+                    return null;
+                }
+                App updateApp = new App();
+                updateApp.setId(appId);
+                updateApp.setCover(screenshotUrl);
+                this.updateById(updateApp);
+                return screenshotUrl;
+            } catch (Exception e) {
+                log.warn("生成应用封面失败 appId={}: {}", appId, e.getMessage());
+                return null;
+            }
+        }, command -> Thread.startVirtualThread(command));
+    }
+
+    /** 部署成功后的封面刷新，复用 {@link #generateAppCoverAsync} */
     private void generateAppScreenshotAsync(Long appId, String appDeployUrl) {
-        // 使用虚拟线程异步执行
-        Thread.startVirtualThread(() -> {
-            // 调用截图服务生成截图并上传
-            String screenshotUrl = screenshotService.generateAndUploadScreenshot(appDeployUrl);
-            // 更新应用封面字段
-            App updateApp = new App();
-            updateApp.setId(appId);
-            updateApp.setCover(screenshotUrl);
-            boolean updated = this.updateById(updateApp);
-            ThrowUtils.throwIf(!updated, ErrorCode.OPERATION_ERROR, "更新应用封面字段失败");
-        });
+        generateAppCoverAsync(appId, appDeployUrl);
     }
 
     private void markDeployFailed(Long appId, String codeDir, CodeGenTypeEnum codeGenTypeEnum) {
