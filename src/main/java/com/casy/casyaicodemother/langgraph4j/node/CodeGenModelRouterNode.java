@@ -17,8 +17,17 @@ public class CodeGenModelRouterNode {
     public static AsyncNodeAction<MessagesState<String>> create() {
         return node_async(state -> {
             WorkflowContext context = WorkflowContext.getContext(state);
-            log.info("执行节点: 智能选择代码生成类型");
+            log.info("执行节点: 智能选择代码生成模型");
             AiModelCatalogService catalog = SpringContextUtil.getBean(AiModelCatalogService.class);
+
+            // 首页已选手动模型则校验启用后直接使用，不再重复路由
+            if (context.getModelTypeEnum() != null) {
+                ModelTypeEnum specified = catalog.requireEnabled(context.getModelTypeEnum().getModelName());
+                context.setModelTypeEnum(specified);
+                context.setCurrentStep("智能选择代码生成模型");
+                log.info("已指定代码生成模型，跳过智能路由: {}", specified.getModelName());
+                return WorkflowContext.saveContext(context);
+            }
 
             ModelTypeEnum modelTypeEnum;
             try {
@@ -32,7 +41,7 @@ public class CodeGenModelRouterNode {
                 log.error("AI智能模型路由失败，回退默认模型 {}: {}", modelTypeEnum.getModelName(), e.getMessage());
             }
 
-            context.setCurrentStep("智能选择代码生成类型");
+            context.setCurrentStep("智能选择代码生成模型");
             context.setModelTypeEnum(modelTypeEnum);
             return WorkflowContext.saveContext(context);
         });

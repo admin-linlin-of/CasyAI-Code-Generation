@@ -39,7 +39,7 @@ public class FileWriteTool extends BaseTool {
                 String versionDir = CodeGenContextHolder.getOrCreateVersionDir(appId, appVersionService);
                 String projectDirName = versionDir != null
                         ? CodeGenContextHolder.buildProjectDirName(appId, versionDir)
-                        : "vue_project_" + appId;
+                        : CodeGenContextHolder.getProjectDirName(appId);
                 Path projectRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, projectDirName);
                 path = projectRoot.resolve(relativeFilePath);
             }

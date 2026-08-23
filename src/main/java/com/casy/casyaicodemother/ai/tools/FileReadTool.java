@@ -9,7 +9,6 @@ import dev.langchain4j.agent.tool.ToolMemoryId;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,10 +30,8 @@ public class FileReadTool extends BaseTool{
     ) {
         try {
             Path path = Paths.get(relativeFilePath);
-            // 获取当前编辑的版本
-            String versionDir = CodeGenContextHolder.getVersionDir(appId);
             if (!path.isAbsolute()) {
-                String projectDirName = "vue_project_" + appId + File.separator + versionDir;
+                String projectDirName = CodeGenContextHolder.getProjectDirName(appId);
                 Path projectRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, projectDirName);
                 path = projectRoot.resolve(relativeFilePath);
             }

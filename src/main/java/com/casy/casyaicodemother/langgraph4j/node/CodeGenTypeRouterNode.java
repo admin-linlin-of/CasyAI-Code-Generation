@@ -18,6 +18,14 @@ public class CodeGenTypeRouterNode {
             WorkflowContext context = WorkflowContext.getContext(state);
             log.info("执行节点: 智能选择代码生成类型");
 
+            // 首页已选手动类型，或创建/加载应用时已写入，不再重复路由
+            if (context.getGenerationType() != null) {
+                log.info("已指定代码生成类型，跳过智能路由: {} ({})",
+                        context.getGenerationType().getValue(), context.getGenerationType().getText());
+                context.setCurrentStep("智能选择代码生成类型");
+                return WorkflowContext.saveContext(context);
+            }
+
             CodeGenTypeEnum generationType;
             try {
                 // 获取AI路由服务

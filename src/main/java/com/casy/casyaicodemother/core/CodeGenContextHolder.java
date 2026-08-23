@@ -38,7 +38,16 @@ public class CodeGenContextHolder {
      * 在 VUE_PROJECT 流式生成开始前调用，保存 modelType 和 userMessageId 供后续创建版本使用。
      */
     public static void set(Long appId, ModelTypeEnum modelType, Long userMessageId, String versionDir) {
-        CONTEXT_MAP.put(appId, new CodeGenContext(modelType, userMessageId, versionDir));
+        set(appId, modelType, userMessageId, versionDir, CodeGenTypeEnum.VUE_PROJECT);
+    }
+
+    /**
+     * 生成或修复开始前写入上下文；修复时必须传入已有 versionDir，避免新建版本。
+     */
+    public static void set(Long appId, ModelTypeEnum modelType, Long userMessageId, String versionDir,
+                           CodeGenTypeEnum codeGenType) {
+        CONTEXT_MAP.put(appId, new CodeGenContext(modelType, userMessageId, versionDir,
+                codeGenType == null ? CodeGenTypeEnum.VUE_PROJECT : codeGenType));
     }
 
     /**
@@ -84,7 +93,26 @@ public class CodeGenContextHolder {
      * 示例：vue_project_421846728331051008_v1
      */
     public static String buildProjectDirName(Long appId, String versionDir) {
-        return String.format("%s_%s_%s", CodeGenTypeEnum.VUE_PROJECT.getValue(), appId, versionDir);
+        CodeGenContext ctx = CONTEXT_MAP.get(appId);
+        String type = (ctx != null && ctx.codeGenType != null)
+                ? ctx.codeGenType.getValue()
+                : CodeGenTypeEnum.VUE_PROJECT.getValue();
+        return String.format("%s_%s_%s", type, appId, versionDir);
+    }
+
+    /**
+     * 当前会话对应的磁盘项目目录名，读写工具共用，禁止再拼 vue_project_{id}/{v1}。
+     */
+    public static String getProjectDirName(Long appId) {
+        String versionDir = getVersionDir(appId);
+        if (versionDir == null) {
+            CodeGenContext ctx = CONTEXT_MAP.get(appId);
+            String type = (ctx != null && ctx.codeGenType != null)
+                    ? ctx.codeGenType.getValue()
+                    : CodeGenTypeEnum.VUE_PROJECT.getValue();
+            return type + "_" + appId;
+        }
+        return buildProjectDirName(appId, versionDir);
     }
 
     /** 单次 VUE 生成会话的上下文数据 */
@@ -95,11 +123,15 @@ public class CodeGenContextHolder {
         private final Long userMessageId;
         /** 懒创建后的版本目录名，如 v1 */
         private volatile String versionDir;
+        /** 代码生成类型，决定磁盘目录前缀 */
+        private final CodeGenTypeEnum codeGenType;
 
-        private CodeGenContext(ModelTypeEnum modelType, Long userMessageId, String versionDir) {
+        private CodeGenContext(ModelTypeEnum modelType, Long userMessageId, String versionDir,
+                               CodeGenTypeEnum codeGenType) {
             this.modelType = modelType;
             this.userMessageId = userMessageId;
             this.versionDir = versionDir;
+            this.codeGenType = codeGenType;
         }
     }
 }

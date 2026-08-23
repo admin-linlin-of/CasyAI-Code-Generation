@@ -98,6 +98,7 @@ const router = createRouter({
 1）writeFile 的 arguments 必须是合法 JSON；content 中的双引号必须转义为 \"，换行必须写成 \n，反斜杠写成 \\
 2）单次 content 不得超过 1500 字符；超过时必须分块写入：同一文件首块 append=false，后续分块 append=true，路径保持不变
 3）禁止在 JSON 字符串内直接写入未转义的 HTML/Vue 双引号
+4）每个 .vue 必须写完整 `<template>...</template>`，根节点必须闭合；分块写入时最后一块必须补全所有未闭合标签，否则 npm run build 会报 Element is missing end tag
 
 ## 严格输出约束
 

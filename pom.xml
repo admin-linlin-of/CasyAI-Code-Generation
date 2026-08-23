@@ -152,6 +152,11 @@
             <groupId>org.bsc.langgraph4j</groupId>
             <artifactId>langgraph4j-langchain4j</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.bsc.langgraph4j</groupId>
+            <artifactId>langgraph4j-studio-springboot</artifactId>
+            <version>1.8.20</version>
+        </dependency>
 
         <!-- https://docs.langchain4j.dev/get-started -->
         <dependency>

@@ -194,9 +194,19 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         if (buildStatus == VersionBuildStatusEnum.SUCCESS || buildStatus == VersionBuildStatusEnum.BUILDING) {
             update.setBuildError(null);
         } else if (buildStatus == VersionBuildStatusEnum.FAILED) {
-            update.setBuildError(StrUtil.blankToDefault(buildError, "打包失败，请查看服务端日志"));
+            // 当前库 build_error 为 varchar(500)，完整 npm 日志必须截断否则更新失败
+            update.setBuildError(truncateBuildError(buildError));
         }
         updateById(update);
+    }
+
+    /** 与线上 varchar(500) 对齐，并去掉 ANSI 色码 */
+    private static final int BUILD_ERROR_MAX_LEN = 500;
+
+    private static String truncateBuildError(String buildError) {
+        String text = StrUtil.blankToDefault(buildError, "打包失败，请查看服务端日志")
+                .replaceAll("\\u001B\\[[;\\d]*m", "");
+        return StrUtil.sub(text, 0, BUILD_ERROR_MAX_LEN);
     }
 
     @Override

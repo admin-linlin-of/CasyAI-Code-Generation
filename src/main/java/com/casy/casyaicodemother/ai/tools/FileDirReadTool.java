@@ -48,11 +48,9 @@ public class FileDirReadTool extends BaseTool{
     ) {
         try {
             // 获取当前编辑的版本
-            String versionDir = CodeGenContextHolder.getVersionDir(appId);
-
             Path path = Paths.get(relativeDirPath == null ? "" : relativeDirPath);
             if (!path.isAbsolute()) {
-                String projectDirName = "vue_project_" + appId + File.separator + versionDir;
+                String projectDirName = CodeGenContextHolder.getProjectDirName(appId);
                 Path projectRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, projectDirName);
                 path = projectRoot.resolve(relativeDirPath == null ? "" : relativeDirPath);
             }

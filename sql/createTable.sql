@@ -216,6 +216,7 @@ COMMENT ON COLUMN t_app_version.is_delete IS '是否删除';
 
 ALTER TABLE t_app_version ADD COLUMN IF NOT EXISTS build_status VARCHAR(32) NOT NULL DEFAULT 'pending';
 ALTER TABLE t_app_version ADD COLUMN IF NOT EXISTS build_error TEXT NULL;
+ALTER TABLE t_app_version ALTER COLUMN build_error TYPE TEXT;
 ALTER TABLE t_app_version ADD COLUMN IF NOT EXISTS deploy_status VARCHAR(32) NOT NULL DEFAULT 'not_deployed';
 COMMENT ON COLUMN t_app_version.build_status IS '构建状态：pending/building/success/failed';
 COMMENT ON COLUMN t_app_version.build_error IS '构建失败原因（npm 输出摘要）';

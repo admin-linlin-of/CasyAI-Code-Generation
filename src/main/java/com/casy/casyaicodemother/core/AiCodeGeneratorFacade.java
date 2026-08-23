@@ -8,6 +8,7 @@ import com.casy.casyaicodemother.core.parser.CodeParserExecutor;
 import com.casy.casyaicodemother.core.save.CodeFileSaverExecutor;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
+import com.casy.casyaicodemother.langgraph4j.ai.CodeRepairServiceFactory;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import com.casy.casyaicodemother.service.AppVersionService;
@@ -32,6 +33,9 @@ public class AiCodeGeneratorFacade {
 
     @Resource
     private AiCodeGeneratorServiceFactory aiCodeGeneratorServiceFactory;
+
+    @Resource
+    private CodeRepairServiceFactory codeRepairServiceFactory;
 
     /**
      * 统一入口：根据类型生成并保存代码
@@ -93,6 +97,16 @@ public class AiCodeGeneratorFacade {
                 throw new BusinessException(ErrorCode.SYSTEM_ERROR, errorMessage);
             }
         };
+    }
+
+    /**
+     * 代码修复流：写入已有 versionDir，不新建版本；使用独立 CodeRepairService。
+     */
+    public Flux<String> repairCodeStream(String repairMessage, CodeGenTypeEnum codeGenType,
+                                         ModelTypeEnum modelType, Long appId, Long userMessageId, String versionDir) {
+        CodeGenContextHolder.set(appId, modelType, userMessageId, versionDir, codeGenType);
+        TokenStream tokenStream = codeRepairServiceFactory.getService(modelType).repairCode(appId, repairMessage);
+        return processTokenStream(tokenStream).doFinally(signal -> CodeGenContextHolder.remove(appId));
     }
 
 

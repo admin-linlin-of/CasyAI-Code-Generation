@@ -38,8 +38,8 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class VueProjectBuilder {
 
-    /** 写入数据库的 build_error 最大长度，避免过长 npm 日志撑爆字段 */
-    private static final int BUILD_ERROR_MAX_LEN = 4000;
+    /** 写入数据库的 build_error 最大长度，需不超过 t_app_version.build_error（varchar 500） */
+    private static final int BUILD_ERROR_MAX_LEN = 500;
 
     @Resource
     private VueProjectVersionManager versionManager;

@@ -61,8 +61,14 @@ public class WorkflowContext implements Serializable {
 
     /**
      * 真实应用 ID。代码保存、版本记录、Redis 对话记忆都依赖它，不能用 0 等占位值。
+     * 为空时由 AppPrepareNode 按首页流程先创建应用。
      */
     private Long appId;
+
+    /**
+     * 当前用户 ID。创建应用、写入对话历史需要；为空时 AppPrepareNode 回退到库中第一个用户（方便测试）。
+     */
+    private Long userId;
 
     /**
      * 触发本次生成的用户消息 ID，写入 t_app_version.chat_history_id；测试场景可为空。
@@ -88,6 +94,13 @@ public class WorkflowContext implements Serializable {
      * 质量检查结果
      */
     private QualityResult qualityResult;
+
+    /**
+     * 代码修复次数，质检失败或打包失败会进入修复节点，上限见 {@link #MAX_REPAIR_COUNT}
+     */
+    private Integer repairCount;
+
+    public static final int MAX_REPAIR_COUNT = 3;
 
     /**
      * 图片收集计划

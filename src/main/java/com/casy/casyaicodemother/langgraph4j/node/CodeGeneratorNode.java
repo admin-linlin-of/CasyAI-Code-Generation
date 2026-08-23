@@ -1,13 +1,15 @@
 package com.casy.casyaicodemother.langgraph4j.node;
 
+import cn.hutool.core.util.StrUtil;
 import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.core.AiCodeGeneratorFacade;
+import com.casy.casyaicodemother.core.vue.VueProjectVersionManager;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.exception.ThrowUtils;
-import com.casy.casyaicodemother.langgraph4j.model.QualityResult;
 import com.casy.casyaicodemother.langgraph4j.state.WorkflowContext;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
+import com.casy.casyaicodemother.service.AppVersionService;
 import com.casy.casyaicodemother.util.SpringContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.AsyncNodeAction;
@@ -29,8 +31,8 @@ public class CodeGeneratorNode {
             WorkflowContext context = WorkflowContext.getContext(state);
             log.info("执行节点: 代码生成");
 
-            // 构造用户消息（包含原始提示词和可能的错误修复信息）
-            String userMessage = buildUserMessage(context);
+            // 构造用户消息
+            String userMessage = context.getEnhancedPrompt();
 
             CodeGenTypeEnum generationType = context.getGenerationType();
             ModelTypeEnum generationModel = context.getModelTypeEnum();
@@ -51,11 +53,9 @@ public class CodeGeneratorNode {
             codeStream.blockLast(Duration.ofMinutes(10));
 
             // 真正的版本号以 createCodeVersion 写入的记录为准，不能用节点里拼的 v1
-//            AppVersionService appVersionService = SpringContextUtil.getBean(AppVersionService.class);
-//            String versionDir = appVersionService.getLatestCodeDir(appId);
-//            ThrowUtils.throwIf(StrUtil.isBlank(versionDir), ErrorCode.SYSTEM_ERROR, "代码版本未创建，文件保存未成功");
-            String generatedCodeDir = String.format("%s/%s_%s_%s",
-                    AppConstant.CODE_OUTPUT_ROOT_DIR, generationType.getValue(), appId, "v1");
+            AppVersionService appVersionService = SpringContextUtil.getBean(AppVersionService.class);
+            String versionDir = appVersionService.getLatestCodeDir(appId);
+            String generatedCodeDir = resolveGeneratedCodeDir(generationType, appId, versionDir);
             log.info("AI 代码生成完成，生成目录: {}", generatedCodeDir);
 
             context.setCurrentStep("代码生成");
@@ -65,46 +65,19 @@ public class CodeGeneratorNode {
     }
 
     /**
-     * 构造用户消息，如果存在质检失败结果则添加错误修复信息
+     * 按真实版本目录拼落盘路径；尚未写出文件时返回空，交给质检判定失败。
      */
-    private static String buildUserMessage(WorkflowContext context) {
-        String userMessage = context.getEnhancedPrompt();
-        // 检查是否存在质检失败结果
-        QualityResult qualityResult = context.getQualityResult();
-        if (isQualityCheckFailed(qualityResult)) {
-            // 直接将错误修复信息作为新的提示词（起到了修改的作用）
-            userMessage = buildErrorFixPrompt(qualityResult);
+    private static String resolveGeneratedCodeDir(CodeGenTypeEnum generationType, Long appId, String versionDir) {
+        if (StrUtil.isBlank(versionDir)) {
+            log.warn("代码版本未创建，文件可能未写出，appId={}", appId);
+            return "";
         }
-        return userMessage;
-    }
-
-    /**
-     * 判断质检是否失败
-     */
-    private static boolean isQualityCheckFailed(QualityResult qualityResult) {
-        return qualityResult != null &&
-                !qualityResult.getIsValid() &&
-                qualityResult.getErrors() != null &&
-                !qualityResult.getErrors().isEmpty();
-    }
-
-    /**
-     * 构造错误修复提示词
-     */
-    private static String buildErrorFixPrompt(QualityResult qualityResult) {
-        StringBuilder errorInfo = new StringBuilder();
-        errorInfo.append("\n\n## 上次生成的代码存在以下问题，请修复：\n");
-        // 添加错误列表
-        qualityResult.getErrors().forEach(error ->
-                errorInfo.append("- ").append(error).append("\n"));
-        // 添加修复建议（如果有）
-        if (qualityResult.getSuggestions() != null && !qualityResult.getSuggestions().isEmpty()) {
-            errorInfo.append("\n## 修复建议：\n");
-            qualityResult.getSuggestions().forEach(suggestion ->
-                    errorInfo.append("- ").append(suggestion).append("\n"));
+        if (generationType == CodeGenTypeEnum.VUE_PROJECT) {
+            VueProjectVersionManager versionManager = SpringContextUtil.getBean(VueProjectVersionManager.class);
+            return versionManager.getVersionDir(appId, versionDir).getAbsolutePath();
         }
-        errorInfo.append("\n请根据上述问题和建议重新生成代码，确保修复所有提到的问题。");
-        return errorInfo.toString();
+        return String.format("%s/%s_%s_%s",
+                AppConstant.CODE_OUTPUT_ROOT_DIR, generationType.getValue(), appId, versionDir);
     }
 
 }

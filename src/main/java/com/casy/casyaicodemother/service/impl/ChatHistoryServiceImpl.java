@@ -69,6 +69,10 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
                 if (MessageTypeEnum.USER.getValue().equals(chatHistory.getMessageType())) {
                     chatMemory.add(UserMessage.from(chatHistory.getMessage()));
                 } else if (MessageTypeEnum.AI.getValue().equals(chatHistory.getMessageType())){
+                    // 空 AI 文本不能写入记忆，否则重试请求会带上无效 assistant
+                    if (StrUtil.isBlank(chatHistory.getMessage())) {
+                        continue;
+                    }
                     chatMemory.add(AiMessage.from(chatHistory.getMessage()));
                 }
                 loadedCount++;
