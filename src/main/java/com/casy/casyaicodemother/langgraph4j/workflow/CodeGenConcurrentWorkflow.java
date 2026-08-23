@@ -16,8 +16,10 @@ import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.NodeOutput;
 import org.bsc.langgraph4j.prebuilt.MessagesState;
 import org.bsc.langgraph4j.prebuilt.MessagesStateGraph;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.publisher.Flux;
 
+import java.io.IOException;
 import java.util.Map;
 
 import static org.bsc.langgraph4j.GraphDefinition.END;
@@ -164,6 +166,7 @@ public class CodeGenConcurrentWorkflow {
     public Flux<String> executeWorkflowWithFlux(String originalPrompt) {
         return Flux.create(sink -> {
             Thread.startVirtualThread(() -> {
+                Thread.currentThread().setContextClassLoader(WorkflowContext.class.getClassLoader());
                 try {
                     CompiledGraph<MessagesState<String>> workflow = createWorkflow();
                     WorkflowContext initialContext = WorkflowContext.builder()
@@ -220,6 +223,84 @@ public class CodeGenConcurrentWorkflow {
             return "event: error\ndata: {\"error\":\"格式化失败\"}\n\n";
         }
     }
+
+    /**
+     * 执行工作流（SSE 流式输出版本）
+     */
+    public SseEmitter executeWorkflowWithSse(String originalPrompt) {
+        SseEmitter emitter = new SseEmitter(30 * 60 * 1000L);
+        /**
+         * 报错：
+         * java.lang.ClassCastException: class com.casy.casyaicodemother.langgraph4j.state.WorkflowContext
+         * cannot be cast to class com.casy.casyaicodemother.langgraph4j.state.WorkflowContext
+         * (WorkflowContext is in unnamed module of loader 'app';
+         * WorkflowContext is in unnamed module of loader org.springframework.boot.devtools.restart.classloader.RestartClassLoader)
+         * 
+         * 
+         * 这不是「把加载器塞进线程里跑业务」，而是给 第三方库一个线索：该用哪套 ClassLoader 去 Class.forName / 反序列化。
+         * 线程有一个 上下文类加载器 TCCL（Thread.getContextClassLoader()）。很多库（langgraph4j 拷贝 state、JDK ObjectInputStream）不会用「当前类是谁加载的」，而是问 当前线程的 TCCL。
+         * SSE 里用了虚拟线程。它往往 带不上 HTTP 线程那个 RestartClassLoader，TCCL 会掉成 app。于是库在 app 里再装一份 WorkflowContext，你这边强转就炸。
+         * 所以先拿到 加载 WorkflowContext 的那个加载器（有 DevTools 时就是 RestartClassLoader），再设到虚拟线程上：
+         * WorkflowContext.class.getClassLoader()  // 业务类所在的加载器
+         * setContextClassLoader(...)              // 让 langgraph4j 跟你用同一套
+         * 变量名叫 appClassLoader 容易误解，它实际是 业务类的加载器，不是 JVM 的 AppClassLoader。
+         */
+        ClassLoader appClassLoader = WorkflowContext.class.getClassLoader();
+        Thread.startVirtualThread(() -> {
+            Thread.currentThread().setContextClassLoader(appClassLoader);
+            try {
+                CompiledGraph<MessagesState<String>> workflow = createWorkflow();
+                WorkflowContext initialContext = WorkflowContext.builder()
+                        .originalPrompt(originalPrompt)
+                        .currentStep("初始化")
+                        .build();
+                sendSseEvent(emitter, "workflow_start", Map.of(
+                        "message", "开始执行代码生成工作流",
+                        "originalPrompt", originalPrompt
+                ));
+                GraphRepresentation graph = workflow.getGraph(GraphRepresentation.Type.MERMAID);
+                log.info("工作流图:\n{}", graph.content());
+
+                int stepCounter = 1;
+                for (NodeOutput<MessagesState<String>> step : workflow.stream(
+                        Map.of(WorkflowContext.WORKFLOW_CONTEXT_KEY, initialContext))) {
+                    log.info("--- 第 {} 步完成 ---", stepCounter);
+                    WorkflowContext currentContext = WorkflowContext.getContext(step.state());
+                    if (currentContext != null) {
+                        sendSseEvent(emitter, "step_completed", Map.of(
+                                "stepNumber", stepCounter,
+                                "currentStep", currentContext.getCurrentStep()
+                        ));
+                        log.info("当前步骤上下文: {}", currentContext);
+                    }
+                    stepCounter++;
+                }
+                sendSseEvent(emitter, "workflow_completed", Map.of(
+                        "message", "代码生成工作流执行完成！"
+                ));
+                log.info("代码生成工作流执行完成！");
+                emitter.complete();
+            } catch (Exception e) {
+                log.error("工作流执行失败: {}", e.getMessage(), e);
+                emitter.completeWithError(e);
+            }
+        });
+        return emitter;
+    }
+
+    /**
+     * 发送 SSE 事件的辅助方法
+     */
+    private void sendSseEvent(SseEmitter emitter, String eventType, Object data) {
+        try {
+            emitter.send(SseEmitter.event()
+                    .name(eventType)
+                    .data(data));
+        } catch (IOException e) {
+            log.error("发送 SSE 事件失败: {}", e.getMessage(), e);
+        }
+    }
+
 
 
     /**
