@@ -47,6 +47,7 @@
             :class="[
               'message-item',
               msg.role === 'user' ? 'message-item--user' : 'message-item--ai',
+              msg.role === 'ai' && msg.streaming ? 'message-item--streaming' : '',
             ]"
           >
             <div class="message-item__content">
@@ -60,6 +61,7 @@
                 v-if="msg.role === 'ai'"
                 :content="msg.content"
                 :streaming="msg.streaming"
+                :agent="agentMode === '1'"
               />
               <template v-else>
                 <!-- 用户气泡内展示本轮粘贴并上传成功的图片 -->
@@ -131,9 +133,9 @@
               <template #icon><EditOutlined /></template>
               {{ visualEditorEnabled ? '退出编辑' : '可视化编辑' }}
             </a-button>
-            <a-button html-type="button" :loading="generating" type="primary" @click="sendMessage"
-              >发送</a-button
-            >
+            <a-button html-type="button" :loading="generating" type="primary" @click="sendMessage">
+              {{ generating ? '生成中' : '发送' }}
+            </a-button>
           </div>
         </div>
       </section>
@@ -1172,6 +1174,9 @@ const startStream = (messageText: string) => {
         append?: boolean
         done?: boolean
       }
+      if (data.t === 'ping') {
+        return
+      }
       if (data.t === 'thinking') {
         aiMsg.thinking = (aiMsg.thinking ?? '') + (data.c ?? '')
       } else if (data.t === 'file' && isVueProject.value) {
@@ -1568,6 +1573,12 @@ onBeforeUnmount(() => {
 .message-item--ai .message-item__content {
   background: rgba(22, 119, 255, 0.08);
   border: 1px solid var(--border-color);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.message-item--streaming .message-item__content {
+  border-color: rgba(22, 119, 255, 0.45);
+  box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.12);
 }
 
 .message-item__thinking {

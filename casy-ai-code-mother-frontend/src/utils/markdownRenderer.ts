@@ -61,9 +61,10 @@ function renderToolTags(html: string): string {
 
 export function renderMarkdown(markdown: string): string {
   if (!markdown) return ''
+  // 工作流进度会输出 ![desc](url)，需要放行 img/src，否则素材和网站预览图渲染不出来
   const html = DOMPurify.sanitize(md.render(markdown), {
-    ADD_TAGS: ['pre', 'code'],
-    ADD_ATTR: ['class'],
+    ADD_TAGS: ['pre', 'code', 'img'],
+    ADD_ATTR: ['class', 'src', 'alt', 'title'],
   })
   return renderToolTags(html)
 }
