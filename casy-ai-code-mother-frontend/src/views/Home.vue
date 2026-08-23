@@ -19,6 +19,7 @@
               style="width: 150px"
             />
             <a-select v-model:value="modelType" :options="modelTypeOptions" style="width: 180px" />
+            <a-select v-model:value="agentMode" :options="agentModeOptions" style="width: 150px" />
           </a-space>
           <a-button
             :loading="creating"
@@ -169,6 +170,7 @@ const creating = ref(false)
 const initPrompt = ref('')
 const codeGenType = ref('')
 const modelType = ref('')
+const agentMode = ref('0')
 
 const codeGenTypeOptions = [
   { value: '', label: '自动选择生成类型' },
@@ -182,6 +184,10 @@ const modelTypeOptions = [
   { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
   { value: 'gpt-5.5', label: 'GPT 5.5' },
   { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+]
+const agentModeOptions = [
+  { value: '0', label: '传统生成' },
+  { value: '1', label: 'Agent 工作流' },
 ]
 
 const quickTags = ['波普风电商页面', '企业网站', '电商运营后台', '暗黑话题社区']
@@ -235,6 +241,7 @@ const createAppByPrompt = async () => {
           initPrompt: trimmedPrompt.value,
           autoStart: '1',
           modelType: modelType.value,
+          agent: agentMode.value,
         },
       })
       initPrompt.value = ''

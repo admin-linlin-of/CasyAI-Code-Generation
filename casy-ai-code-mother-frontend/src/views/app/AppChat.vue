@@ -14,6 +14,7 @@
       </div>
       <a-space>
         <a-select v-model:value="modelType" :options="modelTypeOptions" style="width: 180px" />
+        <a-select v-model:value="agentMode" :options="agentModeOptions" style="width: 150px" />
         <a-button @click="openDetailModal">详情</a-button>
         <a-button :loading="deploying" type="primary" @click="doDeploy">部署</a-button>
         <!-- 下载当前选中版本的代码压缩包 -->
@@ -492,12 +493,17 @@ const detailPublished = computed({
   },
 })
 const modelType = ref(typeof route.query.modelType === 'string' ? route.query.modelType : '')
+const agentMode = ref(route.query.agent === '1' || route.query.agent === 'true' ? '1' : '0')
 const modelTypeOptions = [
   { value: '', label: '自动选择模型' },
   { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
   { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
   { value: 'gpt-5.5', label: 'GPT 5.5' },
   { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+]
+const agentModeOptions = [
+  { value: '0', label: '传统生成' },
+  { value: '1', label: 'Agent 工作流' },
 ]
 const modelTypeLabelMap = Object.fromEntries(
   modelTypeOptions.map((option) => [option.value, option.label]),
@@ -1144,6 +1150,7 @@ const startStream = (messageText: string) => {
   url.searchParams.set('appId', String(appId.value))
   url.searchParams.set('message', messageText)
   url.searchParams.set('modelType', modelType.value)
+  url.searchParams.set('agent', String(agentMode.value === '1'))
   eventSource = new EventSource(url.toString(), { withCredentials: true })
   let finished = false
 

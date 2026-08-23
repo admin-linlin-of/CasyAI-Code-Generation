@@ -226,6 +226,8 @@ declare namespace API {
     appId: string
     message: string
     modelType: string
+    versionDir?: string
+    agent?: boolean
   }
 
   type DeleteRequest = {
