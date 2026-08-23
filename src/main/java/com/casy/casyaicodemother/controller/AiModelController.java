@@ -7,7 +7,10 @@ import com.casy.casyaicodemother.common.ResultUtils;
 import com.casy.casyaicodemother.constant.UserConstant;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.exception.ThrowUtils;
+import com.casy.casyaicodemother.common.DeleteRequest;
+import com.casy.casyaicodemother.model.dto.aimodel.AiModelAddRequest;
 import com.casy.casyaicodemother.model.dto.aimodel.AiModelEnabledUpdateRequest;
+import com.casy.casyaicodemother.model.dto.aimodel.AiModelUpdateRequest;
 import com.casy.casyaicodemother.model.entity.AiModel;
 import com.casy.casyaicodemother.service.AiModelCatalogService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -40,6 +43,30 @@ public class AiModelController {
     @GetMapping("/enabled")
     public BaseResponse<List<AiModel>> enabled() {
         return ResultUtils.success(aiModelCatalogService.listEnabled());
+    }
+
+    @Operation(summary = "新增模型")
+    @SaCheckRole(UserConstant.ADMIN_ROLE)
+    @PostMapping("/add")
+    public BaseResponse<Long> add(@RequestBody AiModelAddRequest request) {
+        ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
+        return ResultUtils.success(aiModelCatalogService.addModel(request));
+    }
+
+    @Operation(summary = "更新模型")
+    @SaCheckRole(UserConstant.ADMIN_ROLE)
+    @PostMapping("/update")
+    public BaseResponse<Boolean> update(@RequestBody AiModelUpdateRequest request) {
+        ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
+        return ResultUtils.success(aiModelCatalogService.updateModel(request));
+    }
+
+    @Operation(summary = "删除模型")
+    @SaCheckRole(UserConstant.ADMIN_ROLE)
+    @PostMapping("/delete")
+    public BaseResponse<Boolean> delete(@RequestBody DeleteRequest request) {
+        ThrowUtils.throwIf(request == null || request.getId() == null, ErrorCode.PARAMS_ERROR);
+        return ResultUtils.success(aiModelCatalogService.deleteModel(request.getId()));
     }
 
     @Operation(summary = "启用或停用模型")

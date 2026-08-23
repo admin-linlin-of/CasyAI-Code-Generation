@@ -18,7 +18,18 @@
               :options="codeGenTypeOptions"
               style="width: 150px"
             />
-            <a-select v-model:value="modelType" :options="modelTypeOptions" style="width: 180px" />
+            <a-select v-model:value="modelType" style="width: 220px">
+              <a-select-option
+                v-for="opt in modelTypeOptions"
+                :key="opt.value || 'auto'"
+                :value="opt.value"
+                :disabled="opt.disabled"
+              >
+                <a-tooltip :title="opt.title">
+                  <span>{{ opt.label }}</span>
+                </a-tooltip>
+              </a-select-option>
+            </a-select>
             <a-select v-model:value="agentMode" :options="agentModeOptions" style="width: 150px" />
           </a-space>
           <a-button
@@ -162,6 +173,7 @@ import dayjs from 'dayjs'
 import { useRouter } from 'vue-router'
 import { addApp, listGoodAppVoByPage, listMyAppVoByPage } from '@/api/appController'
 import { useLoginUserStore } from '@/stores/loginUser'
+import { useAiModelOptions } from '@/composables/useAiModelOptions'
 
 const router = useRouter()
 const loginUserStore = useLoginUserStore()
@@ -178,13 +190,7 @@ const codeGenTypeOptions = [
   { value: 'html', label: 'HTML 模式' },
   { value: 'vue_project', label: 'Vue 工程模式' },
 ]
-const modelTypeOptions = [
-  { value: '', label: '自动选择模型' },
-  { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
-  { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
-  { value: 'gpt-5.5', label: 'GPT 5.5' },
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-]
+const { modelTypeOptions, loadAiModels } = useAiModelOptions()
 const agentModeOptions = [
   { value: '0', label: '传统生成' },
   { value: '1', label: 'Agent 工作流' },
@@ -294,7 +300,7 @@ onMounted(async () => {
   console.log("isLogin.value: ", isLogin.value);
   console.log("loginUserStore.loginUser.id: ", loginUserStore.loginUser.id);
   if (isLogin.value) {
-    await Promise.all([loadMyApps(), loadGoodApps()])
+    await Promise.all([loadMyApps(), loadGoodApps(), loadAiModels()])
   } else {
     await loadGoodApps()
   }

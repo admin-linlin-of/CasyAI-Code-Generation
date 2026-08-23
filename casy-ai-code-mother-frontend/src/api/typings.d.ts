@@ -410,7 +410,7 @@ declare namespace API {
     userRole?: string
   }
 
-  type UserVO = {
+    type UserVO = {
     id?: string
     userAccount?: string
     userName?: string
@@ -418,5 +418,43 @@ declare namespace API {
     userProfile?: string
     userRole?: string
     createTime?: string
+  }
+
+  type AiModel = {
+    id?: string
+    modelCode?: string
+    modelName?: string
+    enabled?: number
+    isDefault?: number
+    sortOrder?: number
+    description?: string
+    routingRule?: string
+    createTime?: string
+    updateTime?: string
+  }
+
+  type AiModelAddRequest = {
+    modelCode?: string
+    modelName?: string
+    enabled?: number
+    isDefault?: number
+    sortOrder?: number
+    description?: string
+    routingRule?: string
+  }
+
+  type AiModelUpdateRequest = AiModelAddRequest & {
+    id?: string
+  }
+
+  type AiModelEnabledUpdateRequest = {
+    id?: string
+    enabled?: number
+  }
+
+  type BaseResponseListAiModel = {
+    code?: number
+    data?: AiModel[]
+    message?: string
   }
 }

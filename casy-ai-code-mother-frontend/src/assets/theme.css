@@ -165,6 +165,16 @@ html[data-theme='dark'] .ant-menu-item {
   color: var(--text-main) !important;
 }
 
+.ant-select-item-option-disabled {
+  cursor: not-allowed;
+  pointer-events: auto;
+  color: rgba(15, 23, 42, 0.35) !important;
+}
+
+html[data-theme='dark'] .ant-select-item-option-disabled {
+  color: rgba(232, 238, 255, 0.35) !important;
+}
+
 html[data-theme='dark'] .ant-select-item-option-active:not(.ant-select-item-option-disabled),
 html[data-theme='dark'] .ant-dropdown-menu-item:hover,
 html[data-theme='dark'] .ant-menu-item:hover {

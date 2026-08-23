@@ -1,5 +1,7 @@
 package com.casy.casyaicodemother.service;
 
+import com.casy.casyaicodemother.model.dto.aimodel.AiModelAddRequest;
+import com.casy.casyaicodemother.model.dto.aimodel.AiModelUpdateRequest;
 import com.casy.casyaicodemother.model.entity.AiModel;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import com.mybatisflex.core.service.IService;
@@ -42,4 +44,10 @@ public interface AiModelCatalogService extends IService<AiModel> {
      * @param enabled 1 启用，0 停用
      */
     boolean updateEnabled(Long id, Integer enabled);
+
+    long addModel(AiModelAddRequest request);
+
+    boolean updateModel(AiModelUpdateRequest request);
+
+    boolean deleteModel(Long id);
 }

@@ -8,6 +8,7 @@ import AppManage from '@/views/app/AppManage.vue'
 import AppEdit from '@/views/app/AppEdit.vue'
 import ChatHistoryManage from '@/views/app/ChatHistoryManage.vue'
 import VersionManage from '@/views/app/VersionManage.vue'
+import AiModelManage from '@/views/ai/AiModelManage.vue'
 import ROLE_ENUM from '@/constant/constant.ts'
 
 const router = createRouter({
@@ -67,6 +68,14 @@ const router = createRouter({
       path: '/appVersion/manage',
       name: '版本管理',
       component: VersionManage,
+      meta: {
+        roles: [ROLE_ENUM.ADMIN],
+      },
+    },
+    {
+      path: '/aiModel/manage',
+      name: '模型管理',
+      component: AiModelManage,
       meta: {
         roles: [ROLE_ENUM.ADMIN],
       },

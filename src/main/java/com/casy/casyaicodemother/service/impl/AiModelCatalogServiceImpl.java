@@ -6,6 +6,8 @@ import cn.hutool.core.util.StrUtil;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.exception.ThrowUtils;
 import com.casy.casyaicodemother.mapper.AiModelMapper;
+import com.casy.casyaicodemother.model.dto.aimodel.AiModelAddRequest;
+import com.casy.casyaicodemother.model.dto.aimodel.AiModelUpdateRequest;
 import com.casy.casyaicodemother.model.entity.AiModel;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import com.casy.casyaicodemother.service.AiModelCatalogService;
@@ -106,5 +108,112 @@ public class AiModelCatalogServiceImpl extends ServiceImpl<AiModelMapper, AiMode
         }
         model.setEnabled(enabled);
         return updateById(model);
+    }
+
+    @Override
+    public long addModel(AiModelAddRequest request) {
+        ThrowUtils.throwIf(request == null, ErrorCode.PARAMS_ERROR);
+        String modelCode = StrUtil.trim(request.getModelCode());
+        String modelName = StrUtil.trim(request.getModelName());
+        ThrowUtils.throwIf(StrUtil.isBlank(modelCode), ErrorCode.PARAMS_ERROR, "模型编码不能为空");
+        ThrowUtils.throwIf(StrUtil.isBlank(modelName), ErrorCode.PARAMS_ERROR, "模型名称不能为空");
+        ThrowUtils.throwIf(ModelTypeEnum.fromCodeOrModelName(modelCode) == null,
+                ErrorCode.PARAMS_ERROR, "模型编码必须与 ModelTypeEnum 一致");
+        long exists = count(QueryWrapper.create().eq(AiModel::getModelCode, modelCode));
+        ThrowUtils.throwIf(exists > 0, ErrorCode.PARAMS_ERROR, "模型编码已存在");
+        int enabled = request.getEnabled() == null ? 1 : request.getEnabled();
+        int isDefault = request.getIsDefault() == null ? 0 : request.getIsDefault();
+        ThrowUtils.throwIf(enabled != 0 && enabled != 1, ErrorCode.PARAMS_ERROR, "enabled 只能为 0 或 1");
+        ThrowUtils.throwIf(isDefault != 0 && isDefault != 1, ErrorCode.PARAMS_ERROR, "isDefault 只能为 0 或 1");
+        ThrowUtils.throwIf(isDefault == 1 && enabled == 0, ErrorCode.PARAMS_ERROR, "停用模型不能设为默认");
+        AiModel model = AiModel.builder()
+                .modelCode(modelCode)
+                .modelName(modelName)
+                .enabled(enabled)
+                .isDefault(isDefault)
+                .sortOrder(request.getSortOrder() == null ? 100 : request.getSortOrder())
+                .description(request.getDescription())
+                .routingRule(request.getRoutingRule())
+                .build();
+        boolean saved = save(model);
+        ThrowUtils.throwIf(!saved, ErrorCode.OPERATION_ERROR, "新增模型失败");
+        if (isDefault == 1) {
+            clearOtherDefaults(model.getId());
+        }
+        return model.getId();
+    }
+
+    @Override
+    public boolean updateModel(AiModelUpdateRequest request) {
+        ThrowUtils.throwIf(request == null || request.getId() == null, ErrorCode.PARAMS_ERROR);
+        AiModel old = getById(request.getId());
+        ThrowUtils.throwIf(old == null, ErrorCode.NOT_FOUND_ERROR, "模型不存在");
+        if (StrUtil.isNotBlank(request.getModelCode()) && !request.getModelCode().equals(old.getModelCode())) {
+            ThrowUtils.throwIf(ModelTypeEnum.fromCodeOrModelName(request.getModelCode()) == null,
+                    ErrorCode.PARAMS_ERROR, "模型编码必须与 ModelTypeEnum 一致");
+            long exists = count(QueryWrapper.create()
+                    .eq(AiModel::getModelCode, request.getModelCode())
+                    .ne(AiModel::getId, old.getId()));
+            ThrowUtils.throwIf(exists > 0, ErrorCode.PARAMS_ERROR, "模型编码已存在");
+            old.setModelCode(StrUtil.trim(request.getModelCode()));
+        }
+        if (StrUtil.isNotBlank(request.getModelName())) {
+            old.setModelName(StrUtil.trim(request.getModelName()));
+        }
+        if (request.getSortOrder() != null) {
+            old.setSortOrder(request.getSortOrder());
+        }
+        if (request.getDescription() != null) {
+            old.setDescription(request.getDescription());
+        }
+        if (request.getRoutingRule() != null) {
+            old.setRoutingRule(request.getRoutingRule());
+        }
+        Integer enabled = request.getEnabled();
+        if (enabled != null) {
+            ThrowUtils.throwIf(enabled != 0 && enabled != 1, ErrorCode.PARAMS_ERROR, "enabled 只能为 0 或 1");
+            if (enabled == 0) {
+                ensureNotLastEnabled(old.getId());
+            }
+            old.setEnabled(enabled);
+        }
+        Integer isDefault = request.getIsDefault();
+        if (isDefault != null) {
+            ThrowUtils.throwIf(isDefault != 0 && isDefault != 1, ErrorCode.PARAMS_ERROR, "isDefault 只能为 0 或 1");
+            ThrowUtils.throwIf(isDefault == 1 && Integer.valueOf(0).equals(old.getEnabled()),
+                    ErrorCode.PARAMS_ERROR, "停用模型不能设为默认");
+            old.setIsDefault(isDefault);
+        }
+        boolean updated = updateById(old);
+        if (updated && Integer.valueOf(1).equals(old.getIsDefault())) {
+            clearOtherDefaults(old.getId());
+        }
+        return updated;
+    }
+
+    @Override
+    public boolean deleteModel(Long id) {
+        ThrowUtils.throwIf(id == null, ErrorCode.PARAMS_ERROR);
+        AiModel model = getById(id);
+        ThrowUtils.throwIf(model == null, ErrorCode.NOT_FOUND_ERROR, "模型不存在");
+        if (Integer.valueOf(1).equals(model.getEnabled())) {
+            ensureNotLastEnabled(id);
+        }
+        return removeById(id);
+    }
+
+    private void ensureNotLastEnabled(Long id) {
+        long remain = listEnabled().stream().filter(m -> !m.getId().equals(id)).count();
+        ThrowUtils.throwIf(remain <= 0, ErrorCode.PARAMS_ERROR, "至少保留一个可用模型");
+    }
+
+    private void clearOtherDefaults(Long keepId) {
+        List<AiModel> all = listAll();
+        for (AiModel model : all) {
+            if (!model.getId().equals(keepId) && Integer.valueOf(1).equals(model.getIsDefault())) {
+                model.setIsDefault(0);
+                updateById(model);
+            }
+        }
     }
 }

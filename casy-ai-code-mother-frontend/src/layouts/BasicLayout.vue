@@ -32,6 +32,7 @@ const originItems = [
   { key: 'appManage', label: '应用管理', path: '/app/manage' },
   { key: 'chatHistoryManage', label: '对话管理', path: '/chatHistory/manage' },
   { key: 'versionManage', label: '版本管理', path: '/appVersion/manage' },
+  { key: 'aiModelManage', label: '模型管理', path: '/aiModel/manage' },
   { key: 'userManage', label: '用户管理', path: '/user/userManage' },
 ]
 const loginUserStore = useLoginUserStore()

@@ -13,7 +13,18 @@
         </div>
       </div>
       <a-space>
-        <a-select v-model:value="modelType" :options="modelTypeOptions" style="width: 180px" />
+        <a-select v-model:value="modelType" style="width: 220px">
+          <a-select-option
+            v-for="opt in modelTypeOptions"
+            :key="opt.value || 'auto'"
+            :value="opt.value"
+            :disabled="opt.disabled"
+          >
+            <a-tooltip :title="opt.title">
+              <span>{{ opt.label }}</span>
+            </a-tooltip>
+          </a-select-option>
+        </a-select>
         <a-select v-model:value="agentMode" :options="agentModeOptions" style="width: 150px" />
         <a-button @click="openDetailModal">详情</a-button>
         <a-button :loading="deploying" type="primary" @click="doDeploy">部署</a-button>
@@ -398,6 +409,7 @@ import {
 } from '@/api/appVersionController'
 import { listAppChatHistoryByPage } from '@/api/chatHistoryController'
 import { useLoginUserStore } from '@/stores/loginUser'
+import { useAiModelOptions } from '@/composables/useAiModelOptions'
 import {
   CheckCircleOutlined,
   EditOutlined,
@@ -494,20 +506,14 @@ const detailPublished = computed({
 })
 const modelType = ref(typeof route.query.modelType === 'string' ? route.query.modelType : '')
 const agentMode = ref(route.query.agent === '1' || route.query.agent === 'true' ? '1' : '0')
-const modelTypeOptions = [
-  { value: '', label: '自动选择模型' },
-  { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
-  { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
-  { value: 'gpt-5.5', label: 'GPT 5.5' },
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-]
+const { modelTypeOptions, loadAiModels } = useAiModelOptions()
 const agentModeOptions = [
   { value: '0', label: '传统生成' },
   { value: '1', label: 'Agent 工作流' },
 ]
-const modelTypeLabelMap = Object.fromEntries(
-  modelTypeOptions.map((option) => [option.value, option.label]),
-) as Record<string, string>
+const modelTypeLabelMap = computed<Record<string, string>>(() =>
+  Object.fromEntries(modelTypeOptions.value.map((option) => [option.value, option.label])),
+)
 const codeGenTypeLabelMap: Record<string, string> = {
   [CodeGenTypeEnum.HTML]: 'HTML 模式',
   [CodeGenTypeEnum.MULTI_FILE]: '多文件模式',
@@ -524,7 +530,7 @@ const currentCodeGenTypeLabel = computed(() => {
 })
 const currentModelTypeLabel = computed(() => {
   const currentModelType = selectedVersion.value?.modelType || modelType.value
-  return `模型：${modelTypeLabelMap[currentModelType] || currentModelType || '自动选择'}`
+  return `模型：${modelTypeLabelMap.value[currentModelType] || currentModelType || '自动选择'}`
 })
 const autoStartPrompt = computed(() => {
   if (route.query.autoStart !== '1') return ''
@@ -1414,6 +1420,7 @@ onMounted(async () => {
     },
   })
   initLayoutWidth()
+  await loadAiModels()
   await fetchAppInfo()
   if (!appInfo.value) return
   if (autoStartPrompt.value && isOwnApp.value) {
