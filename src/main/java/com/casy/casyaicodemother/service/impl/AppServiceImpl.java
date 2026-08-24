@@ -38,6 +38,7 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -242,7 +243,24 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         return toAppVOPage(appPage, pageNum, pageSize, loginUser);
     }
 
+    /*
+      T(类名)：用于调用静态方法，生成缓存 key
+      #参数名：用于引用方法参数
+      condition：设置缓存条件，只有前 10 页才会被缓存
+
+      缓存注解的工作原理，执行流程如下:
+        1. 方法执行前：Spring 根据 key 表达式生成缓存键
+        2. 缓存检查：检查 Redis 中是否存在该键对应的缓存数据
+        3. 缓存命中：如果存在且未过期，直接返回缓存数据，不执行方法
+        4. 缓存未命中：如果不存在，执行方法获取结果，并将结果存储到 Redis 中
+        5. 返回结果：返回方法执行结果
+     */
     @Override
+    @Cacheable(
+            value = "good_app_page",
+            key = "T(com.casy.casyaicodemother.util.CacheKeyUtils).generateKey(#appQueryRequest)",
+            condition = "#appQueryRequest.pageNum <= 10"
+    )
     public Page<AppVO> listGoodAppVOByPage(AppQueryRequest appQueryRequest) {
         ThrowUtils.throwIf(appQueryRequest == null, ErrorCode.PARAMS_ERROR);
         int pageNum = appQueryRequest.getPageNum();

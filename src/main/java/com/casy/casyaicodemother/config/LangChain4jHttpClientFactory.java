@@ -36,6 +36,14 @@ import java.util.concurrent.atomic.AtomicReference;
  * <h2>为什么只建一个 HttpClient</h2>
  * ChatModel 是 prototype，每次 {@code build()} 都会调到这里。JDK HttpClient 本身线程安全，
  * 共用一个实例即可并发打多路 SSE，不必每个模型再 new 一套连接池。
+ *
+ *
+ * 总的来说JdkHttpClient就是返回字节流，不转json为字符串防止出问题，并统一超时配置，并且JdkHttpClient是单例的，多个模型之间的配置是统一的
+ *
+ * 补两点：
+ *
+ * 不转 JSON 为字符串：是绕开 Spring RestClient + Jackson「把 JSON 对象当 String 抽」那条路径，按原始字节/文本读，避免反序列化报错。
+ * 单例的是底层 HttpClient：各模型仍可各自建 ChatModel（prototype），但共用同一个 JDK 客户端和同一套超时（langchain4j.http-client）。模型自己的 baseUrl、apiKey、modelName 等仍各自配置，不共用。
  */
 @Component
 @RequiredArgsConstructor
