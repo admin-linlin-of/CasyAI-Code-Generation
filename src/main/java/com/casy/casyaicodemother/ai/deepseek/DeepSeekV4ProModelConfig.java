@@ -8,10 +8,12 @@ import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Scope;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -21,6 +23,7 @@ import java.util.Map;
 public class DeepSeekV4ProModelConfig {
 
     @Bean("deepSeekV4ProChatModel")
+    @Scope("prototype")
     ChatModel deepSeekV4ProChatModel(DeepSeekV4ProModelProperties g, LangChain4jHttpClientFactory httpClientFactory) {
         boolean thinking = !Boolean.FALSE.equals(g.getThinkingEnabled());
         return OpenAiChatModel.builder()
@@ -40,6 +43,7 @@ public class DeepSeekV4ProModelConfig {
     }
 
     @Bean("deepSeekV4ProStreamingChatModel")
+    @Scope("prototype")
     StreamingChatModel deepSeekV4ProStreamingChatModel(DeepSeekV4ProModelProperties g, LangChain4jHttpClientFactory httpClientFactory) {
         boolean thinking = !Boolean.FALSE.equals(g.getThinkingEnabled());
         return OpenAiStreamingChatModel.builder()
@@ -67,8 +71,8 @@ public class DeepSeekV4ProModelConfig {
     /** 注册 DeepSeek V4 Pro 模型策略 */
     @Bean
     ModelProvider deepSeekV4ProModelProvider(
-            @Qualifier("deepSeekV4ProChatModel") ChatModel chatModel,
-            @Qualifier("deepSeekV4ProStreamingChatModel") StreamingChatModel streamingChatModel) {
+            @Qualifier("deepSeekV4ProChatModel") ObjectProvider<ChatModel> chatModel,
+            @Qualifier("deepSeekV4ProStreamingChatModel") ObjectProvider<StreamingChatModel> streamingChatModel) {
         return new DefaultModelProvider(ModelTypeEnum.DEEPSEEKPRO, chatModel, streamingChatModel);
     }
 }

@@ -9,15 +9,20 @@ import com.casy.casyaicodemother.langgraph4j.state.WorkflowContext;
 import reactor.core.publisher.FluxSink;
 
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.LockSupport;
 
 /**
  * 工作流对话推送器。
  * <p>
  * 聊天接口走 {@code Flux<String>} SSE：每个节点跑完后要把进度立刻推到前端，
- * 而 langgraph 节点是静态方法，拿不到 FluxSink。这里用线程安全的静态引用把 sink 挂上，
- * 节点和主循环都能 {@link #emit(String)} / {@link #emitChunked(String)}。
+ * 而 langgraph 节点是静态方法，拿不到 FluxSink。这里按 appId（测试场景用虚拟线程 id）
+ * 把 sink 挂上，节点和主循环都能 {@link #emit(String)} / {@link #emitChunked(String)}。
+ * </p>
+ * <p>
+ * 两个应用同时生成时必须隔离 sink：全局单槽会把后绑定的请求盖掉先绑定的，
+ * 先开的那路步骤卡住、SSE 丢包，{@code SimpleTextStreamHandler} 攒到的 AI 回复也不全。
+ * 代码生成节点的 ping 跑在 Reactor 线程，不能只靠 ThreadLocal，必须带 appId 查找。
  * </p>
  * <p>
  * 一次性 {@code sink.next(整段文字)} 时，Tomcat/Spring MVC 容易把小包攒到工作流结束才刷出，
@@ -27,43 +32,66 @@ import java.util.concurrent.locks.LockSupport;
  */
 public final class WorkflowChatEmitter {
 
-    /** 当前这一轮工作流绑定的 sink；并发两轮时后一次会覆盖，业务上同一用户同时只跑一轮 */
-    private static final AtomicReference<FluxSink<String>> SINK = new AtomicReference<>();
+    /** appId（或测试用 threadId）→ 该轮工作流的 SSE sink */
+    private static final ConcurrentHashMap<Object, FluxSink<String>> SINKS = new ConcurrentHashMap<>();
+
+    /**
+     * 当前虚拟线程绑定的 key。主循环 {@link #emit(String)} 走这里；
+     * Reactor 线程上的 ping 必须走 {@link #emitPing(Long)}。
+     */
+    private static final ThreadLocal<Object> CURRENT_KEY = new ThreadLocal<>();
 
     private WorkflowChatEmitter() {
     }
 
     /**
-     * 工作流虚拟线程开始时绑定 sink，之后节点里就能推文本。
+     * 工作流虚拟线程开始时绑定 sink。有真实 appId 时按应用隔离，否则用当前线程 id。
+     */
+    public static void bind(FluxSink<String> sink, Long appId) {
+        Object key = resolveKey(appId);
+        CURRENT_KEY.set(key);
+        SINKS.put(key, sink);
+    }
+
+    /**
+     * 兼容旧调用：无 appId 时按当前虚拟线程隔离。
      */
     public static void bind(FluxSink<String> sink) {
-        SINK.set(sink);
+        bind(sink, null);
     }
 
     /**
      * 工作流结束（成功/失败/取消）必须解开，避免旧 sink 被下一轮误用。
+     * 必须在绑定它的那条虚拟线程上调用。
      */
     public static void unbind() {
-        SINK.set(null);
+        Object key = CURRENT_KEY.get();
+        if (key != null) {
+            SINKS.remove(key);
+            CURRENT_KEY.remove();
+        }
     }
 
     /**
      * 立刻推一小段（心跳点、短提示）。不切包、不延迟。
      */
     public static void emit(String text) {
-        FluxSink<String> sink = SINK.get();
-        if (sink == null || sink.isCancelled() || StrUtil.isBlank(text)) {
-            return;
-        }
-        sink.next(text);
+        emitTo(sinkOf(CURRENT_KEY.get()), text);
+    }
+
+    public static void emit(Long appId, String text) {
+        emitTo(sinkOf(resolveKey(appId)), text);
     }
 
     public static void emitPing() {
-        FluxSink<String> sink = SINK.get();
-        if (sink == null || sink.isCancelled()) {
-            return;
-        }
-        sink.next("{\"t\":\"ping\"}");
+        emitPingTo(sinkOf(CURRENT_KEY.get()));
+    }
+
+    /**
+     * 代码流 ping 在 Reactor 线程，必须按 appId 找 sink，不能靠 ThreadLocal。
+     */
+    public static void emitPing(Long appId) {
+        emitPingTo(sinkOf(resolveKey(appId)));
     }
 
     /**
@@ -71,7 +99,46 @@ public final class WorkflowChatEmitter {
      * 前端 AiMarkdownMessage 再按帧打字，合起来就是打字机效果。
      */
     public static void emitChunked(String text) {
-        FluxSink<String> sink = SINK.get();
+        emitChunkedTo(sinkOf(CURRENT_KEY.get()), text);
+    }
+
+    public static void emitChunked(Long appId, String text) {
+        emitChunkedTo(sinkOf(resolveKey(appId)), text);
+    }
+
+    /**
+     * 有真实 appId 用 appId；否则优先当前线程已绑定的 key，再退化为 threadId。
+     */
+    private static Object resolveKey(Long appId) {
+        if (appId != null && appId > 0) {
+            return appId;
+        }
+        Object local = CURRENT_KEY.get();
+        if (local != null) {
+            return local;
+        }
+        return Thread.currentThread().threadId();
+    }
+
+    private static FluxSink<String> sinkOf(Object key) {
+        return key == null ? null : SINKS.get(key);
+    }
+
+    private static void emitTo(FluxSink<String> sink, String text) {
+        if (sink == null || sink.isCancelled() || StrUtil.isBlank(text)) {
+            return;
+        }
+        sink.next(text);
+    }
+
+    private static void emitPingTo(FluxSink<String> sink) {
+        if (sink == null || sink.isCancelled()) {
+            return;
+        }
+        sink.next("{\"t\":\"ping\"}");
+    }
+
+    private static void emitChunkedTo(FluxSink<String> sink, String text) {
         if (sink == null || sink.isCancelled() || StrUtil.isBlank(text)) {
             return;
         }
@@ -104,7 +171,7 @@ public final class WorkflowChatEmitter {
                     sb.append("- 已有代码：`").append(ctx.getExistingCodeDir()).append("`\n");
                 }
             }
-            case "图片计划" -> appendPlan(sb, ctx.getImageCollectionPlan());
+            case "图片计划", "图片收集" -> appendPlan(sb, ctx.getImageCollectionPlan());
             case "内容图片收集" -> appendImages(sb, ctx.getContentImages());
             case "插画图片收集" -> appendImages(sb, ctx.getIllustrations());
             case "架构图生成" -> appendImages(sb, ctx.getDiagrams());

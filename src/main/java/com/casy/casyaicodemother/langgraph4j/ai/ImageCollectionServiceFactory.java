@@ -13,14 +13,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Scope;
 
 @Slf4j
 @Configuration
 public class ImageCollectionServiceFactory {
-
-    @Resource
-    @Qualifier("deepSeekV4FlashChatModel")
-    private ChatModel chatModel;
 
     @Resource
     private ImageSearchTool imageSearchTool;
@@ -34,11 +31,10 @@ public class ImageCollectionServiceFactory {
     @Resource
     private LogoGeneratorTool logoGeneratorTool;
 
-    /**
-     * 创建图片收集 AI 服务
-     */
     @Bean
-    public ImageCollectionService createImageCollectionService() {
+    @Scope("prototype")
+    public ImageCollectionService createImageCollectionService(
+            @Qualifier("deepSeekV4FlashChatModel") ChatModel chatModel) {
         return AiServices.builder(ImageCollectionService.class)
                 .chatModel(chatModel)
                 .chatRequestTransformer(request -> request.toBuilder()

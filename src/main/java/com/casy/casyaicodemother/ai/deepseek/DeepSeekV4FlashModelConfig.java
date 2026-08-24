@@ -8,10 +8,12 @@ import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Scope;
 import org.springframework.util.StringUtils;
 
 import java.util.HashMap;
@@ -28,7 +30,9 @@ import java.util.Map;
 })
 public class DeepSeekV4FlashModelConfig {
 
+    /** 每次调用新建实例。OpenAiChatModel.chat() 内部 HTTP execute 是阻塞的，单例会把并发请求排成串行。 */
     @Bean("deepSeekV4FlashChatModel")
+    @Scope("prototype")
     ChatModel deepSeekV4FlashChatModel(DeepSeekFlashChatModelProperties g, LangChain4jHttpClientFactory httpClientFactory) {
         boolean thinking = Boolean.TRUE.equals(g.getThinkingEnabled());
         return OpenAiChatModel.builder()
@@ -48,6 +52,7 @@ public class DeepSeekV4FlashModelConfig {
     }
 
     @Bean("deepSeekV4FlashStreamingChatModel")
+    @Scope("prototype")
     StreamingChatModel deepSeekV4FlashStreamingChatModel(
             DeepSeekFlashStreamingChatModelProperties s,
             DeepSeekFlashChatModelProperties chat,
@@ -79,10 +84,14 @@ public class DeepSeekV4FlashModelConfig {
                 .build();
     }
 
+    /**
+     * 策略本身单例即可。模型是 prototype，通过 ObjectProvider 在 {@link DefaultModelProvider#getChatModel()} 时才创建，
+     * 这样每个 app 的 AiServices、每次图片规划/质检都能拿到独立模型，不会把并发请求挤进同一次同步 execute。
+     */
     @Bean
     ModelProvider deepSeekV4FlashModelProvider(
-            @Qualifier("deepSeekV4FlashChatModel") ChatModel chatModel,
-            @Qualifier("deepSeekV4FlashStreamingChatModel") StreamingChatModel streamingChatModel) {
+            @Qualifier("deepSeekV4FlashChatModel") ObjectProvider<ChatModel> chatModel,
+            @Qualifier("deepSeekV4FlashStreamingChatModel") ObjectProvider<StreamingChatModel> streamingChatModel) {
         return new DefaultModelProvider(ModelTypeEnum.DEEPSEEKFLASH, chatModel, streamingChatModel);
     }
 

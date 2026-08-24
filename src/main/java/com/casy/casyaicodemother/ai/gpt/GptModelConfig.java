@@ -8,16 +8,19 @@ import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Scope;
 
 @Configuration
 @EnableConfigurationProperties(GptModelProperties.class)
 public class GptModelConfig {
 
     @Bean("gptChatModel")
+    @Scope("prototype")
     ChatModel gptChatModel(GptModelProperties g, LangChain4jHttpClientFactory httpClientFactory) {
         return OpenAiChatModel.builder()
                 .httpClientBuilder(httpClientFactory.jdkHttpClientBuilder())
@@ -34,6 +37,7 @@ public class GptModelConfig {
     }
 
     @Bean("gptStreamingChatModel")
+    @Scope("prototype")
     StreamingChatModel gptStreamingChatModel(GptModelProperties g, LangChain4jHttpClientFactory httpClientFactory) {
         return OpenAiStreamingChatModel.builder()
                 .httpClientBuilder(httpClientFactory.jdkHttpClientBuilder())
@@ -52,8 +56,8 @@ public class GptModelConfig {
     /** 注册 GPT 模型策略，参见 {@link com.casy.casyaicodemother.ai.deepseek.DeepSeekV4FlashModelConfig} */
     @Bean
     ModelProvider gptModelProvider(
-            @Qualifier("gptChatModel") ChatModel chatModel,
-            @Qualifier("gptStreamingChatModel") StreamingChatModel streamingChatModel) {
+            @Qualifier("gptChatModel") ObjectProvider<ChatModel> chatModel,
+            @Qualifier("gptStreamingChatModel") ObjectProvider<StreamingChatModel> streamingChatModel) {
         return new DefaultModelProvider(ModelTypeEnum.GPT, chatModel, streamingChatModel);
     }
 }

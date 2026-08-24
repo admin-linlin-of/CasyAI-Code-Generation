@@ -55,7 +55,7 @@ public class CodeGeneratorNode {
                     userMessage, generationType, generationModel, appId, userMessageId, specifiedVersionDir);
             // 代码流本身不进对话（避免把 HTML 源码刷到左侧）。先提示「正在生成」，
             // 再每 1.6s 推一个点，避免长节点期间 SSE 完全静默。
-            WorkflowChatEmitter.emitChunked(Boolean.TRUE.equals(context.getEditMode())
+            WorkflowChatEmitter.emitChunked(appId, Boolean.TRUE.equals(context.getEditMode())
                     ? "\n正在按你的要求修改已有网站…\n"
                     : "\n代码生成中，模型正在输出…\n");
             java.util.concurrent.atomic.AtomicLong lastBeat = new java.util.concurrent.atomic.AtomicLong(System.currentTimeMillis());
@@ -64,7 +64,8 @@ public class CodeGeneratorNode {
                         long now = System.currentTimeMillis();
                         if (now - lastBeat.get() >= 1600) {
                             lastBeat.set(now);
-                            WorkflowChatEmitter.emitPing();
+                            // ping 在 Reactor 线程，必须带 appId，不能靠 ThreadLocal
+                            WorkflowChatEmitter.emitPing(appId);
                         }
                     })
                     .blockLast(Duration.ofMinutes(10));

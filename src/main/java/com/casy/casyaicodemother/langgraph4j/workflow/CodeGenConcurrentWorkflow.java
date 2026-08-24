@@ -219,7 +219,8 @@ public class CodeGenConcurrentWorkflow {
             Thread.startVirtualThread(() -> {
                 // DevTools 下虚拟线程要带上加载 WorkflowContext 的 ClassLoader，否则 state 反序列化会 ClassCast
                 Thread.currentThread().setContextClassLoader(WorkflowContext.class.getClassLoader());
-                WorkflowChatEmitter.bind(sink);
+                // 按 appId 绑 SSE，两个应用同时生成时互不抢 sink
+                WorkflowChatEmitter.bind(sink, appId);
                 try {
                     CompiledGraph<MessagesState<String>> workflow = createWorkflow();
                     WorkflowContext initialContext = buildInitialContext(
