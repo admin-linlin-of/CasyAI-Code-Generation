@@ -76,6 +76,27 @@ public class WorkflowContext implements Serializable {
      */
     private String versionDir;
     /**
+     * 是否走「修改已有网站」短路径。
+     * <p>
+     * true：磁盘上已有该应用的代码，本轮按增量修改，默认跳过图片并发收集、不重选生成类型。
+     * false：首次生成，走完整素材收集 + 整站生成。
+     * 由 {@code EditModeDetectNode} 在 app_prepare 之后写入。
+     */
+    private Boolean editMode;
+    /**
+     * 修改模式下用户是否明确要求换图/补图。为 true 时即使 editMode 也走图片收集分支。
+     */
+    private Boolean needNewImages;
+    /**
+     * 修改模式读取用的已有代码绝对路径（最新一版落盘目录）。
+     * 只用于拼文件清单和提示词，不覆盖 {@link #versionDir}，避免把新版本写进旧目录。
+     */
+    private String existingCodeDir;
+    /**
+     * 已有代码的相对路径清单（截断后），塞进修改提示词，让模型先定向读文件再改。
+     */
+    private String existingFileSummary;
+    /**
      * 生成的代码目录
      */
     private String generatedCodeDir;

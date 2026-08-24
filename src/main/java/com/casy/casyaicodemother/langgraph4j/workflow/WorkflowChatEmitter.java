@@ -95,6 +95,15 @@ public final class WorkflowChatEmitter {
         sb.append("\n**步骤 ").append(stepNo).append(" · ").append(step).append("**\n");
         switch (step) {
             case "创建应用", "加载应用" -> sb.append("- 应用 ID：").append(ctx.getAppId()).append('\n');
+            case "识别生成模式" -> {
+                sb.append("- 模式：").append(Boolean.TRUE.equals(ctx.getEditMode()) ? "修改已有网站" : "首次生成").append('\n');
+                if (Boolean.TRUE.equals(ctx.getNeedNewImages())) {
+                    sb.append("- 本轮需要补充图片素材\n");
+                }
+                if (StrUtil.isNotBlank(ctx.getExistingCodeDir())) {
+                    sb.append("- 已有代码：`").append(ctx.getExistingCodeDir()).append("`\n");
+                }
+            }
             case "图片计划" -> appendPlan(sb, ctx.getImageCollectionPlan());
             case "内容图片收集" -> appendImages(sb, ctx.getContentImages());
             case "插画图片收集" -> appendImages(sb, ctx.getIllustrations());

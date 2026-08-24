@@ -30,13 +30,21 @@ import static org.bsc.langgraph4j.action.AsyncEdgeAction.edge_async;
 public class CodeGenConcurrentWorkflow {
 
     /**
-     * 创建并发工作流
+     * 创建并发工作流。
+     * <p>
+     * 同一张图两条路径，入口仍是 {@code chatToGenCode}：
+     * <ul>
+     *   <li>首次生成：app_prepare → 识别模式 → 图片计划/四路收集 → 提示词增强 → 类型/模型路由 → 生成 → 质检 → 构建 → 预览</li>
+     *   <li>修改已有站：app_prepare → 识别模式 → 跳过搜图（用户要换图除外）→ 提示词增强（增量修改说明）→ 锁类型只选模型 → 生成 → 质检 → 构建 → 预览</li>
+     * </ul>
      */
     public CompiledGraph<MessagesState<String>> createWorkflow() {
         try {
             return new MessagesStateGraph<String>()
                     // 添加节点：对齐首页发起会话，无 appId 先创建应用
                     .addNode("app_prepare", AppPrepareNode.create())
+                    // 看磁盘上有没有上一版代码，决定走首次生成还是修改短路径
+                    .addNode("edit_mode_detect", EditModeDetectNode.create())
                     .addNode("image_plan", ImagePlanNode.create())
                     .addNode("prompt_enhancer", PromptEnhancerNode.create())
                     .addNode("code_gen_type_router", CodeGenTypeRouterNode.create())
@@ -57,9 +65,15 @@ public class CodeGenConcurrentWorkflow {
                     .addNode("logo_collector", LogoCollectorNode.create())
                     .addNode("image_aggregator", ImageAggregatorNode.create())
 
-                    // 添加边：先准备应用，再进入图片计划
                     .addEdge(START, "app_prepare")
-                    .addEdge("app_prepare", "image_plan")
+                    .addEdge("app_prepare", "edit_mode_detect")
+                    // 有现成代码且用户没要换图 → edit，直接增强提示词；否则走搜图
+                    .addConditionalEdges("edit_mode_detect",
+                            edge_async(this::routeAfterModeDetect),
+                            Map.of(
+                                    "create", "image_plan",
+                                    "edit", "prompt_enhancer"
+                            ))
 
                     // 并发分支：从计划节点分发到各个收集节点
                     .addEdge("image_plan", "content_image_collector")
@@ -73,9 +87,14 @@ public class CodeGenConcurrentWorkflow {
                     .addEdge("diagram_collector", "image_aggregator")
                     .addEdge("logo_collector", "image_aggregator")
 
-                    // 继续串行流程
                     .addEdge("image_aggregator", "prompt_enhancer")
-                    .addEdge("prompt_enhancer", "code_gen_type_router")
+                    // 修改模式类型已锁在应用上，跳过类型路由，只走模型路由
+                    .addConditionalEdges("prompt_enhancer",
+                            edge_async(this::routeAfterPromptEnhance),
+                            Map.of(
+                                    "route_type", "code_gen_type_router",
+                                    "skip_type", "code_gen_model_router"
+                            ))
                     .addEdge("code_gen_type_router", "code_gen_model_router")
                     .addEdge("code_gen_model_router", "save_chat_history")
                     .addEdge("save_chat_history", "code_generator")
@@ -340,6 +359,31 @@ public class CodeGenConcurrentWorkflow {
     }
 
 
+
+    /**
+     * 应用准备之后：有现成代码且用户没要求换图 → 修改短路径；否则首次生成（含修改但要补图）。
+     */
+    private String routeAfterModeDetect(MessagesState<String> state) {
+        WorkflowContext context = WorkflowContext.getContext(state);
+        if (Boolean.TRUE.equals(context.getEditMode()) && !Boolean.TRUE.equals(context.getNeedNewImages())) {
+            log.info("工作流走修改短路径，跳过图片收集，appId={}", context.getAppId());
+            return "edit";
+        }
+        log.info("工作流走首次生成/补图路径，editMode={}, needNewImages={}, appId={}",
+                context.getEditMode(), context.getNeedNewImages(), context.getAppId());
+        return "create";
+    }
+
+    /**
+     * 修改模式生成类型已写在应用上，不必再跑类型路由。
+     */
+    private String routeAfterPromptEnhance(MessagesState<String> state) {
+        WorkflowContext context = WorkflowContext.getContext(state);
+        if (Boolean.TRUE.equals(context.getEditMode()) && context.getGenerationType() != null) {
+            return "skip_type";
+        }
+        return "route_type";
+    }
 
     /**
      * 路由函数：根据质检结果决定下一步

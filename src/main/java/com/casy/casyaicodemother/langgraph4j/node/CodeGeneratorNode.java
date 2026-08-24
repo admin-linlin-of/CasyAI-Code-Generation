@@ -44,7 +44,9 @@ public class CodeGeneratorNode {
             Long userMessageId = context.getUserMessageId();
 
             AiCodeGeneratorFacade codeGeneratorFacade = SpringContextUtil.getBean(AiCodeGeneratorFacade.class);
-            log.info("开始生成代码，类型: {} ({})，appId: {}", generationType.getValue(), generationType.getText(), appId);
+            log.info("开始{}代码，类型: {} ({})，appId: {}",
+                    Boolean.TRUE.equals(context.getEditMode()) ? "修改" : "生成",
+                    generationType.getValue(), generationType.getText(), appId);
 
             // 多次对话可指定已有版本目录；为空则 HTML/MULTI_FILE 在 processCodeStream 内 createCodeVersion，
             // VUE_PROJECT 由 CodeGenContextHolder 首次写文件时创建，不能写死 v1。
@@ -53,7 +55,9 @@ public class CodeGeneratorNode {
                     userMessage, generationType, generationModel, appId, userMessageId, specifiedVersionDir);
             // 代码流本身不进对话（避免把 HTML 源码刷到左侧）。先提示「正在生成」，
             // 再每 1.6s 推一个点，避免长节点期间 SSE 完全静默。
-            WorkflowChatEmitter.emitChunked("\n代码生成中，模型正在输出…\n");
+            WorkflowChatEmitter.emitChunked(Boolean.TRUE.equals(context.getEditMode())
+                    ? "\n正在按你的要求修改已有网站…\n"
+                    : "\n代码生成中，模型正在输出…\n");
             java.util.concurrent.atomic.AtomicLong lastBeat = new java.util.concurrent.atomic.AtomicLong(System.currentTimeMillis());
             codeStream
                     .doOnNext(chunk -> {
