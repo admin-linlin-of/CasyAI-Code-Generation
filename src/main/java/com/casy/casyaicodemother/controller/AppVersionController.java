@@ -17,7 +17,9 @@ import com.casy.casyaicodemother.service.UserService;
 import com.mybatisflex.core.paginate.Page;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.annotation.Resource;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
@@ -58,6 +60,27 @@ public class AppVersionController {
         Long appId = Long.valueOf(StrUtil.isNotBlank(request.getAppId()) ? request.getAppId() : "0");
         tAppVersionService.buildVersion(appId, request.getCodeDir(), loginUser);
         return ResultUtils.success(true);
+    }
+
+    /**
+     * SSE 订阅 Vue 版本打包进度（传统模式替代轮询）。
+     * <p>
+     * 一次请求完成「触发异步 build + 推送状态」：
+     * <ul>
+     *   <li>{@code event=build_status, data={"status":"building|success|failed"}}</li>
+     *   <li>终态后 {@code event=done} 并关闭连接</li>
+     * </ul>
+     *
+     * @param skipIfSuccess 工作流传 true：若工作流节点已同步 build，直接返回当前状态、不重复打包
+     */
+    @Operation(summary = "SSE 订阅 Vue 版本打包状态（触发打包并推送 building/success/failed）")
+    @SaCheckLogin
+    @GetMapping(value = "/build/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter buildVersionStream(@RequestParam Long appId,
+                                         @RequestParam String codeDir,
+                                         @RequestParam(required = false, defaultValue = "false") Boolean skipIfSuccess) {
+        User loginUser = userService.getLoginUser();
+        return tAppVersionService.buildVersionStream(appId, codeDir, loginUser, Boolean.TRUE.equals(skipIfSuccess));
     }
 
     @Operation(summary = "管理员分页查询应用代码版本")

@@ -11,6 +11,7 @@ import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.model.entity.User;
 import com.casy.casyaicodemother.model.enums.StreamMessageTypeEnum;
 import com.casy.casyaicodemother.service.ChatHistoryService;
+import com.casy.casyaicodemother.util.ChatThinkingCodec;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -48,12 +49,13 @@ public class JsonMessageStreamHandler {
                                User loginUser) {
         // 收集数据用于生成后端记忆格式
         StringBuilder chatHistoryStringBuilder = new StringBuilder();
+        StringBuilder thinkingHistoryBuilder = new StringBuilder();
         // 用于跟踪已经见过的工具ID，判断是否是第一次调用
         Set<String> seenToolIds = new HashSet<>();
         return originFlux
                 // 1 个 chunk → List<String>（1~2 条）→ 每条各发 1 次 SSE
                 .concatMap(chunk -> Flux.fromIterable(
-                        handleJsonMessageChunks(chunk, chatHistoryStringBuilder, seenToolIds)))
+                        handleJsonMessageChunks(chunk, chatHistoryStringBuilder, thinkingHistoryBuilder, seenToolIds)))
                 .filter(StrUtil::isNotEmpty)// 过滤空串
                 // 流结束后统一收尾：空响应写入错误并推送到 SSE，避免 doOnComplete 抛异常导致前端收不到错误
                 .concatWith(Mono.defer(() -> {
@@ -64,7 +66,9 @@ public class JsonMessageStreamHandler {
                         // 作为普通文本 chunk 推送，前端 onmessage 可实时展示
                         return Mono.just("生成失败：" + detail);
                     }
-                    chatHistoryService.saveAiMessage(appId, userMessageId, aiResponse, loginUser);
+                    chatHistoryService.saveAiMessage(appId, userMessageId,
+                            ChatThinkingCodec.composeForSave(thinkingHistoryBuilder.toString(), aiResponse),
+                            loginUser);
                     return Mono.empty();
                 }))
                 // 流中途异常时持久化错误，Controller 层 onErrorResume 负责推送给前端
@@ -79,7 +83,10 @@ public class JsonMessageStreamHandler {
      * @param seenToolIds              已经出现过的工具
      * @return ai消息
      */
-    private List<String> handleJsonMessageChunks(String chunk, StringBuilder chatHistoryStringBuilder, Set<String> seenToolIds) {
+    private List<String> handleJsonMessageChunks(String chunk,
+                                               StringBuilder chatHistoryStringBuilder,
+                                               StringBuilder thinkingHistoryBuilder,
+                                               Set<String> seenToolIds) {
         // 解析 JSON
         StreamMessage streamMessage = JSONUtil.toBean(chunk, StreamMessage.class);
         StreamMessageTypeEnum typeEnum = StreamMessageTypeEnum.getEnumByValue(streamMessage.getType());
@@ -97,7 +104,7 @@ public class JsonMessageStreamHandler {
             case AI_THINKING -> {
                 AiThinkingMessage aiThinkingMessage = JSONUtil.toBean(chunk, AiThinkingMessage.class);
                 String data = aiThinkingMessage.getData();
-                // 深度思考仅实时推前端展示，不写入对话历史
+                thinkingHistoryBuilder.append(data);
                 yield List.of(JSONUtil.toJsonStr(Map.of("c", data, "t", "thinking")));
             }
             case TOOL_REQUEST -> {

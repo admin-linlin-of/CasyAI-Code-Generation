@@ -19,6 +19,7 @@ import com.casy.casyaicodemother.model.vo.chathistory.ChatHistoryVO;
 import com.casy.casyaicodemother.model.vo.user.UserVO;
 import com.casy.casyaicodemother.service.ChatHistoryService;
 import com.casy.casyaicodemother.service.UserService;
+import com.casy.casyaicodemother.util.ChatThinkingCodec;
 import com.casy.casyaicodemother.util.NumberUtils;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
@@ -69,11 +70,11 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
                 if (MessageTypeEnum.USER.getValue().equals(chatHistory.getMessageType())) {
                     chatMemory.add(UserMessage.from(chatHistory.getMessage()));
                 } else if (MessageTypeEnum.AI.getValue().equals(chatHistory.getMessageType())){
-                    // 空 AI 文本不能写入记忆，否则重试请求会带上无效 assistant
-                    if (StrUtil.isBlank(chatHistory.getMessage())) {
+                    String messageForMemory = ChatThinkingCodec.stripThinking(chatHistory.getMessage());
+                    if (StrUtil.isBlank(messageForMemory)) {
                         continue;
                     }
-                    chatMemory.add(AiMessage.from(chatHistory.getMessage()));
+                    chatMemory.add(AiMessage.from(messageForMemory));
                 }
                 loadedCount++;
             }

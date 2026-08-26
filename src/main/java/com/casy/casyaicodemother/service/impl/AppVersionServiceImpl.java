@@ -5,6 +5,7 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.constant.UserConstant;
+import com.casy.casyaicodemother.core.builder.VueBuildStatusNotifier;
 import com.casy.casyaicodemother.core.builder.VueProjectBuilder;
 import com.casy.casyaicodemother.core.vue.VueProjectVersionManager;
 import com.casy.casyaicodemother.exception.BusinessException;
@@ -29,6 +30,7 @@ import jakarta.annotation.Resource;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.File;
 import java.util.List;
@@ -56,6 +58,10 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
 
     @Resource
     private VueProjectBuilder vueProjectBuilder;
+
+    /** 打包状态 SSE 广播，由 updateBuildStatus 触发 publish */
+    @Resource
+    private VueBuildStatusNotifier vueBuildStatusNotifier;
 
     /**
      * 创建代码版本记录，并在磁盘上初始化版本目录。
@@ -198,6 +204,9 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
             update.setBuildError(truncateBuildError(buildError));
         }
         updateById(update);
+        // 持久化成功后广播 SSE，订阅 /tAppVersion/build/stream 的前端可即时收到状态变更
+        vueBuildStatusNotifier.publish(appId, codeDir, buildStatus,
+                buildStatus == VersionBuildStatusEnum.FAILED ? update.getBuildError() : null);
     }
 
     /** 与线上 varchar(500) 对齐，并去掉 ANSI 色码 */
@@ -260,6 +269,50 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         File projectDir = new File(projectPath);
         ThrowUtils.throwIf(!projectDir.exists(), ErrorCode.NOT_FOUND_ERROR, "版本代码目录不存在");
         vueProjectBuilder.buildProjectAsync(projectPath);
+    }
+
+    @Override
+    public SseEmitter buildVersionStream(Long appId, String codeDir, User loginUser, boolean skipIfSuccess) {
+        // ── 与 buildVersion 相同的参数校验与鉴权 ──
+        ThrowUtils.throwIf(appId == null || StrUtil.isBlank(codeDir), ErrorCode.PARAMS_ERROR);
+        App app = appService.getAppById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        checkAppVersionViewAuth(app, loginUser);
+        ThrowUtils.throwIf(CodeGenTypeEnum.VUE_PROJECT != CodeGenTypeEnum.getEnumByValue(app.getCodeGenType()),
+                ErrorCode.OPERATION_ERROR, "仅 Vue 项目支持打包");
+        AppVersion appVersion = getByAppIdAndCodeDir(appId, codeDir);
+        ThrowUtils.throwIf(appVersion == null, ErrorCode.NOT_FOUND_ERROR, "版本不存在");
+        String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator
+                + vueProjectVersionManager.getVersionDirName(appId, codeDir);
+        File projectDir = new File(projectPath);
+        ThrowUtils.throwIf(!projectDir.exists(), ErrorCode.NOT_FOUND_ERROR, "版本代码目录不存在");
+
+        // 先注册 SSE，再决定是「只订阅」还是「触发新 build」，避免 build 极快完成时丢事件
+        SseEmitter emitter = vueBuildStatusNotifier.subscribe(appId, codeDir);
+        VersionBuildStatusEnum current = VersionBuildStatusEnum.getEnumByValue(appVersion.getBuildStatus());
+
+        // 工作流模式：ProjectBuilderNode 已同步 build 成功，无需二次 npm build
+        if (current == VersionBuildStatusEnum.SUCCESS && skipIfSuccess) {
+            Thread.startVirtualThread(() ->
+                    vueBuildStatusNotifier.sendImmediate(emitter, VersionBuildStatusEnum.SUCCESS, null));
+            return emitter;
+        }
+        // 工作流模式 build 已失败：直接推送 failed，由前端展示 buildError
+        if (current == VersionBuildStatusEnum.FAILED && skipIfSuccess) {
+            Thread.startVirtualThread(() ->
+                    vueBuildStatusNotifier.sendImmediate(emitter, VersionBuildStatusEnum.FAILED, appVersion.getBuildError()));
+            return emitter;
+        }
+        // 已有 build 在进行（如多 Tab 或重连）：只订阅，不重复触发 buildProjectAsync
+        if (current == VersionBuildStatusEnum.BUILDING) {
+            Thread.startVirtualThread(() ->
+                    vueBuildStatusNotifier.sendImmediate(emitter, VersionBuildStatusEnum.BUILDING, null));
+            return emitter;
+        }
+
+        // pending / failed（传统模式）/ success（传统模式需重建）：异步触发 npm install + build
+        vueProjectBuilder.buildProjectAsync(projectPath);
+        return emitter;
     }
 
     private void checkAppVersionViewAuth(App app, User loginUser) {
