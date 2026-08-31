@@ -3,6 +3,7 @@ package com.casy.casyaicodemother.langgraph4j.workflow;
 import cn.hutool.json.JSONUtil;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
+import com.casy.casyaicodemother.exception.GuardrailBlockedException;
 import com.casy.casyaicodemother.langgraph4j.model.QualityResult;
 import com.casy.casyaicodemother.langgraph4j.node.*;
 import com.casy.casyaicodemother.langgraph4j.node.concurrent.*;
@@ -258,7 +259,9 @@ public class CodeGenConcurrentWorkflow {
                     sink.complete();
                 } catch (Exception e) {
                     log.error("工作流执行失败: {}", e.getMessage(), e);
-                    WorkflowChatEmitter.emitChunked("\n工作流执行失败：" + e.getMessage() + "\n");
+                    if (!GuardrailBlockedException.isGuardrail(e)) {
+                        WorkflowChatEmitter.emitChunked("\n工作流执行失败：" + e.getMessage() + "\n");
+                    }
                     sink.error(e);
                 } finally {
                     WorkflowChatEmitter.unbind();

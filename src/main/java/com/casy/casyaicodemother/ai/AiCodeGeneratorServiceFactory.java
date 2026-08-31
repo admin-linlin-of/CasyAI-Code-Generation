@@ -4,6 +4,7 @@ import com.casy.casyaicodemother.ai.tools.RepairingToolExecutor;
 import com.casy.casyaicodemother.ai.tools.ToolManager;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
+import com.casy.casyaicodemother.guardrail.PromptSafetyInputGuardrail;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import com.casy.casyaicodemother.service.ChatHistoryService;
@@ -11,11 +12,11 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
-import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.tool.AiServiceTool;
 import dev.langchain4j.service.tool.ToolErrorHandlerResult;
 import dev.langchain4j.service.tool.ToolService;
+import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -23,11 +24,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -120,10 +117,11 @@ public class AiCodeGeneratorServiceFactory {
                             // TODO 注意‍‍！这里最好做一些调整，防止 AI 一直无限循环调用工具，包括：
                             // TODO 调大对话记忆的容量，否则 AI 会中途断片儿，忘记已经生成了哪些文件
                             // TODO 尝试换其他的 AI 大模型、优化提示词
+                            .inputGuardrails(new PromptSafetyInputGuardrail())  // 添加输入护轨
                             .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name())).build();
             // HTML 和多文件生成使用默认模型
             case HTML, MULTI_FILE ->
-                    AiServices.builder(AiCodeGeneratorService.class).chatModel(provider.getChatModel()).streamingChatModel(provider.getStreamingChatModel()).chatMemory(chatMemory).build();
+                    AiServices.builder(AiCodeGeneratorService.class).chatModel(provider.getChatModel()).streamingChatModel(provider.getStreamingChatModel()).inputGuardrails(new PromptSafetyInputGuardrail()).chatMemory(chatMemory).build();
             default ->
                     throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型: " + codeGenType.getValue());
         };

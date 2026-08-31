@@ -268,3 +268,44 @@ VALUES
      '如果用户需求涉及 Vue 项目、多个页面、多个组件、路由、状态管理、复杂文件结构、持续迭代已有项目、长上下文理解，选择 CLAUDESONNET。')
 ON CONFLICT (model_code) DO NOTHING;
 
+CREATE TABLE IF NOT EXISTS t_guardrail_event
+(
+    id             BIGINT       NOT NULL PRIMARY KEY,
+    user_id        BIGINT       NULL,
+    user_account   VARCHAR(256) NULL,
+    user_name      VARCHAR(256) NULL,
+    app_id         BIGINT       NULL,
+    request_uri    VARCHAR(512) NULL,
+    request_ip     VARCHAR(64)  NULL,
+    input_content  TEXT         NULL,
+    rule_type      VARCHAR(64)  NOT NULL,
+    rule_detail    VARCHAR(512) NULL,
+    fail_message   VARCHAR(512) NULL,
+    handle_result  VARCHAR(64)  NOT NULL,
+    create_time    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_delete      SMALLINT     NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_guardrail_event_user_id ON t_guardrail_event (user_id);
+CREATE INDEX IF NOT EXISTS idx_guardrail_event_rule_type ON t_guardrail_event (rule_type);
+CREATE INDEX IF NOT EXISTS idx_guardrail_event_create_time ON t_guardrail_event (create_time);
+
+CREATE TRIGGER update_guardrail_event_modtime
+    BEFORE UPDATE ON t_guardrail_event
+    FOR EACH ROW
+EXECUTE FUNCTION update_modified_column();
+
+COMMENT ON TABLE t_guardrail_event IS '输入护轨拦截事件';
+COMMENT ON COLUMN t_guardrail_event.user_id IS '用户ID';
+COMMENT ON COLUMN t_guardrail_event.user_account IS '用户账号';
+COMMENT ON COLUMN t_guardrail_event.user_name IS '用户昵称';
+COMMENT ON COLUMN t_guardrail_event.app_id IS '应用ID';
+COMMENT ON COLUMN t_guardrail_event.request_uri IS '请求路径';
+COMMENT ON COLUMN t_guardrail_event.request_ip IS '客户端IP';
+COMMENT ON COLUMN t_guardrail_event.input_content IS '被拦截的输入内容';
+COMMENT ON COLUMN t_guardrail_event.rule_type IS '触发规则：LENGTH/EMPTY/SENSITIVE_WORD/INJECTION';
+COMMENT ON COLUMN t_guardrail_event.rule_detail IS '命中的敏感词或正则';
+COMMENT ON COLUMN t_guardrail_event.fail_message IS '返回给前端的错误信息';
+COMMENT ON COLUMN t_guardrail_event.handle_result IS '处理结果：SSE_PUSHED/JSON_RETURNED';
+

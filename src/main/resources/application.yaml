@@ -68,6 +68,9 @@ langchain4j:
     connect-timeout: 30s
     read-timeout: 600s
   ttl: 3600           # 你 LangChain 自定义字段，保留
+  open-ai:
+    chat-model:
+      max-retries: 3
 
 
 mybatis-flex:

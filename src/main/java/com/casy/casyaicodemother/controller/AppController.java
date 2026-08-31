@@ -13,16 +13,20 @@ import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.constant.UserConstant;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
+import com.casy.casyaicodemother.exception.GuardrailBlockedException;
 import com.casy.casyaicodemother.exception.ThrowUtils;
 import com.casy.casyaicodemother.model.dto.app.*;
 import com.casy.casyaicodemother.model.entity.App;
 import com.casy.casyaicodemother.model.entity.User;
 import com.casy.casyaicodemother.model.vo.app.AppCodeFileListVO;
 import com.casy.casyaicodemother.model.vo.app.AppVO;
+import com.casy.casyaicodemother.ratelimiter.annotation.RateLimit;
+import com.casy.casyaicodemother.ratelimiter.enums.RateLimitType;
 import com.casy.casyaicodemother.service.*;
 import com.mybatisflex.core.paginate.Page;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -60,6 +64,9 @@ public class AppController {
 
     @Resource
     private AiModelCatalogService aiModelCatalogService;
+
+    @Resource
+    private GuardrailEventService guardrailEventService;
 
     /**
      * 创建应用（须填写 initPrompt）
@@ -224,11 +231,13 @@ public class AppController {
      */
     @Operation(summary = "应用聊天生成代码")
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @RateLimit(limitType = RateLimitType.USER, rate = 2, rateInterval = 60, message = "AI 对话请求过于频繁，请稍后再试")
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
                                                        @RequestParam String message,
                                                        @RequestParam String modelType,
                                                        @RequestParam(required = false) String versionDir,
-                                                       @RequestParam(required = false, defaultValue = "false") Boolean agent) {
+                                                       @RequestParam(required = false, defaultValue = "false") Boolean agent,
+                                                       HttpServletRequest request) {
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID无效");
         ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
         User loginUser = userService.getLoginUser();
@@ -260,6 +269,15 @@ public class AppController {
                 ))
                 // SSE 接口不能走 GlobalExceptionHandler（返回 JSON），需在流内将异常转为 SSE 数据推送给前端
                 .onErrorResume(e -> {
+                    if (GuardrailBlockedException.isGuardrail(e)) {
+                        guardrailEventService.record(e, loginUser, appId, request, "SSE_PUSHED");
+                        String msg = GuardrailBlockedException.userMessage(e);
+                        String jsonData = JSONUtil.toJsonStr(ResultUtils.error(ErrorCode.GUARDRAIL_BLOCKED, msg));
+                        return Flux.just(
+                                ServerSentEvent.<String>builder().event("business-error").data(jsonData).build(),
+                                ServerSentEvent.<String>builder().event("done").data("{}").build()
+                        );
+                    }
                     log.error("chatToGenCode stream error", e);
                     String msg = StrUtil.blankToDefault(e.getMessage(), "未知错误");
                     if (!msg.startsWith("生成失败")) {

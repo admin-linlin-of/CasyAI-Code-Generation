@@ -6,14 +6,15 @@ import cn.dev33.satoken.exception.NotRoleException;
 import cn.hutool.json.JSONUtil;
 import com.casy.casyaicodemother.common.BaseResponse;
 import com.casy.casyaicodemother.common.ResultUtils;
+import com.casy.casyaicodemother.service.GuardrailEventService;
+import dev.langchain4j.guardrail.InputGuardrailException;
 import io.swagger.v3.oas.annotations.Hidden;
+import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -36,6 +37,19 @@ import java.nio.charset.StandardCharsets;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @Resource
+    private GuardrailEventService guardrailEventService;
+
+    @ExceptionHandler({InputGuardrailException.class, GuardrailBlockedException.class})
+    public Object guardrailExceptionHandler(RuntimeException e,
+                                            HttpServletRequest request,
+                                            HttpServletResponse response) {
+        String message = GuardrailBlockedException.userMessage(e);
+        String handleResult = isSseRequest(request, response) ? "SSE_PUSHED" : "JSON_RETURNED";
+        guardrailEventService.record(e, null, null, request, handleResult);
+        return respond(ErrorCode.GUARDRAIL_BLOCKED.getCode(), message, request, response);
+    }
 
     @ExceptionHandler(BusinessException.class)
     public Object businessExceptionHandler(BusinessException e,
@@ -102,31 +116,34 @@ public class GlobalExceptionHandler {
      * Spring 会按 JSON 找转换器，但响应头已是 text/event-stream，于是抛
      * HttpMessageNotWritableException。
      * <p>
-     * 事件名 workflow_error 与前端 EventSource.addEventListener('workflow_error') 对齐。
+     * 事件名 business-error 与前端 EventSource.addEventListener('business-error') 对齐，
+     * 避免占用浏览器默认 error 事件。随后发 done 结束流。
      * 末尾必须有空行（\n\n），否则浏览器会一直等这条 SSE 结束。
      * <p>
      * 流已经向前端推过数据后 response.isCommitted() == true，不能再改 Content-Type / 状态码，
-     * 只能往已打开的输出流里追加一段 SSE；返回 null 表示 body 已自行写完。
-     * 尚未提交时，用 ResponseEntity 让 Spring 按 text/event-stream 写出。
+     * 只能往已打开的输出流里追加一段 SSE。尚未提交时补齐 SSE 响应头再写出。
+     * 返回 null 表示 body 已自行写完。
      */
     private Object respond(int code, String message, HttpServletRequest request, HttpServletResponse response) {
         BaseResponse<?> body = ResultUtils.error(code, message);
         if (!isSseRequest(request, response)) {
             return body;
         }
-        String sse = "event: workflow_error\ndata: " + JSONUtil.toJsonStr(body) + "\n\n";
-        if (response.isCommitted()) {
-            try {
-                response.getOutputStream().write(sse.getBytes(StandardCharsets.UTF_8));
-                response.flushBuffer();
-            } catch (IOException ex) {
-                log.warn("SSE 错误事件写入失败", ex);
+        String sse = "event: business-error\ndata: " + JSONUtil.toJsonStr(body) + "\n\n"
+                + "event: done\ndata: {}\n\n";
+        try {
+            if (!response.isCommitted()) {
+                response.setContentType(MediaType.TEXT_EVENT_STREAM_VALUE);
+                response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+                response.setHeader(HttpHeaders.CACHE_CONTROL, "no-cache");
+                response.setHeader(HttpHeaders.CONNECTION, "keep-alive");
             }
-            return null;
+            response.getOutputStream().write(sse.getBytes(StandardCharsets.UTF_8));
+            response.flushBuffer();
+        } catch (IOException ex) {
+            log.warn("SSE 错误事件写入失败", ex);
         }
-        return ResponseEntity.status(HttpStatus.OK)
-                .contentType(MediaType.TEXT_EVENT_STREAM)
-                .body(sse);
+        return null;
     }
 
     /**
