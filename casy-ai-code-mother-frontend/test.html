@@ -234,12 +234,12 @@
       }, 1000);
     });
 
-    eventSource.addEventListener('workflow_error', function(event) {
+    eventSource.addEventListener('business-error', function(event) {
       const data = JSON.parse(event.data);
-      addEvent('❌ 工作流错误', data, new Date().toLocaleTimeString());
+      addEvent('❌ 业务错误', data, new Date().toLocaleTimeString());
       setTimeout(() => {
         eventSource.close();
-        updateStatus('工作流失败，连接已关闭', 'disconnected');
+        updateStatus('业务失败，连接已关闭', 'disconnected');
       }, 1000);
     });
 

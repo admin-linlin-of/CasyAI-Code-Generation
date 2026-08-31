@@ -52,14 +52,29 @@
         </li>
       </ul>
       <div class="ai-md__bar" />
-      <div class="ai-md__elapsed">已等待 {{ elapsed }} 秒</div>
+      <div class="ai-md__elapsed">已运行 {{ formatElapsed(elapsed) }}</div>
+    </div>
+
+    <div v-else-if="waitingClassic" class="ai-md__think ai-md__think--classic">
+      <div class="ai-md__think-head">
+        <span class="ai-md__orb" />
+        <span class="ai-md__shimmer">{{ currentHint }}</span>
+      </div>
+      <div class="ai-md__bar" />
+      <div class="ai-md__elapsed">已运行 {{ formatElapsed(elapsed) }}</div>
     </div>
 
     <template v-else>
-      <div v-if="live" class="ai-md__live">
-        <span class="ai-md__spinner" />
-        <span :key="currentHint" class="ai-md__live-text">{{ currentHint }}</span>
-        <span class="ai-md__elapsed">{{ elapsed }}s</span>
+      <div v-if="live" class="ai-md__status">
+        <div class="ai-md__status-row">
+          <span class="ai-md__orb ai-md__orb--sm" />
+          <span :key="currentHint" class="ai-md__status-text">{{ currentHint }}</span>
+          <span class="ai-md__status-time">{{ formatElapsed(elapsed) }}</span>
+        </div>
+        <div v-if="toolActionCount > 0" class="ai-md__status-meta">
+          已完成 {{ toolActionCount }} 次工具调用
+        </div>
+        <div class="ai-md__bar" />
       </div>
       <div v-if="html" class="ai-md__body" v-html="html" />
       <span v-if="typing" class="ai-md__cursor" />
@@ -88,6 +103,38 @@ const props = defineProps<{
 
 const stripHeartbeat = (raw: string) =>
   raw.replace(/\n(?:\.)+/g, '').replace(/(代码生成中[^\n]*)\.+/g, '$1')
+
+const TOOL_TAG_LABELS: Record<string, string> = {
+  fileWrite: '写入',
+  fileModify: '修改',
+  fileRead: '读取',
+  fileDelete: '删除',
+  dirRead: '浏览目录',
+}
+
+/** 从流式原文解析最近一次工具调用，用于动态状态文案 */
+const parseLatestToolHint = (raw: string): string | null => {
+  const tagRe = /<(fileWrite|fileModify|fileRead|fileDelete|dirRead)>([\s\S]*?)<\/\1>/gi
+  let last: string | null = null
+  let m: RegExpExecArray | null
+  while ((m = tagRe.exec(raw)) !== null) {
+    const label = TOOL_TAG_LABELS[m[1]] ?? '处理'
+    const pathMatch = m[2].match(/[`']([^`']+)[`']/)
+    last = pathMatch?.[1] ? `正在${label} ${pathMatch[1]}` : `正在${label}文件`
+  }
+  const toolRe = /\[Tool\]\s*(?:write|modify|read|delete)\s*(?:file|dir)?\s*[`']([^`']+)[`']/gi
+  while ((m = toolRe.exec(raw)) !== null) {
+    last = `正在处理 ${m[1]}`
+  }
+  return last
+}
+
+const formatElapsed = (sec: number) => {
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  if (m <= 0) return `${s} 秒`
+  return `${m}:${String(s).padStart(2, '0')}`
+}
 
 const parseWorkflow = (raw: string): WfView | null => {
   if (!raw.includes('代码生成工作流') && !/\*\*步骤\s+\d+/.test(raw)) return null
@@ -119,7 +166,12 @@ let rafId = 0
 let lastTs = 0
 
 const live = computed(() => !!props.streaming)
-const waiting = computed(() => live.value && cleanContent.value.trim().length === 0)
+/** 假步骤进度仅 Agent 工作流在尚无 Markdown 输出时使用 */
+const waiting = computed(() => !!props.agent && live.value && cleanContent.value.trim().length === 0)
+/** 传统模式首包未到：展示计时卡片，不显示工作流假步骤 */
+const waitingClassic = computed(
+  () => !props.agent && live.value && cleanContent.value.trim().length === 0,
+)
 const visibleRaw = computed(() => cleanContent.value.slice(0, displayLen.value))
 const workflow = computed(() => parseWorkflow(visibleRaw.value))
 const wfSteps = computed(() => workflow.value?.steps ?? [])
@@ -136,14 +188,21 @@ let elapsedTimer = 0
 const opened = ref<Record<string, boolean>>({})
 
 const visualStep = computed(() => Math.min(WAITING_STEPS.length - 1, Math.floor(elapsed.value / 4)))
+const latestToolHint = computed(() => parseLatestToolHint(cleanContent.value))
+const toolActionCount = computed(() => {
+  const m = cleanContent.value.match(/<(?:fileWrite|fileModify|fileRead|fileDelete|dirRead)>/g)
+  return m?.length ?? 0
+})
 const currentHint = computed(() => {
   const last = workflow.value?.steps.at(-1)?.title
   if (last) return `正在${last}`
+  if (latestToolHint.value) return latestToolHint.value
   if (cleanContent.value.includes('代码生成中')) return '正在生成代码'
+  if (!props.agent) return '模型正在生成项目代码…'
   return WAITING_HINTS[hintIndex.value] ?? WAITING_HINTS[0]
 })
 const workflowSub = computed(() => {
-  if (live.value) return `已等待 ${elapsed.value} 秒`
+  if (live.value) return `已运行 ${formatElapsed(elapsed.value)}`
   return '已完成'
 })
 
@@ -173,9 +232,11 @@ watch(
     hintIndex.value = 0
     elapsed.value = 0
     opened.value = {}
-    hintTimer = window.setInterval(() => {
-      hintIndex.value = (hintIndex.value + 1) % WAITING_HINTS.length
-    }, 1800)
+    if (props.agent) {
+      hintTimer = window.setInterval(() => {
+        hintIndex.value = (hintIndex.value + 1) % WAITING_HINTS.length
+      }, 1800)
+    }
     elapsedTimer = window.setInterval(() => {
       elapsed.value += 1
     }, 1000)
@@ -267,6 +328,56 @@ onBeforeUnmount(() => {
 .ai-md__think {
   min-width: 220px;
   padding: 2px 0 4px;
+}
+
+.ai-md__think--classic {
+  min-width: 200px;
+}
+
+.ai-md__status {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(22, 119, 255, 0.08), rgba(22, 119, 255, 0.03));
+  border: 1px solid rgba(22, 119, 255, 0.22);
+}
+
+.ai-md__status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-md__status-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1677ff;
+  animation: ai-hint-fade 0.35s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-md__status-time {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: #595959;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-md__status-meta {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #8c8c8c;
+}
+
+.ai-md__orb--sm {
+  width: 14px;
+  height: 14px;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.12);
 }
 
 .ai-md__think-head {
@@ -362,6 +473,7 @@ onBeforeUnmount(() => {
 .ai-md__elapsed {
   font-size: 12px;
   color: #8c8c8c;
+  font-variant-numeric: tabular-nums;
 }
 
 .ai-md__spinner {

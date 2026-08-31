@@ -134,7 +134,7 @@
               {{ visualEditorEnabled ? '退出编辑' : '可视化编辑' }}
             </a-button>
             <a-button html-type="button" :loading="generating" type="primary" @click="sendMessage">
-              {{ generating ? '生成中' : '发送' }}
+              {{ generating ? `生成中 ${formatDuration(genElapsed)}` : '发送' }}
             </a-button>
           </div>
         </div>
@@ -150,8 +150,13 @@
       <section class="preview-panel">
         <div class="preview-panel__head">
           <a-segmented v-model:value="rightViewMode" :options="rightViewOptions" size="small" />
+          <div v-if="panelShowActivity" class="preview-panel__activity">
+            <span class="preview-panel__activity-dot" />
+            <span class="preview-panel__activity-text">{{ panelActivityText }}</span>
+            <span class="preview-panel__activity-time">{{ formatDuration(panelElapsedSec) }}</span>
+          </div>
           <a
-            v-if="rightViewMode === 'preview' && previewUrl && showPreview"
+            v-if="rightViewMode === 'preview' && previewUrl && showPreview && rightPanelMode === 'preview-ready'"
             :href="previewUrl"
             rel="noreferrer"
             target="_blank"
@@ -159,23 +164,59 @@
             新窗口打开
           </a>
         </div>
-        <div class="preview-panel__body">
-          <!-- 代码模式：Monaco + 文件树 -->
+        <div class="preview-panel__body" :class="{ 'preview-panel__body--busy': panelShowActivity }">
+          <!-- 生成中：尚无文件 / 预览 Tab -->
+          <div v-if="rightPanelMode === 'generating'" class="preview-generating preview-generating--panel">
+            <span class="preview-generating__orb" />
+            <div class="preview-generating__title">{{ genPreviewHint }}</div>
+            <div class="preview-generating__elapsed">已运行 {{ formatDuration(genElapsed) }}</div>
+            <div v-if="projectFilePaths.length" class="preview-generating__stat">
+              已写入 {{ projectFilePaths.length }} 个文件
+            </div>
+            <ul v-if="recentProjectFiles.length" class="preview-generating__files">
+              <li v-for="path in recentProjectFiles" :key="path">{{ path }}</li>
+            </ul>
+            <div class="preview-generating__bar" />
+            <div class="preview-generating__tip">
+              {{ rightViewMode === 'code' ? '文件写入后将在此实时展示' : '生成完成后将自动进入预览' }}
+            </div>
+          </div>
+
+          <!-- 生成中 + 已有文件：代码 Tab 实时编辑区 -->
+          <div v-else-if="rightPanelMode === 'code-live'" class="code-live-wrap">
+            <CodeWorkspace
+              :mode="isVueProject ? 'tree' : 'flat'"
+              :files="displayVirtualFiles"
+              :project-files="projectFiles"
+              :project-paths="projectFilePaths"
+              v-model:active-path="projectActivePath"
+              :generating="true"
+              :read-only="true"
+            />
+            <div class="code-live-wrap__footer">
+              <span class="preview-panel__activity-dot" />
+              <span>{{ genPreviewHint }}</span>
+              <span class="code-live-wrap__time">{{ formatDuration(genElapsed) }}</span>
+              <span v-if="projectFilePaths.length" class="code-live-wrap__count">
+                {{ projectFilePaths.length }} 个文件
+              </span>
+            </div>
+          </div>
+
+          <!-- 静态代码浏览 -->
           <CodeWorkspace
-            v-if="rightViewMode === 'code' && hasCodeContent"
+            v-else-if="rightPanelMode === 'code'"
             :mode="isVueProject ? 'tree' : 'flat'"
             :files="displayVirtualFiles"
             :project-files="projectFiles"
             :project-paths="projectFilePaths"
             v-model:active-path="projectActivePath"
-            :generating="generating"
-            :read-only="generating"
+            :generating="false"
+            :read-only="false"
           />
-          <!-- Vue 项目：后端异步 npm build，轮询 dist 就绪后再加载 iframe -->
-          <div
-            v-else-if="rightViewMode === 'preview' && showPreview && selectedVersionBuildFailed"
-            class="preview-building"
-          >
+
+          <!-- 打包失败 -->
+          <div v-else-if="rightPanelMode === 'build-failed'" class="preview-building">
             <a-empty>
               <template #description>
                 <div class="build-fail-title">项目打包失败</div>
@@ -188,28 +229,40 @@
               >
             </a-empty>
           </div>
+
+          <!-- 打包中 / 预览准备中 -->
           <div
-            v-else-if="rightViewMode === 'preview' && showPreview && previewBuilding"
+            v-else-if="rightPanelMode === 'building' || rightPanelMode === 'waiting-preview'"
             class="preview-building"
           >
-            <a-spin tip="项目打包中，请稍候..." />
+            <div class="preview-generating">
+              <span class="preview-generating__orb" />
+              <div class="preview-generating__title">
+                {{ rightPanelMode === 'building' ? '项目打包中' : '预览准备中' }}
+              </div>
+              <div class="preview-generating__elapsed">已等待 {{ formatDuration(buildElapsed) }}</div>
+              <div class="preview-generating__bar" />
+              <div class="preview-generating__tip">npm install + build 完成后自动加载预览</div>
+            </div>
           </div>
+
+          <!-- 预览 iframe -->
           <iframe
-            v-else-if="rightViewMode === 'preview' && showPreview && selectedVersionPreviewReady"
+            v-else-if="rightPanelMode === 'preview-ready'"
             ref="previewIframeRef"
             :key="`${previewUrl}-${previewRefreshKey}`"
             :src="previewUrl"
             title="app-preview"
+            class="preview-panel__iframe"
             @load="handlePreviewIframeLoad"
           />
-          <a-empty
-            v-else
-            :description="
-              generating
-                ? '代码生成中，可切换到代码查看实时输出'
-                : '发送消息开始生成，或切换到预览查看效果'
-            "
-          />
+
+          <!-- 空闲 -->
+          <div v-else class="workbench-idle">
+            <div class="workbench-idle__orb" />
+            <div class="workbench-idle__title">代码与预览</div>
+            <div class="workbench-idle__desc">发送消息开始生成，生成过程中此处会显示进度与实时代码</div>
+          </div>
         </div>
       </section>
 
@@ -386,7 +439,7 @@
  *
  * startStream（SSE）
  *   → onmessage             累积 aiMsg.content / thinking；Vue 项目防抖刷新代码面板
- *   → done                  结束流 → loadVersions → [Vue] buildVersion → 轮询打包 → 预览
+ *   → done                  结束流 → loadVersions → [Vue] SSE 打包 → 预览
  *   → onerror               网络异常兜底
  *
  * 版本切换 selectVersion
@@ -406,8 +459,6 @@ import { deleteApp, deployApp, getAppVoById, updateApp } from '@/api/appControll
 import { uploadImage } from '@/api/fileController'
 import {
   getAppVersionsByAppId,
-  buildVersion,
-  retryBuild as retryBuildApi,
 } from '@/api/appVersionController'
 import { listAppChatHistoryByPage } from '@/api/chatHistoryController'
 import { useLoginUserStore } from '@/stores/loginUser'
@@ -486,6 +537,62 @@ const inputMessage = ref('')
 /** 输入框上方：粘贴待发的图片列表 */
 const pendingImages = ref<PendingImage[]>([])
 const generating = ref(false)
+const genElapsed = ref(0)
+let genElapsedTimer = 0
+const buildElapsed = ref(0)
+let buildElapsedTimer = 0
+
+const formatDuration = (sec: number) => {
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+const startGenTimer = () => {
+  genElapsed.value = 0
+  if (genElapsedTimer) clearInterval(genElapsedTimer)
+  genElapsedTimer = window.setInterval(() => {
+    genElapsed.value += 1
+  }, 1000)
+}
+
+const stopGenTimer = () => {
+  if (genElapsedTimer) {
+    clearInterval(genElapsedTimer)
+    genElapsedTimer = 0
+  }
+}
+
+const startBuildTimer = () => {
+  buildElapsed.value = 0
+  if (buildElapsedTimer) clearInterval(buildElapsedTimer)
+  buildElapsedTimer = window.setInterval(() => {
+    buildElapsed.value += 1
+  }, 1000)
+}
+
+const stopBuildTimer = () => {
+  if (buildElapsedTimer) {
+    clearInterval(buildElapsedTimer)
+    buildElapsedTimer = 0
+  }
+}
+
+/** 中间面板生成态文案：优先展示最近一条 AI 流式消息里的工具活动 */
+const genPreviewHint = computed(() => {
+  const streamingMsg = [...messages.value].reverse().find((m) => m.role === 'ai' && m.streaming)
+  const raw = streamingMsg?.content ?? ''
+  const toolMatch = raw.match(/<(fileWrite|fileModify|fileRead|fileDelete|dirRead)>([\s\S]*?)<\/\1>/gi)
+  if (toolMatch?.length) {
+    const last = toolMatch[toolMatch.length - 1]
+    const inner = last.match(/>([\s\S]*?)<\//)?.[1] ?? ''
+    const path = inner.match(/[`']([^`']+)[`']/)?.[1]
+    if (path) return `正在处理 ${path}`
+  }
+  if (streamingMsg?.thinking) return '模型深度思考中…'
+  if (isVueProject.value) return '模型正在调用工具生成 Vue 项目…'
+  return '模型正在生成代码…'
+})
 /** 部署 / 下载 / 应用编辑 */
 const deploying = ref(false)
 const downloading = ref(false)
@@ -758,61 +865,125 @@ const markVersionPreviewReady = (codeDir: string) => {
   previewRefreshKey.value++
 }
 
-/** 轮询版本 build_status，最长约 6 分钟，直到 success / failed */
-const pollVersionBuildStatus = async (codeDir: string) => {
-  for (let i = 0; i < 120; i++) {
-    const res = await getAppVersionsByAppId({ appid: appId.value })
-    const list = Array.isArray(res.data) ? res.data : []
-    versionList.value = list
-    const version = list.find((v) => v.codeDir === codeDir)
-    if (!version) return false
-    if (version.buildStatus === 'success') {
-      markVersionPreviewReady(codeDir)
-      return true
-    }
-    if (version.buildStatus === 'failed') {
-      // 优先展示后端写入的 npm 输出摘要
-      message.error(version.buildError?.trim() || '项目打包失败')
-      return false
-    }
-    await new Promise((r) => setTimeout(r, 3000))
+/**
+ * 构造打包 SSE 的完整 URL。
+ * 与 {@link buildSseUrl} 相同方式解析 baseURL，避免 Vite 代理下 Invalid URL。
+ *
+ * @param codeDir        版本目录，如 v2
+ * @param skipIfSuccess  工作流模式传 true：后端不再重复 npm build
+ */
+const buildVersionStreamUrl = (codeDir: string, skipIfSuccess = false) => {
+  const baseURL = request.defaults.baseURL || '/'
+  const normalizedBase = baseURL.endsWith('/') ? baseURL : `${baseURL}/`
+  const url = new URL('tAppVersion/build/stream', new URL(normalizedBase, window.location.origin))
+  url.searchParams.set('appId', String(appId.value))
+  url.searchParams.set('codeDir', codeDir)
+  if (skipIfSuccess) {
+    url.searchParams.set('skipIfSuccess', 'true')
   }
-  return false
+  return url
 }
 
-/** Vue 生成/重试打包后：等待 dist 就绪再允许 iframe 预览 */
-const waitForVuePreviewReady = async (codeDir?: string) => {
+/**
+ * 通过 EventSource 订阅打包状态，替代原先每 3 秒轮询 GET /tAppVersion/list/{appId}。
+ *
+ * 流程：
+ * 1. 建立 SSE → 后端 register SseEmitter 并按需触发 buildProjectAsync
+ * 2. 收到 build_status(building) → 更新版本列表 UI
+ * 3. 收到 build_status(success) → markVersionPreviewReady，resolve(true)
+ * 4. 收到 build_status(failed) → 展示 buildError，resolve(false)
+ * 5. 10 分钟无终态 → 兜底 resolve(false)（与后端 SseEmitter 超时一致）
+ *
+ * @returns Promise<boolean> true=dist 已就绪可预览
+ */
+const watchBuildStatusViaSse = (codeDir: string, skipIfSuccess = false) =>
+  new Promise<boolean>((resolve) => {
+    let settled = false
+    let buildEventSource: EventSource | null = new EventSource(
+      buildVersionStreamUrl(codeDir, skipIfSuccess).toString(),
+      { withCredentials: true },
+    )
+    /** 确保只 resolve 一次并关闭 EventSource */
+    const finish = (success: boolean, buildError?: string) => {
+      if (settled) return
+      settled = true
+      buildEventSource?.close()
+      buildEventSource = null
+      if (!success && buildError) {
+        message.error(buildError.trim() || '项目打包失败')
+      }
+      resolve(success)
+    }
+    /** 解析 event=build_status 的 JSON 载荷，同步更新 versionList 内存态 */
+    const handleStatus = (raw: string) => {
+      try {
+        const data = JSON.parse(raw) as { status?: string; buildError?: string }
+        if (data.status === 'building') {
+          const version = versionList.value.find((v) => v.codeDir === codeDir)
+          if (version) version.buildStatus = 'building'
+        }
+        if (data.status === 'success') {
+          markVersionPreviewReady(codeDir)
+          const version = versionList.value.find((v) => v.codeDir === codeDir)
+          if (version) {
+            version.buildStatus = 'success'
+            version.buildError = undefined
+          }
+          finish(true)
+        }
+        if (data.status === 'failed') {
+          const version = versionList.value.find((v) => v.codeDir === codeDir)
+          if (version) {
+            version.buildStatus = 'failed'
+            version.buildError = data.buildError
+          }
+          finish(false, data.buildError)
+        }
+      } catch {
+        finish(false)
+      }
+    }
+    buildEventSource.addEventListener('build_status', (event) => handleStatus(event.data))
+    // 网络断开或后端异常关闭连接
+    buildEventSource.onerror = () => finish(false)
+    // 与后端 VueBuildStatusNotifier.SSE_TIMEOUT_MS 对齐
+    window.setTimeout(() => finish(false), 10 * 60 * 1000)
+  })
+
+/**
+ * Vue 生成/重试打包后：等待 dist 就绪再允许 iframe 预览。
+ *
+ * @param skipIfSuccess Agent 工作流模式传 true（ProjectBuilderNode 已同步 build）
+ */
+const waitForVuePreviewReady = async (codeDir?: string, skipIfSuccess = false) => {
   const dir = codeDir || selectedVersionCodeDir.value
   if (!isVueProject.value || !dir) return
   previewBuilding.value = true
+  startBuildTimer()
   try {
-    const ready = await pollVersionBuildStatus(dir)
+    const ready = await watchBuildStatusViaSse(dir, skipIfSuccess)
     if (!ready && selectedVersion.value?.buildStatus !== 'failed') {
       message.warning('项目打包超时，请稍后刷新页面重试')
     }
   } finally {
     previewBuilding.value = false
+    stopBuildTimer()
   }
 }
 
-/** 版本打包失败后重新触发 /tAppVersion/build */
+/** 版本打包失败后重新触发打包（走 SSE，不再 POST /build + 轮询） */
 const retryBuild = async (codeDir?: string) => {
   const dir = codeDir || selectedVersionCodeDir.value
   if (!isVueProject.value || !dir || generating.value || retryingBuild.value) return
   retryingBuild.value = true
   try {
-    const res = await retryBuildApi({ appId: appId.value, codeDir: dir })
-    if (res.data.code !== 0) {
-      message.error(res.data.message || '重新打包失败')
-      return
-    }
     if (dir !== selectedVersionCodeDir.value) {
       selectedVersionCodeDir.value = dir
       buildPreviewUrl(dir)
     }
     rightViewMode.value = 'preview'
     showPreview.value = true
-    await waitForVuePreviewReady(dir)
+    await waitForVuePreviewReady(dir, false)
   } finally {
     retryingBuild.value = false
   }
@@ -897,6 +1068,57 @@ const hasCodeContent = computed(() => {
   return hasVirtualFileContent(displayVirtualFiles.value)
 })
 
+type RightPanelMode =
+  | 'generating'
+  | 'code-live'
+  | 'code'
+  | 'build-failed'
+  | 'building'
+  | 'waiting-preview'
+  | 'preview-ready'
+  | 'idle'
+
+const rightPanelMode = computed((): RightPanelMode => {
+  if (generating.value) {
+    if (rightViewMode.value === 'code' && hasCodeContent.value) return 'code-live'
+    return 'generating'
+  }
+  if (rightViewMode.value === 'code' && hasCodeContent.value) return 'code'
+  if (rightViewMode.value !== 'preview' || !showPreview.value) return 'idle'
+  if (selectedVersionBuildFailed.value) return 'build-failed'
+  if (previewBuilding.value) return 'building'
+  if (isVueProject.value && !selectedVersionPreviewReady.value) return 'waiting-preview'
+  if (selectedVersionPreviewReady.value && previewUrl.value) return 'preview-ready'
+  return 'idle'
+})
+
+const panelShowActivity = computed(() =>
+  ['generating', 'code-live', 'building', 'waiting-preview'].includes(rightPanelMode.value),
+)
+
+const panelActivityText = computed(() => {
+  switch (rightPanelMode.value) {
+    case 'generating':
+    case 'code-live':
+      return genPreviewHint.value
+    case 'building':
+      return '项目打包中'
+    case 'waiting-preview':
+      return '预览准备中'
+    default:
+      return ''
+  }
+})
+
+const panelElapsedSec = computed(() => {
+  if (rightPanelMode.value === 'building' || rightPanelMode.value === 'waiting-preview') {
+    return buildElapsed.value
+  }
+  return genElapsed.value
+})
+
+const recentProjectFiles = computed(() => projectFilePaths.value.slice(-6).reverse())
+
 const loadSavedCodeFiles = async () => {
   if (isVueProject.value) {
     if (!appId.value || !selectedVersionCodeDir.value || !staticBaseUrl.value) return
@@ -908,14 +1130,40 @@ const loadSavedCodeFiles = async () => {
   if (files.length) savedVirtualFiles.value = files
 }
 
+/** 从持久化 message 中拆出深度思考（<aiThinking> 标签） */
+const splitThinkingFromHistory = (raw: string) => {
+  const matched = raw.match(/^<aiThinking>([\s\S]*?)<\/aiThinking>\s*/i)
+  if (!matched) {
+    return { content: raw, thinking: undefined as string | undefined }
+  }
+  return {
+    content: raw.slice(matched[0].length),
+    thinking: matched[1]?.trim() || undefined,
+  }
+}
+
 /** ChatHistoryVO → 内存消息；streaming=false 供 AiMarkdownMessage 跳过打字机 */
-const toChatMessage = (item: API.ChatHistoryVO): ChatMessage => ({
-  id: item.id,
-  role: item.messageType === 'user' ? 'user' : 'ai',
-  content: item.message || '',
-  createTime: item.createTime,
-  streaming: false,
-})
+const toChatMessage = (item: API.ChatHistoryVO): ChatMessage => {
+  const raw = item.message || ''
+  if (item.messageType === 'user') {
+    return {
+      id: item.id,
+      role: 'user',
+      content: raw,
+      createTime: item.createTime,
+      streaming: false,
+    }
+  }
+  const { content, thinking } = splitThinkingFromHistory(raw)
+  return {
+    id: item.id,
+    role: 'ai',
+    content,
+    thinking,
+    createTime: item.createTime,
+    streaming: false,
+  }
+}
 
 /** 合并分页结果；prepend=true 时 prepend 到列表头部（加载更早消息） */
 const applyHistoryRecords = (records: API.ChatHistoryVO[], prepend: boolean) => {
@@ -1143,10 +1391,11 @@ const openDeployUrl = () => {
  *   - 深度思考：{"c":"片段","t":"thinking"}
  * 结束：自定义 SSE 事件 done
  *
- * Vue 项目 done 后额外：buildVersion → waitForVuePreviewReady → loadSavedCodeFiles
+ * Vue 项目 done 后额外：SSE 订阅打包状态 → loadSavedCodeFiles
  */
 const startStream = (messageText: string) => {
   generating.value = true
+  startGenTimer()
   showPreview.value = false
   rightViewMode.value = 'code'
   if (isVueProject.value) {
@@ -1203,11 +1452,29 @@ const startStream = (messageText: string) => {
    * 2. 成功：刷新版本 → [Vue] 触发打包 → 轮询 dist → 加载落盘文件 → 展示预览
    * 3. 失败（content 以「生成失败」开头）：仅滚到底部
    */
+  eventSource.addEventListener('business-error', (event: MessageEvent) => {
+    if (finished) return
+    finished = true
+    let errorMessage = '生成失败，请重试'
+    try {
+      const data = JSON.parse(event.data) as { message?: string }
+      if (data.message) errorMessage = data.message
+    } catch {}
+    aiMsg.content = '❌ ' + errorMessage
+    aiMsg.streaming = false
+    generating.value = false
+    stopGenTimer()
+    message.error(errorMessage)
+    closeEventSource()
+    scrollToBottom()
+  })
+
   eventSource.addEventListener('done', async () => {
     if (finished) return
     finished = true
     aiMsg.streaming = false
     generating.value = false
+    stopGenTimer()
     closeEventSource()
     // 错误信息已通过 onmessage 写入 aiMsg.content，跳过预览加载
     const isError = aiMsg.content.startsWith('生成失败')
@@ -1217,20 +1484,14 @@ const startStream = (messageText: string) => {
     }
     showPreview.value = true
     rightViewMode.value = 'preview'
-    await loadVersions(true)
-    // Vue 项目：代码生成完成后调用打包接口，再轮询打包状态
-    if (isVueProject.value && selectedVersionCodeDir.value) {
-      const buildRes = await buildVersion({
-        appId: appId.value,
-        codeDir: selectedVersionCodeDir.value,
-      })
-      if (buildRes.data.code !== 0) {
-        message.error(buildRes.data.message || '项目打包失败')
-        scrollToBottom()
-        return
-      }
+    if (isVueProject.value) {
+      startBuildTimer()
     }
-    await waitForVuePreviewReady(selectedVersionCodeDir.value)
+    await loadVersions(true)
+    // Vue：SSE 订阅打包；Agent 工作流 skipIfSuccess=true 避免 ProjectBuilderNode 已 build 后重复打包
+    if (isVueProject.value && selectedVersionCodeDir.value) {
+      await waitForVuePreviewReady(selectedVersionCodeDir.value, agentMode.value === '1')
+    }
     await loadSavedCodeFiles()
   })
 
@@ -1241,6 +1502,7 @@ const startStream = (messageText: string) => {
       finished = true
       aiMsg.streaming = false
       generating.value = false
+      stopGenTimer()
       if (!aiMsg.content.trim()) {
         aiMsg.content = '生成失败，请重试'
       }
@@ -1450,6 +1712,8 @@ onBeforeUnmount(() => {
   visualEditorController?.destroy()
   visualEditorController = null
   closeEventSource()
+  stopGenTimer()
+  stopBuildTimer()
   resetVisualEditor()
   clearPendingImages()
   stopResize()
@@ -1579,6 +1843,17 @@ onBeforeUnmount(() => {
 .message-item--streaming .message-item__content {
   border-color: rgba(22, 119, 255, 0.45);
   box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.12);
+  animation: message-stream-pulse 2s ease-in-out infinite;
+}
+
+@keyframes message-stream-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px rgba(22, 119, 255, 0.12);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.18);
+  }
 }
 
 .message-item__thinking {
@@ -1765,11 +2040,174 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--border-color);
 }
 
+.preview-panel__activity {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(22, 119, 255, 0.08);
+  border: 1px solid rgba(22, 119, 255, 0.18);
+}
+
+.preview-panel__activity-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #1677ff;
+  animation: panel-dot-pulse 1.2s ease-out infinite;
+}
+
+.preview-panel__activity-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1677ff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-panel__activity-time {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: #595959;
+  font-variant-numeric: tabular-nums;
+}
+
 .preview-panel__body {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.preview-panel__body--busy {
+  background: linear-gradient(180deg, rgba(22, 119, 255, 0.03), transparent 120px);
+}
+
+.preview-panel__iframe {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  min-height: 0;
+}
+
+.code-live-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.code-live-wrap__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid rgba(22, 119, 255, 0.15);
+  background: rgba(22, 119, 255, 0.06);
+  font-size: 12px;
+  color: #1677ff;
+}
+
+.code-live-wrap__time {
+  margin-left: auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #595959;
+}
+
+.code-live-wrap__count {
+  color: #8c8c8c;
+}
+
+.workbench-idle {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+}
+
+.workbench-idle__orb {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(22, 119, 255, 0.15), rgba(22, 119, 255, 0.05));
+  animation: workbench-idle-float 2.4s ease-in-out infinite;
+}
+
+.workbench-idle__title {
+  font-size: 15px;
+  font-weight: 650;
+  color: #434343;
+}
+
+.workbench-idle__desc {
+  max-width: 320px;
+  font-size: 13px;
+  color: #8c8c8c;
+  line-height: 1.6;
+}
+
+.preview-generating__files {
+  width: min(360px, 90%);
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  list-style: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(22, 119, 255, 0.12);
+  text-align: left;
+}
+
+.preview-generating__files li {
+  font-size: 12px;
+  color: #595959;
+  line-height: 1.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: file-row-in 0.35s ease;
+}
+
+@keyframes panel-dot-pulse {
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes workbench-idle-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes file-row-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .preview-building {
@@ -1779,6 +2217,87 @@ onBeforeUnmount(() => {
   height: 100%;
   min-height: 240px;
   padding: 16px;
+}
+
+.preview-generating {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+}
+
+.preview-generating--panel {
+  flex: 1;
+  min-height: 280px;
+}
+
+.preview-generating__orb {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #69b1ff, #1677ff, #95de64, #69b1ff);
+  animation: preview-orb-spin 1.2s linear infinite;
+  box-shadow: 0 0 0 4px rgba(22, 119, 255, 0.12);
+}
+
+.preview-generating__title {
+  font-size: 15px;
+  font-weight: 650;
+  color: #1677ff;
+}
+
+.preview-generating__elapsed {
+  font-size: 22px;
+  font-weight: 700;
+  color: #262626;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.preview-generating__stat {
+  font-size: 13px;
+  color: #595959;
+}
+
+.preview-generating__tip {
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+.preview-generating__bar {
+  width: min(280px, 80%);
+  height: 3px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: rgba(22, 119, 255, 0.12);
+}
+
+.preview-generating__bar::after {
+  content: '';
+  display: block;
+  width: 38%;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #69b1ff, #1677ff);
+  animation: preview-bar-slide 1.15s ease-in-out infinite;
+}
+
+@keyframes preview-orb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes preview-bar-slide {
+  0% {
+    transform: translateX(-20%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
 }
 
 .build-fail-title {
