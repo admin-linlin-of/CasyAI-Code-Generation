@@ -12,14 +12,15 @@ import org.springframework.context.annotation.Configuration;
 /**
  * AI代码生成类型路由服务工厂
  *
- * @author yupi
+ * @author casy
  */
 @Slf4j
 @Configuration
 public class AiCodeGenTypeRoutingServiceFactory {
 
+    /** 使用 routing-chat-model（便宜模型），避免类型/模型路由占用代码生成大模型额度 */
     @Resource
-    @Qualifier("openAiChatModel")
+    @Qualifier("routingChatModel")
     private ChatModel chatModel;
 
     /**
