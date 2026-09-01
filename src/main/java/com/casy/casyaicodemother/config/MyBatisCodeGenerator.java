@@ -26,8 +26,7 @@ public class MyBatisCodeGenerator {
         String username = String.valueOf(dataSourceConfig.get("username"));
         String password = String.valueOf(dataSourceConfig.get("password"));
         HikariDataSource dataSource = new HikariDataSource();
-        // 显式指定驱动，与 spring.datasource.url 中的 postgresql 一致，避免 Hikari 只凭 URL 推断时偶发不加载驱动。
-        dataSource.setDriverClassName("org.postgresql.Driver");
+        dataSource.setDriverClassName("com.mysql.cj.jdbc.Driver");
         dataSource.setJdbcUrl(url);
         dataSource.setUsername(username);
         dataSource.setPassword(password);
@@ -53,8 +52,6 @@ public class MyBatisCodeGenerator {
 
         // 设置表前缀和只生成哪些表，setGenerateTable 未配置时，生成所有表
         globalConfig.getStrategyConfig()
-                // PostgreSQL 里表挂在 schema 下；不设时 JDBC 元数据可能扫到别的对象/读不准主键。你库表建在 public 下，故指定 public。
-                .setGenerateSchema("public")
                 .setGenerateTable(TABLE_NAMES)
                 .setLogicDeleteColumn("isDelete");
 

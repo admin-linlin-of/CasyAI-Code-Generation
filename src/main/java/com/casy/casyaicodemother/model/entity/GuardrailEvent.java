@@ -24,7 +24,7 @@ import java.sql.Timestamp;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(value = "t_guardrail_event", schema = "public")
+@Table("t_guardrail_event")
 public class GuardrailEvent implements Serializable {
 
     @Serial

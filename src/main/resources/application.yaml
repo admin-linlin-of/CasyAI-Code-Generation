@@ -7,23 +7,20 @@ spring:
     active: local
   application:
     name: casy-ai-code-mother
-  # 聊天粘贴图片上传：单文件 ≤5MB
   servlet:
     multipart:
       max-file-size: 5MB
       max-request-size: 10MB
   mvc:
     async:
-      # 前端 SSE 最长等待；需不小于 langchain4j.http-client.read-timeout
       request-timeout: 600000
-  # redis
   data:
     redis:
       host: 47.95.204.8
       port: 16379
-      username: default   # ACL 用户名，Spring Boot 用 username 不是 user
+      username: default
       password: YourStrongPassword123!
-      database: 1         # Sa-Token 建议单独库，和业务 key 隔离
+      database: 1
       timeout: 10s
       lettuce:
         pool:
@@ -31,129 +28,55 @@ spring:
           max-wait: -1ms
           max-idle: 10
           min-idle: 0
-  # context.initializer.classes 在 Spring Boot 3.4+ 已失效，请用 META-INF/spring.factories 或 main 中 addInitializers
-  # 数据源配置
   datasource:
-    # 驱动类名（可省略，SpringBoot 自动识别）
-    driver-class-name: org.postgresql.Driver
-    # 连接URL 固定格式：jdbc:postgresql://IP:端口/数据库名
-    url: jdbc:postgresql://localhost:5432/casy_code
-    username: postgres
-    password: Hxb@93393
-    # Hikari 连接池配置（生产环境推荐）
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: "jdbc:mysql://localhost:3306/casy_code?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true"
+    username: root
+    password: root
     hikari:
-      minimum-idle: 5        # 最小空闲连接
-      maximum-pool-size: 20  # 最大连接数
-      idle-timeout: 300000   # 空闲超时时间
-      max-lifetime: 1800000  # 连接最大生命周期
-      connection-timeout: 20000 # 连接超时时间
-  # JPA 专属配置（仅使用 JPA 时需要）
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 300000
+      max-lifetime: 1800000
+      connection-timeout: 20000
   jpa:
-    database-platform: org.hibernate.dialect.PostgreSQLDialect # PostgreSQL 方言
+    database-platform: org.hibernate.dialect.MySQLDialect
     hibernate:
-      ddl-auto: update # 自动建表策略：update=自动更新表结构
-    show-sql: true     # 控制台打印 SQL
+      ddl-auto: update
+    show-sql: true
     properties:
-      hibernate.format_sql: true # 格式化 SQL
+      hibernate.format_sql: true
 
-# Mermaid CLI：指向本机 Chrome/Chromium，避免下载 Puppeteer 自带浏览器
-# Windows 示例：C:/Program Files/Google/Chrome/Application/chrome.exe
-# Linux 示例：/usr/bin/chromium 或 /usr/bin/google-chrome
 mermaid:
-  chrome-path: C:/Program Files/Google/Chrome/Application/chrome.exe
+  chrome-path: "C:/Program Files/Google/Chrome/Application/chrome.exe"
 
-# LangChain4j 调用模型 API 的 HTTP 超时（流式读超时须覆盖长生成，避免 60s 报 closed）
 langchain4j:
   http-client:
     connect-timeout: 30s
     read-timeout: 600s
-  ttl: 3600           # 你 LangChain 自定义字段，保留
+  ttl: 3600
   open-ai:
     chat-model:
       max-retries: 3
 
-
 mybatis-flex:
   configuration:
-    # 开启 数据库下划线 ↔ 实体类驼峰
     map-underscore-to-camel-case: true
 
-
-############## Sa-Token 配置 (文档: https://sa-token.cc) ##############
 sa-token:
-  # token 名称（同时也是 cookie 名称）
   token-name: satoken
-  # token 有效期（单位：秒） 默认30天，-1 代表永久有效
   timeout: 2592000
-  # token 最低活跃频率（单位：秒），如果 token 超过此时间没有访问系统就会被冻结，默认-1 代表不限制，永不冻结
   active-timeout: 1800
-  # 是否允许同一账号多地同时登录 （为 true 时允许一起登录, 为 false 时新登录挤掉旧登录）
   is-concurrent: false
-  # 在多人登录同一账号时，是否共用一个 token （为 true 时所有登录共用一个 token, 为 false 时每次登录新建一个 token）
   is-share: false
-  # token 风格（默认可取值：uuid、simple-uuid、random-32、random-64、random-128、tik）
   token-style: uuid
-  # 是否输出操作日志
   is-log: true
 
-
-# springdoc-openapi
 springdoc:
   group-configs:
     - group: 'default'
       packages-to-scan: com.casy.casyaicodemother.controller
-# knife4j
 knife4j:
   enable: true
   setting:
     language: zh_cn
-
-# local的配置
-#langchain4j:
-#  open-ai:
-#    streaming-chat-model:
-#      base-url: ${url}
-#      api-key: ${key}
-#      model-name: deepseek-v4-flash
-#      max-tokens: 8192
-#      thinking-enabled: false
-#      #      strict-json-schema: true
-#      #      response-format: json_object
-#      log-requests: true
-#      log-responses: true
-#    chat-model:
-#      base-url: ${url}
-#      api-key: ${key}
-#      model-name: deepseek-v4-flash
-#      max-tokens: 8192
-#      thinking-enabled: false
-#      #      strict-json-schema: true
-#      #      response-format: json_object
-#      log-requests: true
-#      log-responses: true
-#
-#ai:
-#  gpt:
-#    base-url: ${url}
-#    api-key: ${key}
-#    model-name: gpt-5.5
-#    max-tokens: 8192
-#    #    strict-json-schema: true
-#    #    response-format: json_object
-#    log-requests: true
-#    log-responses: true
-#  deepseek:
-#    base-url: ${url}
-#    api-key: ${key}
-#    model-name: deepseek-v4-pro
-#    max-tokens: 8192
-#    thinking-enabled: true
-#    log-requests: true
-#    log-responses: true
-#  claude:
-#    base-url: ${url}
-#    api-key: ${key}
-#    model-name: claude-opus-4-8
-#    max-tokens: 8192
-#    log-requests: true
-#    log-responses: true

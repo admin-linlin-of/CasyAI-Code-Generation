@@ -24,7 +24,7 @@ import java.sql.Timestamp;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(value = "t_ai_model", schema = "public")
+@Table("t_ai_model")
 public class AiModel implements Serializable {
 
     @Serial

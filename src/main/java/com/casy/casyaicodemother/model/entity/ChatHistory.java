@@ -23,7 +23,7 @@ import java.sql.Timestamp;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(value = "t_chat_history", schema = "public")
+@Table("t_chat_history")
 public class ChatHistory implements Serializable {
 
     @Serial

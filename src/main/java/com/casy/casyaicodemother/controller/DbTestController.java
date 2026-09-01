@@ -12,12 +12,12 @@ public class DbTestController {
     @Resource
     private JdbcTemplate jdbcTemplate;
 
-    // 测试接口
-    @Operation(summary = "测试PostgreSQL连接")
-    @GetMapping("/test-postgres")
+    @Operation(summary = "测试MySQL连接")
+    @GetMapping("/test-mysql")
     public String testConnection() {
-        // 查询 PostgreSQL 系统表数量
-        Long count = jdbcTemplate.queryForObject("SELECT count(*) FROM pg_tables", Long.class);
-        return "✅ PostgreSQL 连接成功！系统表数量：" + count;
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()",
+                Long.class);
+        return "✅ MySQL 连接成功！当前库表数量：" + count;
     }
 }

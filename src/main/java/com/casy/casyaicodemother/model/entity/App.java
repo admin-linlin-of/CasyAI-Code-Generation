@@ -4,7 +4,7 @@ import com.mybatisflex.annotation.Column;
 import com.mybatisflex.annotation.Id;
 import com.mybatisflex.annotation.KeyType;
 import com.mybatisflex.annotation.Table;
-import com.casy.casyaicodemother.handler.JsonbTypeHandler;
+import com.mybatisflex.core.handler.Fastjson2TypeHandler;
 import com.mybatisflex.core.keygen.KeyGenerators;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -25,7 +25,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(value = "t_app", schema = "public")
+@Table("t_app")
 public class App implements Serializable {
 
     @Serial
@@ -66,7 +66,7 @@ public class App implements Serializable {
     /**
      * 应用类型数组
      */
-    @Column(value = "app_types", typeHandler = JsonbTypeHandler.class)
+    @Column(value = "app_types", typeHandler = Fastjson2TypeHandler.class)
     private List<String> appTypes;
 
     /**

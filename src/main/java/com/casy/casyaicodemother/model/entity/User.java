@@ -24,7 +24,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(value = "t_user", schema = "public")
+@Table("t_user")
 public class User implements Serializable {
 
     @Serial

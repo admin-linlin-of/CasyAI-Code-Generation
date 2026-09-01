@@ -307,9 +307,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
                 .like("cover", cover, StrUtil.isNotBlank(cover))
                 .like("init_prompt", initPrompt, StrUtil.isNotBlank(initPrompt))
                 .eq("code_gen_type", codeGenType, StrUtil.isNotBlank(codeGenType))
-                // WHERE (app_types::jsonb @> '["website"]'::jsonb)
-                // @> 表示：左边 jsonb 必须包含右边 jsonb 的所有元素。
-                .and(q -> q.and("app_types::jsonb @> ?::jsonb", JSONUtil.toJsonStr(appTypes)), CollUtil.isNotEmpty(appTypes))
+                // JSON_CONTAINS(app_types, CAST('["website"]' AS JSON))
+                // 判断 JSON 列 app_types 是否包含传入数组的全部元素，例如筛「website」时必须带有该类型。
+                // CAST(? AS JSON) 把 Java 传来的 JSON 字符串转成 MySQL JSON，才能和 JSON 列比较。
+                .and(q -> q.and("JSON_CONTAINS(app_types, CAST(? AS JSON))", JSONUtil.toJsonStr(appTypes)), CollUtil.isNotEmpty(appTypes))
                 .eq("deploy_key", deployKey, StrUtil.isNotBlank(deployKey))
                 .ge("priority", priority, priority != null)
                 .eq("user_id", userId)

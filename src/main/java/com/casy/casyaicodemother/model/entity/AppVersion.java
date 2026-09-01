@@ -23,7 +23,7 @@ import java.sql.Timestamp;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(value = "t_app_version", schema = "public")
+@Table("t_app_version")
 public class AppVersion implements Serializable {
 
     @Serial
