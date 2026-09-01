@@ -14,6 +14,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+/**
+ * 护轨拦截事件落库实现。
+ * 聊天 SSE 的 Flux 错误发生在 Reactor 线程上，RequestContextHolder 可能为空，
+ * 因此用户、appId 优先用调用方传入的参数，request 仅作 URI / IP 补充。
+ */
 @Slf4j
 @Service
 public class GuardrailEventServiceImpl extends ServiceImpl<GuardrailEventMapper, GuardrailEvent>
@@ -22,9 +27,13 @@ public class GuardrailEventServiceImpl extends ServiceImpl<GuardrailEventMapper,
     @Resource
     private UserService userService;
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void record(Throwable error, User loginUser, Long appId, HttpServletRequest request, String handleResult) {
         try {
+            // 解开 LangChain4j 包装，取规则类型 / 命中细节 / 原文；解不开则记 UNKNOWN
             GuardrailBlockedException blocked = GuardrailBlockedException.unwrap(error);
             String ruleType = blocked != null ? blocked.getRuleType() : "UNKNOWN";
             String ruleDetail = blocked != null ? blocked.getRuleDetail() : StrUtil.blankToDefault(error.getMessage(), "");
@@ -53,10 +62,14 @@ public class GuardrailEventServiceImpl extends ServiceImpl<GuardrailEventMapper,
                     .build();
             this.save(event);
         } catch (Exception ex) {
+            // 审计失败不能阻断主流程，否则前端收不到 business-error
             log.warn("护轨拦截事件落库失败", ex);
         }
     }
 
+    /**
+     * 全局异常处理器等未传入 User 时，从当前登录态补全；未登录或查询失败返回 null。
+     */
     private User tryGetLoginUser() {
         try {
             if (!StpUtil.isLogin()) {
@@ -68,6 +81,9 @@ public class GuardrailEventServiceImpl extends ServiceImpl<GuardrailEventMapper,
         }
     }
 
+    /**
+     * 从查询参数 appId 解析应用 ID，格式错误时忽略。
+     */
     private Long parseAppId(HttpServletRequest request) {
         if (request == null) {
             return null;
@@ -80,6 +96,9 @@ public class GuardrailEventServiceImpl extends ServiceImpl<GuardrailEventMapper,
         }
     }
 
+    /**
+     * 解析客户端 IP：X-Forwarded-For → X-Real-IP → remoteAddr，多级代理只取第一个。
+     */
     private String resolveClientIp(HttpServletRequest request) {
         if (request == null) {
             return null;

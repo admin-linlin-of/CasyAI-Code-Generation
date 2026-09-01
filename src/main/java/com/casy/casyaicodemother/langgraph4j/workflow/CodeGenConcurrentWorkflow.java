@@ -259,6 +259,7 @@ public class CodeGenConcurrentWorkflow {
                     sink.complete();
                 } catch (Exception e) {
                     log.error("工作流执行失败: {}", e.getMessage(), e);
+                    // 护轨拦截不往聊天区塞「工作流执行失败」文本，交给上层 onErrorResume 推 business-error
                     if (!GuardrailBlockedException.isGuardrail(e)) {
                         WorkflowChatEmitter.emitChunked("\n工作流执行失败：" + e.getMessage() + "\n");
                     }

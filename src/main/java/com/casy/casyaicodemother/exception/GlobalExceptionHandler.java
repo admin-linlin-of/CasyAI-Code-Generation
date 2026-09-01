@@ -41,6 +41,15 @@ public class GlobalExceptionHandler {
     @Resource
     private GuardrailEventService guardrailEventService;
 
+    /**
+     * 捕获输入护轨异常。
+     * <p>
+     * LangChain4j 会把 {@link GuardrailBlockedException} 包装成 {@link InputGuardrailException}，
+     * 因此两个类型都要声明。流式聊天接口的错误走 {@code Flux.onErrorResume}，不一定进这里；
+     * SseEmitter.completeWithError 以及同步接口抛出的护轨异常会进入本方法。
+     * <p>
+     * 先落库审计，再按请求类型返回：SSE 推 {@code business-error}，普通 HTTP 返回 JSON。
+     */
     @ExceptionHandler({InputGuardrailException.class, GuardrailBlockedException.class})
     public Object guardrailExceptionHandler(RuntimeException e,
                                             HttpServletRequest request,

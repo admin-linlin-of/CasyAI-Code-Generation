@@ -1,16 +1,17 @@
 package com.casy.casyaicodemother.ai;
 
+import com.casy.casyaicodemother.ai.guardrail.PromptSafetyInputGuardrail;
 import com.casy.casyaicodemother.ai.tools.RepairingToolExecutor;
 import com.casy.casyaicodemother.ai.tools.ToolManager;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
-import com.casy.casyaicodemother.guardrail.PromptSafetyInputGuardrail;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import com.casy.casyaicodemother.service.ChatHistoryService;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
+import dev.langchain4j.guardrail.config.OutputGuardrailsConfig;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.tool.AiServiceTool;
@@ -78,6 +79,11 @@ public class AiCodeGeneratorServiceFactory {
         providerMap = modelProviders.stream().collect(Collectors.toMap(ModelProvider::getType, Function.identity()));
     }
 
+    // 通过护轨配置类来设置最大重试次数
+    OutputGuardrailsConfig outputGuardrailsConfig = OutputGuardrailsConfig.builder()
+            .maxRetries(3)
+            .build();
+
     /**
      * 根据模型类型和应用 ID 获取 AI 服务（带缓存）。
      * 记忆 ID 仅使用 appId，切换模型不会丢失对话记忆。
@@ -114,14 +120,28 @@ public class AiCodeGeneratorServiceFactory {
                             // 修复仍失败时，将错误文本回传 LLM 让其自行纠正（而非直接中断流式生成）
                             .toolArgumentsErrorHandler((error, context) -> ToolErrorHandlerResult.text("工具参数 JSON 解析失败：" + error.getMessage() + "。请确保 content 中双引号转义为 \\\"，换行用 \\n；单块不超过1500字符，大文件分块 append=false/true 写入。")) // TODO 这个提示在多个工具时就不合适了
                             // hallucinatedToolNameStrategy（幻觉工具名称策略）配置了找不到工具时的处理策略，可以让框架帮我们处理 AI 出现幻觉的情况，比如告诉 AI “找不到工具”
-                            // TODO 注意‍‍！这里最好做一些调整，防止 AI 一直无限循环调用工具，包括：
-                            // TODO 调大对话记忆的容量，否则 AI 会中途断片儿，忘记已经生成了哪些文件
-                            // TODO 尝试换其他的 AI 大模型、优化提示词
+                            // 防止 AI 一直无限循环调用工具，包括：
+                            .maxSequentialToolsInvocations(20)  // 最多连续调用 20 次工具
+                            // 调大对话记忆的容量，否则 AI 会中途断片儿，忘记已经生成了哪些文件 (调大了最大的token数）
+                            // 尝试换其他的 AI 大模型、优化提示词（已优化）
                             .inputGuardrails(new PromptSafetyInputGuardrail())  // 添加输入护轨
+                            /*
+                                如果用了输出护轨，可能会导致流式输出的响应不及时，
+                                等到 AI 输出结束才一起返回，所以如果为了追求流式输出效果，建议不要通过护轨的方式进行重试
+                             */
+//                            .outputGuardrails(new RetryOutputGuardrail())  // 添加输出护轨
+                            .outputGuardrailsConfig(outputGuardrailsConfig)
                             .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name())).build();
             // HTML 和多文件生成使用默认模型
             case HTML, MULTI_FILE ->
-                    AiServices.builder(AiCodeGeneratorService.class).chatModel(provider.getChatModel()).streamingChatModel(provider.getStreamingChatModel()).inputGuardrails(new PromptSafetyInputGuardrail()).chatMemory(chatMemory).build();
+                    AiServices.builder(AiCodeGeneratorService.class)
+                            .chatModel(provider.getChatModel())
+                            .streamingChatModel(provider.getStreamingChatModel())
+                            .inputGuardrails(new PromptSafetyInputGuardrail())
+//                            .outputGuardrails(new RetryOutputGuardrail())
+                            .outputGuardrailsConfig(outputGuardrailsConfig)
+                            .chatMemory(chatMemory)
+                            .build();
             default ->
                     throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型: " + codeGenType.getValue());
         };

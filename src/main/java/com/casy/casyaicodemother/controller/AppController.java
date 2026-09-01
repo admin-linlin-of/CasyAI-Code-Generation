@@ -65,6 +65,7 @@ public class AppController {
     @Resource
     private AiModelCatalogService aiModelCatalogService;
 
+    /** 护轨拦截事件落库，Flux 流内错误不会进 GlobalExceptionHandler，需在本层记录 */
     @Resource
     private GuardrailEventService guardrailEventService;
 
@@ -227,6 +228,9 @@ public class AppController {
      * @param appId     应用 ID
      * @param message   用户消息
      * @param modelType 模型类型
+     * @param versionDir 指定版本目录，修改已有代码时传入
+     * @param agent      是否走 Agent 工作流
+     * @param request    当前请求，护轨拦截落库时取 URI / IP
      * @return 生成结果流
      */
     @Operation(summary = "应用聊天生成代码")
@@ -267,8 +271,9 @@ public class AppController {
                         ServerSentEvent.<String>builder()
                                 .event("done").data("").build()
                 ))
-                // SSE 接口不能走 GlobalExceptionHandler（返回 JSON），需在流内将异常转为 SSE 数据推送给前端
+                // Flux 订阅后抛出的异常不会进 @RestControllerAdvice，必须在流内转成 SSE 事件
                 .onErrorResume(e -> {
+                    // 护轨拦截：推 business-error（前端单独监听，避免和浏览器默认 error 冲突）并落库
                     if (GuardrailBlockedException.isGuardrail(e)) {
                         guardrailEventService.record(e, loginUser, appId, request, "SSE_PUSHED");
                         String msg = GuardrailBlockedException.userMessage(e);

@@ -16,6 +16,7 @@ public enum ErrorCode {
     LOGIN_ERROR(40102, "sa-token异常"),
     NOT_FOUND_ERROR(40400, "请求数据不存在"),
     FORBIDDEN_ERROR(40300, "禁止访问"),
+    /** 输入护轨拦截（敏感词 / 注入 / 超长等），与 HTTP 403 语义一致 */
     GUARDRAIL_BLOCKED(40310, "输入被安全护轨拦截"),
     SYSTEM_ERROR(50000, "系统内部异常"),
     OPERATION_ERROR(50001, "操作失败"),
