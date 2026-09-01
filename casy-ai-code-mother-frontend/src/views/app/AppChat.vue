@@ -439,6 +439,7 @@
  *
  * startStream（SSE）
  *   → onmessage             累积 aiMsg.content / thinking；Vue 项目防抖刷新代码面板
+ *   → business-error        护轨/业务异常 → 展示错误并断开
  *   → done                  结束流 → loadVersions → [Vue] SSE 打包 → 预览
  *   → onerror               网络异常兜底
  *
@@ -1447,10 +1448,9 @@ const startStream = (messageText: string) => {
   }
 
   /**
-   * 后端推送 done 事件表示本轮生成结束：
-   * 1. 关闭 streaming，断开 EventSource
-   * 2. 成功：刷新版本 → [Vue] 触发打包 → 轮询 dist → 加载落盘文件 → 展示预览
-   * 3. 失败（content 以「生成失败」开头）：仅滚到底部
+   * 业务异常（含护轨拦截）：自定义事件名，避免触发浏览器 EventSource 默认 error。
+   * 解析 BaseResponse.message 展示到聊天区，toast 提示后关闭连接。
+   * 置 finished=true，后续 done 事件会直接 return，避免误走预览加载。
    */
   eventSource.addEventListener('business-error', (event: MessageEvent) => {
     if (finished) return
@@ -1469,6 +1469,12 @@ const startStream = (messageText: string) => {
     scrollToBottom()
   })
 
+  /**
+   * 后端推送 done 事件表示本轮生成结束：
+   * 1. 关闭 streaming，断开 EventSource
+   * 2. 成功：刷新版本 → [Vue] 触发打包 → 轮询 dist → 加载落盘文件 → 展示预览
+   * 3. 失败（content 以「生成失败」开头）：仅滚到底部
+   */
   eventSource.addEventListener('done', async () => {
     if (finished) return
     finished = true

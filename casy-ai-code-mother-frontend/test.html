@@ -234,6 +234,7 @@
       }, 1000);
     });
 
+    // 后端 GlobalExceptionHandler / 工作流 SSE 推送的业务错误（含护轨拦截）
     eventSource.addEventListener('business-error', function(event) {
       const data = JSON.parse(event.data);
       addEvent('❌ 业务错误', data, new Date().toLocaleTimeString());
