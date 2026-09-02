@@ -14,20 +14,20 @@ spring:
   mvc:
     async:
       request-timeout: 600000
-  data:
-    redis:
-      host: 47.95.204.8
-      port: 16379
-      username: default
-      password: YourStrongPassword123!
-      database: 1
-      timeout: 10s
-      lettuce:
-        pool:
-          max-active: 200
-          max-wait: -1ms
-          max-idle: 10
-          min-idle: 0
+#  data:
+#    redis:
+#      host: 47.95.204.8
+#      port: 16379
+#      username: default
+#      password: YourStrongPassword123!
+#      database: 1
+#      timeout: 10s
+#      lettuce:
+#        pool:
+#          max-active: 200
+#          max-wait: -1ms
+#          max-idle: 10
+#          min-idle: 0
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: "jdbc:mysql://localhost:3306/casy_code?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true"

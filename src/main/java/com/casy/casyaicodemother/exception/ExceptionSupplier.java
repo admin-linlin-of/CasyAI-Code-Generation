@@ -7,21 +7,21 @@ import org.springframework.lang.Nullable;
 import java.util.function.Supplier;
 
 /**
- * exception supplier»ùÀà
+ * exception supplieråŸºç±»
  */
 @ToString
 @Slf4j
 public abstract class ExceptionSupplier<T extends Exception> implements Supplier<T> {
 
-    /** ´íÎóÏûÏ¢ */
+    /** é”™è¯¯æ¶ˆæ¯ */
     protected final String msg;
-    /** ´íÎóÔ­Òò */
+    /** é”™è¯¯åŸå›  */
     protected final Throwable cause;
 
     /**
      *
-     * @param msg ´íÎóÏûÏ¢
-     * @param cause ´íÎóÔ­Òò
+     * @param msg é”™è¯¯æ¶ˆæ¯
+     * @param cause é”™è¯¯åŸå› 
      */
     protected ExceptionSupplier(String msg, @Nullable Throwable cause) {
         this.msg = msg;
@@ -29,10 +29,10 @@ public abstract class ExceptionSupplier<T extends Exception> implements Supplier
     }
 
     /**
-     * »ñÈ¡¸ñÊ½»¯ºóÏûÏ¢
-     * @param format ÏûÏ¢¸ñÊ½
-     * @param args ÏûÏ¢²ÎÊı
-     * @return ¸ñÊ½»¯ºóÏûÏ¢
+     * è·å–æ ¼å¼åŒ–åæ¶ˆæ¯
+     * @param format æ¶ˆæ¯æ ¼å¼
+     * @param args æ¶ˆæ¯å‚æ•°
+     * @return æ ¼å¼åŒ–åæ¶ˆæ¯
      */
     protected static String format(String format, Object... args) {
         Throwable throwable = extractThrowable(args);
@@ -47,8 +47,8 @@ public abstract class ExceptionSupplier<T extends Exception> implements Supplier
 
 
     /**
-     * ´ÓObjectÊı×é²ÎÊıÖĞ³éÈ¡Throwable¶ÔÏó
-     * @param argArray Òì³£²ÎÊı
+     * ä»Objectæ•°ç»„å‚æ•°ä¸­æŠ½å–Throwableå¯¹è±¡
+     * @param argArray å¼‚å¸¸å‚æ•°
      * @return Throwable
      */
     protected static Throwable extractThrowable(Object[] argArray) {
@@ -66,8 +66,8 @@ public abstract class ExceptionSupplier<T extends Exception> implements Supplier
     /**
      * This method should be called only if the last element is a throwable object.
      *
-     * @param argArray Êı×é²ÎÊı
-     * @return È¥³ıÊı×é×îºóÒ»¸öÔªËØ
+     * @param argArray æ•°ç»„å‚æ•°
+     * @return å»é™¤æ•°ç»„æœ€åä¸€ä¸ªå…ƒç´ 
      */
     protected static Object[] trimmedCopy(Object[] argArray) {
         if (argArray == null || argArray.length == 0) {

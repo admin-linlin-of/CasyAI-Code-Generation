@@ -1,5 +1,6 @@
 package com.casy.casyaicodemother.config;
 
+import cn.hutool.core.util.StrUtil;
 import dev.langchain4j.community.store.memory.chat.redis.RedisChatMemoryStore;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import lombok.Data;
@@ -28,14 +29,17 @@ public class RedisChatMemoryStoreConfig {
 
     @Bean
     public ChatMemoryStore redisChatMemoryStore() {
-        RedisChatMemoryStore redisStore = RedisChatMemoryStore.builder()
+        RedisChatMemoryStore.Builder builder = RedisChatMemoryStore.builder()
                 .host(host)
                 .port(port)
                 .user(username)
                 .password(password)
-                .ttl(ttl)
-                .build();
+                .ttl(ttl);
+        // 有密码时必填用户名
+        if (StrUtil.isNotBlank(password)) {
+            builder.user("default");
+        }
         // 过滤 thinking 模型产生的空 assistant，避免质检重试时被 DeepSeek 拒绝
-        return new SanitizingChatMemoryStore(redisStore);
+        return new SanitizingChatMemoryStore(builder.build());
     }
 }
