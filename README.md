@@ -2,23 +2,23 @@
 
 用自然语言生成网站：原生 HTML / 多文件静态站 / Vue 工程。对话式迭代、实时预览、一键部署。
 
-**后端** Spring Boot 4 + Java 21 + LangChain4j + LangGraph4j  
+**后端** Spring Boot 4 + Java 24 + LangChain4j + LangGraph4j  
 **前端** Vue 3 + Vite + Ant Design Vue + Monaco Editor
 
 ---
 
 ## 技术栈
 
-| 层级 | 技术 |
-| --- | --- |
-| 后端 | Spring Boot 4.0、Java 21 虚拟线程、Spring WebFlux `Flux` / SSE |
+| 层级 | 技术                                                                    |
+| --- |-----------------------------------------------------------------------|
+| 后端 | Spring Boot 4.0、Java 24 虚拟线程、Spring WebFlux `Flux` / SSE              |
 | AI | LangChain4j 1.14、LangGraph4j 1.8、AiServices / TokenStream / Guardrail |
-| 模型 | DeepSeek V4 Flash / Pro、Claude Sonnet 4.6、GPT-5.5（OpenAI 兼容协议） |
-| 数据 | MySQL + MyBatis-Flex、Redis（Session / 对话记忆 / 精选缓存） |
-| 鉴权 | Sa-Token + Redis 分布式 Session |
-| 构建 | npm + 共用 `node_modules`（Windows Junction / Linux symlink） |
-| 截图 | Selenium + Chrome Headless → 阿里云 OSS |
-| 前端 | Vue 3、Pinia、Vue Router、Ant Design Vue、Monaco、EventSource SSE |
+| 模型 | DeepSeek V4 Flash / Pro、Claude Sonnet 4.6、GPT-5.5（OpenAI 兼容协议）        |
+| 数据 | MySQL + MyBatis-Flex、Redis（Session / 对话记忆 / 精选缓存）                     |
+| 鉴权 | Sa-Token + Redis 分布式 Session                                          |
+| 构建 | npm + 共用 `node_modules`（Windows Junction / Linux symlink）             |
+| 截图 | Selenium + Chrome Headless → 阿里云 OSS                                  |
+| 前端 | Vue 3、Pinia、Vue Router、Ant Design Vue、Monaco、EventSource SSE          |
 
 ---
 
@@ -304,7 +304,7 @@ casy-ai-code-mother-frontend/     # Vue 3 工作台
 
 ## 快速启动
 
-**环境**：JDK 21、MySQL、Redis、Node.js、Chrome（封面截图）
+**环境**：JDK 24、MySQL、Redis、Node.js、Chrome（封面截图）
 
 ```bash
 # 后端
