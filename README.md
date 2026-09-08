@@ -1,4 +1,4 @@
-# Casy AI Code Mother
+# Casy AI 智能代码生成平台
 
 用自然语言生成网站：原生 HTML / 多文件静态站 / Vue 工程。对话式迭代、实时预览、一键部署。
 
