@@ -20,4 +20,8 @@ INSERT IGNORE INTO t_sys_param (id, param_key, param_value, param_name, remark, 
 VALUES
     (1, 'site.github.url', '', 'GitHub 仓库地址', '首页左上角 GitHub 图标跳转地址，留空则不显示图标', 1, 1, 10),
     (2, 'site.gitee.url', 'https://gitee.com/linlinyes/casy-ai-code-mother', 'Gitee 仓库地址',
-     '首页左上角 Gitee 图标跳转地址，留空则不显示图标', 1, 1, 20);
+     '首页左上角 Gitee 图标跳转地址，留空则不显示图标', 1, 1, 20),
+    (3, 'login.demo.account', 'user01', '登录页体验账号',
+     '展示在登录页的默认账号，修改后刷新登录页生效。实际登录仍以用户表为准', 1, 1, 30),
+    (4, 'login.demo.password', '1234567', '登录页体验密码',
+     '展示在登录页的默认密码。若修改此项，请同步改用户表中对应账号的密码', 1, 1, 40);
