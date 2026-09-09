@@ -792,7 +792,28 @@ const generationFailedText = ref('')
 /** 判定一段回复文本是否表示“生成失败”（传统前缀 / 工作流失败 / 连接中断） */
 const isGenerationFailure = (text: string): boolean => {
   const t = (text ?? '').trim()
-  return t.startsWith('生成失败') || t.startsWith('❌') || t.includes('工作流执行失败')
+  if (!t) return false
+  return (
+    t.startsWith('生成失败') ||
+    t.startsWith('❌') ||
+    t.includes('工作流执行失败') ||
+    /生成失败[:：]/.test(t)
+  )
+}
+/** 从整段 AI 回复中抽出失败原因（正文可能先流式输出代码，错误拼在末尾） */
+const extractGenerationFailureText = (text: string): string => {
+  const t = (text ?? '').trim()
+  if (!t || !isGenerationFailure(t)) return ''
+  const failIdx = t.lastIndexOf('生成失败')
+  const crossIdx = t.lastIndexOf('❌')
+  const start = Math.max(failIdx, crossIdx)
+  const slice = start >= 0 ? t.slice(start).trim() : t
+  return (
+    slice
+      .replace(/^❌\s*/, '')
+      .replace(/^生成失败[:：]?\s*/, '')
+      .trim() || slice
+  )
 }
 /** Vue 项目：当前版本 npm build 轮询中 */
 const previewBuilding = ref(false)
@@ -1324,19 +1345,15 @@ const applyHistoryRecords = (records: API.ChatHistoryVO[], prepend: boolean) => 
 }
 
 // ─── 上一次生成失败提示 ───────────────────────────────────────
-/** 是否为「生成失败」的 AI 消息（saveErrorMessage 统一以“生成失败：”开头） */
+/** 是否为「生成失败」的 AI 消息（独立错误记录，或拼在流式正文末尾） */
 const isErrorAiMessage = (m?: ChatMessage): boolean => {
   if (!m || m.role !== 'ai') return false
-  const text = m.content?.trim() ?? ''
-  return text.startsWith('生成失败') || text.startsWith('❌')
+  return isGenerationFailure(m.content ?? '')
 }
 
 /** 从错误消息文本中提取可读原因（去掉“生成失败：/❌”前缀，超长截断） */
 const extractErrorReason = (content: string): string => {
-  const text = (content ?? '')
-    .replace(/^生成失败[:：]?\s*/, '')
-    .replace(/^❌\s*/, '')
-    .trim()
+  const text = extractGenerationFailureText(content) || (content ?? '').trim()
   return text.length > 120 ? `${text.slice(0, 120)}…` : text || '生成中断，详见对话记录'
 }
 
@@ -1550,8 +1567,18 @@ const isWorkflowAiMessage = (msg: ChatMessage) => {
 const aiBubbleContent = (msg: ChatMessage): string => {
   const raw = msg.content ?? ''
   if (!raw.trim()) return raw
-  if (isVueProject.value) return raw
-  return stripChatCode(raw) || CHAT_CODE_PLACEHOLDER
+  const failDetail = extractGenerationFailureText(raw)
+  const failLine = failDetail ? `❌ 生成失败：${failDetail}` : ''
+  if (isVueProject.value) {
+    if (failLine && !raw.includes('❌')) return `${raw.trimEnd()}\n\n${failLine}`
+    return raw
+  }
+  const narrative = stripChatCode(raw)
+  if (failLine) {
+    const body = narrative && !isGenerationFailure(narrative) ? narrative : ''
+    return [body, failLine].filter(Boolean).join('\n\n')
+  }
+  return narrative || CHAT_CODE_PLACEHOLDER
 }
 
 const closeEventSource = () => {
@@ -1729,10 +1756,16 @@ const startStream = (messageText: string) => {
         liveCodeBuffer.value += data.c ?? ''
       } else {
         aiMsg.content += data.c ?? ''
+        if (isGenerationFailure(data.c ?? '') || isGenerationFailure(aiMsg.content)) {
+          generationFailedText.value = extractGenerationFailureText(aiMsg.content)
+        }
         if (!isVueProject.value) scheduleCodeRefresh()
       }
     } catch {
       aiMsg.content += event.data ?? ''
+      if (isGenerationFailure(event.data ?? '') || isGenerationFailure(aiMsg.content)) {
+        generationFailedText.value = extractGenerationFailureText(aiMsg.content)
+      }
       if (!isVueProject.value) scheduleCodeRefresh()
     }
     scrollToBottom()
@@ -1781,7 +1814,9 @@ const startStream = (messageText: string) => {
     // 传统前缀“生成失败”、工作流“工作流执行失败”、❌ 等都属于失败：
     // 直接展示失败态，不进入“加载版本/等预览”流程
     if (isGenerationFailure(aiMsg.content)) {
-      generationFailedText.value = aiMsg.content.trim()
+      const reason = extractGenerationFailureText(aiMsg.content) || aiMsg.content.trim()
+      generationFailedText.value = reason
+      message.error(`生成失败：${reason.slice(0, 80)}`)
       scrollToBottom()
       return
     }
@@ -1810,10 +1845,11 @@ const startStream = (messageText: string) => {
     stopBuildTimer()
     if (!aiMsg.content.trim()) {
       aiMsg.content = '❌ 生成失败：连接中断，请检查后端服务后重试'
-    } else if (!aiMsg.content.includes('❌')) {
+    } else if (!isGenerationFailure(aiMsg.content)) {
       aiMsg.content = `${aiMsg.content.trimEnd()}\n\n❌ 连接中断，请检查后端服务后重试`
     }
-    generationFailedText.value = aiMsg.content.trim()
+    generationFailedText.value =
+      extractGenerationFailureText(aiMsg.content) || aiMsg.content.trim()
     message.error('生成中断：与服务器的连接已断开')
     scrollToBottom()
   }
@@ -2008,11 +2044,14 @@ onMounted(async () => {
   await loadVersions()
   await loadChatHistory()
   restoreAgentMode()
-  // 已有历史：直接进预览并加载落盘代码
+  // 已有历史：直接进预览并加载落盘代码；若上次以失败收尾且没有可预览代码，右侧显示失败态
   if (messages.value.length > 0) {
     showPreview.value = true
     rightViewMode.value = 'preview'
     await loadSavedCodeFiles()
+    if (lastErrorNotice.value && !hasCodeContent.value) {
+      generationFailedText.value = lastErrorNotice.value.reason
+    }
     await scrollToBottom()
   }
   // 上次生成以失败收尾：弹窗提示一次（历史记录已在上面加载，不会回到“新对话”空状态）

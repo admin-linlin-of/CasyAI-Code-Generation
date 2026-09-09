@@ -374,8 +374,3 @@ pnpm dev
 
 接口文档：Knife4j（SpringDoc OpenAPI 3）。
 
-## 项目截图
-
-![image-20260908233534620](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20260908233534620.png)
-
-![image-20260908233638246](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20260908233638246.png)
