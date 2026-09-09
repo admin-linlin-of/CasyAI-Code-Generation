@@ -70,9 +70,9 @@
             ]"
           >
             <div class="message-item__content">
-              <!-- AI 深度思考区域：流式展示 reasoning 内容 -->
+              <!-- AI 深度思考：SSE t=thinking 或历史 <aiThinking>；生成中标题带「中…」 -->
               <details v-if="msg.role === 'ai' && msg.thinking" class="message-item__thinking" open>
-                <summary>深度思考</summary>
+                <summary>{{ msg.streaming ? '深度思考中…' : '深度思考' }}</summary>
                 <pre class="message-item__thinking-body">{{ msg.thinking }}</pre>
               </details>
               <!-- AI 消息：Markdown + 高亮 + 打字机；用户消息：纯文本 + 粘贴图片缩略图 -->
@@ -635,8 +635,16 @@ const genPreviewHint = computed(() => {
     const path = inner.match(/[`']([^`']+)[`']/)?.[1]
     if (path) return `正在处理 ${path}`
   }
-  if (streamingMsg?.thinking) return '模型深度思考中…'
+  // HTML / 多文件没有工具标签，按「思考 → 设计说明 → 写代码」阶段提示
+  if (streamingMsg?.thinking && !(streamingMsg.content ?? '').trim()) return '模型深度思考中…'
   if (isVueProject.value) return '模型正在调用工具生成 Vue 项目…'
+  if (streamingMsg && !isVueProject.value) {
+    const html = parseAiContentToVirtualFiles(streamingMsg.content ?? '').find((f) => f.path === 'index.html')
+      ?.content ?? ''
+    if (html.trim()) return '正在写入页面代码…'
+    if ((streamingMsg.content ?? '').trim()) return '正在输出设计说明…'
+    return '正在构思页面结构…'
+  }
   return '模型正在生成代码…'
 })
 /** 部署 / 下载 / 应用编辑 */
@@ -1546,7 +1554,50 @@ const stripChatCode = (raw: string): string => {
   return text.replace(/\n{3,}/g, '\n\n').trim()
 }
 
-const CHAT_CODE_PLACEHOLDER = '（已生成代码：请查看右侧「代码 / 预览」区域）'
+/** 单文件进度行；未开始且已结束则省略，避免历史气泡刷出空列表 */
+const fileProgressLine = (name: string, content: string, streaming: boolean) => {
+  if (!content.trim()) {
+    return streaming ? `- \`${name}\` 等待中` : ''
+  }
+  const state = streaming ? '写入中' : '已完成'
+  return `- \`${name}\` ${state}（${content.length} 字）`
+}
+
+/**
+ * HTML / 多文件聊天摘要：代码仍在右侧，气泡只留设计说明 + 文件进度。
+ * 流式中用 liveCodeBuffer 解析未闭合 HTML；历史消息只用自身 content，
+ * 避免当前生成的 buffer 污染旧气泡。
+ */
+const traditionalChatDigest = (msg: ChatMessage): string => {
+  const raw = msg.content ?? ''
+  const source = (msg.streaming && liveCodeBuffer.value.trim() ? liveCodeBuffer.value : raw).trim()
+  const files = parseAiContentToVirtualFiles(source)
+  const html = files.find((f) => f.path === 'index.html')?.content ?? ''
+  const css = files.find((f) => f.path === 'style.css')?.content ?? ''
+  const js = files.find((f) => f.path === 'script.js')?.content ?? ''
+  const narrative = stripChatCode(raw)
+  const parts: string[] = []
+  if (narrative) {
+    parts.push(narrative)
+  } else if (msg.streaming) {
+    parts.push(msg.thinking?.trim() ? '正在把思考结果落实到页面…' : '正在理解需求并生成页面…')
+  } else {
+    parts.push('页面已生成，可在右侧切换「代码 / 预览」。')
+  }
+  const isHtmlOnly = appInfo.value?.codeGenType === 'html'
+  const progress = isHtmlOnly
+    ? [fileProgressLine('index.html', html, !!msg.streaming)]
+    : [
+        fileProgressLine('index.html', html, !!msg.streaming),
+        fileProgressLine('style.css', css, !!msg.streaming),
+        fileProgressLine('script.js', js, !!msg.streaming),
+      ]
+  const progressBlock = progress.filter(Boolean).join('\n')
+  if (progressBlock) {
+    parts.push(`**生成进度**\n${progressBlock}`)
+  }
+  return parts.join('\n\n')
+}
 
 /**
  * 工作流气泡判定：正在以 Agent 工作流生成，或历史正文本身就是步骤卡片。
@@ -1560,25 +1611,25 @@ const isWorkflowAiMessage = (msg: ChatMessage) => {
 
 /**
  * AI 消息在聊天区展示的正文：
- * - HTML / 多文件模式：模型正文几乎全是代码，聊天区只显示叙述文字，代码由
- *   latestAiContent 解析进右侧虚拟文件（打字机渐进展示），不回灌到聊天气泡。
- * - Vue 工程模式：聊天区只收到叙述与工具摘要，原样展示。
+ * - HTML / 多文件：即使 content 仍为空也要走 digest（思考阶段需要「正在理解需求…」）。
+ *   代码剥掉后只留设计说明 + 文件进度，不把源码回灌到气泡。
+ * - Vue 工程：聊天区只收到叙述与工具摘要，原样展示。
  */
 const aiBubbleContent = (msg: ChatMessage): string => {
   const raw = msg.content ?? ''
-  if (!raw.trim()) return raw
   const failDetail = extractGenerationFailureText(raw)
   const failLine = failDetail ? `❌ 生成失败：${failDetail}` : ''
   if (isVueProject.value) {
+    if (!raw.trim()) return raw
     if (failLine && !raw.includes('❌')) return `${raw.trimEnd()}\n\n${failLine}`
     return raw
   }
-  const narrative = stripChatCode(raw)
+  const narrative = traditionalChatDigest(msg)
   if (failLine) {
     const body = narrative && !isGenerationFailure(narrative) ? narrative : ''
     return [body, failLine].filter(Boolean).join('\n\n')
   }
-  return narrative || CHAT_CODE_PLACEHOLDER
+  return narrative
 }
 
 const closeEventSource = () => {
@@ -1743,7 +1794,9 @@ const startStream = (messageText: string) => {
         return
       }
       if (data.t === 'thinking') {
-        aiMsg.thinking = (aiMsg.thinking ?? '') + (data.c ?? '')
+        // 只进折叠块，不拼进 content；若片段误带落库标签则剥掉，避免界面露出 <aiThinking>
+        const piece = (data.c ?? '').replace(/^<aiThinking>|<\/aiThinking>$/gi, '')
+        aiMsg.thinking = (aiMsg.thinking ?? '') + piece
       } else if (data.t === 'file') {
         ingestFileEvent({
           path: data.path ?? '',
