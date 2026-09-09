@@ -12,8 +12,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 过滤无效 assistant 消息：thinking 模型常写出无 content、无 tool_calls 的空 AiMessage，
- * DeepSeek 再次请求时会报 Invalid assistant message: content or tool_calls must be set。
+ * Redis 对话记忆过滤器。
+ * <p>
+ * 思考模型常先写出「无 content、无 tool_calls」的 assistant（reasoning 在 thinking()）。
+ * 若直接丢弃，Vue 的 writeFile 循环会在这一轮被掐断，表现为最终响应 null。
+ * 有 thinking 时补一个占位正文，满足 DeepSeek「content 或 tool_calls 必填」。
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -42,28 +45,33 @@ public class SanitizingChatMemoryStore implements ChatMemoryStore {
         }
         List<ChatMessage> cleaned = new ArrayList<>(messages.size());
         int dropped = 0;
+        int thinkingPlaceholder = 0;
         for (ChatMessage message : messages) {
-            if (isInvalidAssistant(message)) {
-                dropped++;
+            if (!(message instanceof AiMessage aiMessage)) {
+                cleaned.add(message);
                 continue;
             }
-            cleaned.add(message);
+            boolean noText = StrUtil.isBlank(aiMessage.text());
+            boolean noTools = !aiMessage.hasToolExecutionRequests();
+            if (!noText || !noTools) {
+                cleaned.add(aiMessage);
+                continue;
+            }
+            if (StrUtil.isNotBlank(aiMessage.thinking())) {
+                // 空格只进 Redis 记忆，不会写入 t_chat_history / 聊天气泡
+                cleaned.add(aiMessage.withText(" "));
+                thinkingPlaceholder++;
+                continue;
+            }
+            dropped++;
+        }
+        if (thinkingPlaceholder > 0) {
+            log.info("已为 {} 条仅-thinking 的 assistant 补占位正文, memoryId={}, persist={}",
+                    thinkingPlaceholder, memoryId, persist);
         }
         if (dropped > 0) {
             log.warn("已丢弃 {} 条空 assistant 消息, memoryId={}, persist={}", dropped, memoryId, persist);
         }
         return cleaned;
-    }
-
-    /**
-     * assistant 既没有文本也没有工具调用时，OpenAI 兼容接口会拒绝该消息。
-     */
-    private static boolean isInvalidAssistant(ChatMessage message) {
-        if (!(message instanceof AiMessage aiMessage)) {
-            return false;
-        }
-        boolean noText = StrUtil.isBlank(aiMessage.text());
-        boolean noTools = !aiMessage.hasToolExecutionRequests();
-        return noText && noTools;
     }
 }

@@ -15,6 +15,11 @@ public final class ChatThinkingCodec {
             "<aiThinking>([\\s\\S]*?)</aiThinking>\\s*",
             Pattern.CASE_INSENSITIVE);
 
+    /** 部分网关把 reasoning 写进正文的 {@code <think>} 标签 */
+    private static final Pattern NATIVE_THINK_BLOCK = Pattern.compile(
+            "<think>([\\s\\S]*?)</think>\\s*",
+            Pattern.CASE_INSENSITIVE);
+
     private ChatThinkingCodec() {
     }
 
@@ -45,5 +50,16 @@ public final class ChatThinkingCodec {
             return message;
         }
         return THINKING_BLOCK.matcher(message).replaceFirst("").trim();
+    }
+
+    /**
+     * 去掉模型原生 {@code <think>...</think>}。
+     * 解析 HTML/多文件前调用，避免思考块干扰围栏提取；加载记忆时同样剥掉。
+     */
+    public static String stripNativeThink(String message) {
+        if (StrUtil.isBlank(message)) {
+            return message;
+        }
+        return NATIVE_THINK_BLOCK.matcher(message).replaceAll("").trim();
     }
 }

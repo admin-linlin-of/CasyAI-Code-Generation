@@ -140,11 +140,11 @@ public class AiCodeGeneratorServiceFactory {
 //                            .outputGuardrails(new RetryOutputGuardrail())  // 添加输出护轨
                             .outputGuardrailsConfig(outputGuardrailsConfig)
                             .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name())).build();
-            // HTML 和多文件生成使用默认模型
+            // HTML / 多文件：关闭思考，把额度留给页面代码。聊天区靠设计说明 + 文件进度。
             case HTML, MULTI_FILE ->
                     AiServices.builder(AiCodeGeneratorService.class)
-                            .chatModel(provider.getChatModel())
-                            .streamingChatModel(provider.getStreamingChatModel())
+                            .chatModel(ThinkingDisabledChatModels.wrap(provider.getChatModel()))
+                            .streamingChatModel(ThinkingDisabledChatModels.wrap(provider.getStreamingChatModel()))
                             .inputGuardrails(new PromptSafetyInputGuardrail())
 //                            .outputGuardrails(new RetryOutputGuardrail())
                             .outputGuardrailsConfig(outputGuardrailsConfig)

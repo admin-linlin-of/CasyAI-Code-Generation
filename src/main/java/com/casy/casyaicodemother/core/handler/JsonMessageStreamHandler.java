@@ -60,14 +60,22 @@ public class JsonMessageStreamHandler {
                 // 流结束后统一收尾：空响应写入错误并推送到 SSE，避免 doOnComplete 抛异常导致前端收不到错误
                 .concatWith(Mono.defer(() -> {
                     String aiResponse = chatHistoryStringBuilder.toString();
+                    String thinking = thinkingHistoryBuilder.toString();
                     if (StrUtil.isBlank(aiResponse)) {
+                        // 思考不进 chatHistoryStringBuilder；只有思考没有 writeFile 时不能写成「什么都没返回」
+                        if (StrUtil.isNotBlank(thinking)) {
+                            chatHistoryService.saveAiMessage(appId, userMessageId,
+                                    ChatThinkingCodec.composeForSave(thinking, ""), loginUser);
+                            String detail = "模型只完成了思考，没有写入任何 Vue 文件";
+                            chatHistoryService.saveErrorMessage(appId, userMessageId, detail, loginUser);
+                            return Mono.just("生成失败：" + detail);
+                        }
                         String detail = "模型未返回任何内容";
                         chatHistoryService.saveErrorMessage(appId, userMessageId, detail, loginUser);
-                        // 作为普通文本 chunk 推送，前端 onmessage 可实时展示
                         return Mono.just("生成失败：" + detail);
                     }
                     chatHistoryService.saveAiMessage(appId, userMessageId,
-                            ChatThinkingCodec.composeForSave(thinkingHistoryBuilder.toString(), aiResponse),
+                            ChatThinkingCodec.composeForSave(thinking, aiResponse),
                             loginUser);
                     return Mono.empty();
                 }))

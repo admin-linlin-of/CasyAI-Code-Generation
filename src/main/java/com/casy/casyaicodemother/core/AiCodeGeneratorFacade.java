@@ -13,6 +13,7 @@ import com.casy.casyaicodemother.langgraph4j.node.SitePreviewNode;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import com.casy.casyaicodemother.service.AppVersionService;
+import com.casy.casyaicodemother.util.ChatThinkingCodec;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.model.chat.response.PartialThinking;
 import dev.langchain4j.service.TokenStream;
@@ -79,15 +80,15 @@ public class AiCodeGeneratorFacade {
         }
         return switch (codeGenTypeEnum) {
             case HTML -> {
-                // TokenStream 才能拿到 onPartialThinking；旧 Flux 入口看不到思考过程
-                TokenStream tokenStream = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId)
-                        .generateHtmlCodeTokenStream(userMessage);
-                yield processTextTokenStream(tokenStream, CodeGenTypeEnum.HTML, modelTypeEnum, appId, userMessageId);
+                // 传统 HTML 走 Flux 正文流，不采集 reasoning：思考太长会把 token 占满，content 为空
+                Flux<String> codeStream = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId)
+                        .generateHtmlCodeStream(userMessage);
+                yield processCodeStream(codeStream, CodeGenTypeEnum.HTML, modelTypeEnum, appId, userMessageId);
             }
             case MULTI_FILE -> {
-                TokenStream tokenStream = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId)
-                        .generateMultiFileCodeTokenStream(userMessage);
-                yield processTextTokenStream(tokenStream, CodeGenTypeEnum.MULTI_FILE, modelTypeEnum, appId, userMessageId);
+                Flux<String> codeStream = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId)
+                        .generateMultiFileCodeStream(userMessage);
+                yield processCodeStream(codeStream, CodeGenTypeEnum.MULTI_FILE, modelTypeEnum, appId, userMessageId);
             }
             case VUE_PROJECT -> {
                 // 每轮用户对话都先建新版本，再让 read/modify/write 打到该目录。
@@ -132,42 +133,6 @@ public class AiCodeGeneratorFacade {
 
 
     /**
-     * HTML / 多文件：TokenStream 同时推送思考 token 与正文，流结束后再解析落盘。
-     * <p>
-     * 思考必须打成 {@code {"c":"...","t":"thinking"}}：前端按 {@code t===thinking} 写入折叠块，
-     * {@link com.casy.casyaicodemother.core.handler.SimpleTextStreamHandler} 也靠该标记把思考
-     * 从正文里拆出去。思考片段<strong>不能</strong>写入 {@code codeBuilder}，否则解析器会把
-     * reasoning 当成代码。
-     */
-    private Flux<String> processTextTokenStream(TokenStream tokenStream, CodeGenTypeEnum codeGenType,
-                                                ModelTypeEnum modelTypeEnum, Long appId, Long userMessageId) {
-        StringBuilder codeBuilder = new StringBuilder();
-        Flux<String> live = Flux.create(sink -> tokenStream
-                // 模型开启 returnThinking 时才会回调；Flash 默认关闭则整段不触发
-                .onPartialThinking((PartialThinking partialThinking) -> {
-                    String text = partialThinking.text();
-                    if (StrUtil.isBlank(text)) {
-                        return;
-                    }
-                    sink.next(JSONUtil.toJsonStr(java.util.Map.of("c", text, "t", "thinking")));
-                })
-                .onPartialResponse(partialResponse -> {
-                    if (partialResponse != null) {
-                        // 仅正文进入解析缓冲（设计说明 + 代码围栏）
-                        codeBuilder.append(partialResponse);
-                        sink.next(partialResponse);
-                    }
-                })
-                .onCompleteResponse(response -> sink.complete())
-                .onError(error -> {
-                    log.error("HTML/多文件 TokenStream 异常", error);
-                    sink.error(error);
-                })
-                .start());
-        return live.concatWith(Flux.defer(() -> saveParsedCode(codeBuilder.toString(), codeGenType, modelTypeEnum, appId, userMessageId)));
-    }
-
-    /**
      * 流式收集模型输出，流结束后解析并落盘。
      * <p>
      * 版本目录仍由 {@link AppVersionService#createCodeVersion} 生成，不在此处改写 versionDir 规则。
@@ -176,7 +141,7 @@ public class AiCodeGeneratorFacade {
     private Flux<String> processCodeStream(Flux<String> codeStream, CodeGenTypeEnum codeGenType, ModelTypeEnum modelTypeEnum, Long appId, Long userMessageId) {
         StringBuilder codeBuilder = new StringBuilder();
         return codeStream.doOnNext(chunk -> {
-            // 旧 Flux 入口若混入 thinking JSON，同样不能进解析缓冲
+            // ping / thinking JSON 若混入也不进解析缓冲
             if (isThinkingSseChunk(chunk)) {
                 return;
             }
@@ -192,6 +157,9 @@ public class AiCodeGeneratorFacade {
 
     private Flux<String> saveParsedCode(String completeCode, CodeGenTypeEnum codeGenType,
                                         ModelTypeEnum modelTypeEnum, Long appId, Long userMessageId) {
+        // 解析前剥掉误混入的思考标签，避免当代码处理
+        completeCode = ChatThinkingCodec.stripThinking(StrUtil.nullToEmpty(completeCode));
+        completeCode = ChatThinkingCodec.stripNativeThink(completeCode);
         log.info("AI最终的响应：{}", completeCode);
         if (StrUtil.isBlank(completeCode)) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "模型未返回代码内容，无法保存文件");
@@ -229,31 +197,29 @@ public class AiCodeGeneratorFacade {
      *
      * <h3>工具调用消息流程图：</h3>
      * <img src="../../../../../javadoc/doc-files/VUE项目生成流程.png" alt="登录验证流程" width="700"  height="500"/>
+     * <p>
+     * 回调跑在 ForkJoinPool 上。{@code lock} 是本轮 TokenStream 的局部对象，
+     * 只串行「这一轮」的 next/complete，不阻塞其他用户的对话。
+     * 若 complete 抢在 toolExecuted 的 next 前面，聊天区会丢掉工具摘要，被误判成空响应。
      *
      * @param tokenStream TokenStream 对象
      * @return Flux&lt;String&gt; JSON 格式的流式响应
      */
     private Flux<String> processTokenStream(TokenStream tokenStream) {
         return Flux.create(sink -> {
+            // lock 仅约束本轮回调顺序，每个请求各自 new，多用户并发互不影响
+            final Object lock = new Object();
             tokenStream
-                    // 阶段1：AI 普通文本流式输出
-                    // 当 LLM 生成文本内容（非工具调用）时，每产生一个 token 触发一次
-                    // 前端 type=ai_response，可实时拼接展示 AI 回复
-                    // 阶段0：AI 深度思考流式输出（DeepSeek reasoning 等模型）
-                    // 每产生一个 thinking token 触发一次，前端 type=ai_thinking 单独展示
                     .onPartialThinking((PartialThinking partialThinking) -> {
-                        sink.next(JSONUtil.toJsonStr(new AiThinkingMessage(partialThinking.text())));
+                        synchronized (lock) {
+                            sink.next(JSONUtil.toJsonStr(new AiThinkingMessage(partialThinking.text())));
+                        }
                     })
-                    // 阶段1：AI 普通文本流式输出
                     .onPartialResponse(partialResponse -> {
-                        sink.next(JSONUtil.toJsonStr(new AiResponseMessage(partialResponse)));
+                        synchronized (lock) {
+                            sink.next(JSONUtil.toJsonStr(new AiResponseMessage(partialResponse)));
+                        }
                     })
-                    // 阶段2：工具调用请求流式输出（仅部分 LLM 支持，如 OpenAI）
-                    // LLM 决定调用工具后，以流式方式输出工具名和参数 JSON 片段
-                    // 同一工具调用会多次触发，index 标识第几个工具，partialArguments 为参数片段
-                    // 所有片段拼接后应形成完整 JSON，如 {"city":"London"}
-                    // 部分提供商（Bedrock/Google/Mistral/Ollama）不支持流式工具调用，此回调不会触发
-                    // 前端 type=tool_request, partial=true，可展示"正在调用 xxx 工具..."
                     .onPartialToolCall(partialToolCall -> {
                         ToolRequestMessage message = new ToolRequestMessage(
                                 partialToolCall.index(),
@@ -262,13 +228,10 @@ public class AiCodeGeneratorFacade {
                                 partialToolCall.partialArguments(),
                                 true
                         );
-                        sink.next(JSONUtil.toJsonStr(message));
+                        synchronized (lock) {
+                            sink.next(JSONUtil.toJsonStr(message));
+                        }
                     })
-                    // 阶段3：工具执行完成
-                    // AI Service 在收到完整工具调用请求后自动执行对应 @Tool 方法，执行完毕后触发
-                    // request() 含完整工具请求（id/name/arguments），result() 含执行返回值
-                    // 若启用 executeToolsConcurrently()，多个工具会并发执行，各自独立触发此回调
-                    // 前端 type=tool_executed，可展示工具执行结果（如文件写入成功）
                     .onToolExecuted(toolExecution -> {
                         ToolExecutionRequest request = toolExecution.request();
                         ToolExecutedMessage message = new ToolExecutedMessage(
@@ -278,20 +241,29 @@ public class AiCodeGeneratorFacade {
                                 toolExecution.result(),
                                 toolExecution.hasFailed()
                         );
-                        sink.next(JSONUtil.toJsonStr(message));
+                        synchronized (lock) {
+                            sink.next(JSONUtil.toJsonStr(message));
+                        }
                     })
-                    // 阶段4：本轮响应全部完成
-                    // 所有文本输出和工具调用（含多轮 tool→LLM→tool 循环）结束后触发
-                    // response.aiMessage() 包含最终 AI 消息，可获取所有工具调用记录
                     .onCompleteResponse(response -> {
-                        log.info("Vue 项目生成完成，最终响应: {}", response.aiMessage().text());
-                        sink.complete();
+                        var aiMessage = response == null ? null : response.aiMessage();
+                        String text = aiMessage == null ? null : aiMessage.text();
+                        String thinking = aiMessage == null ? null : aiMessage.thinking();
+                        int toolCalls = aiMessage != null && aiMessage.hasToolExecutionRequests()
+                                ? aiMessage.toolExecutionRequests().size() : 0;
+                        log.info("Vue 项目生成完成，textLen={}, toolCalls={}, thinkingLen={}",
+                                text == null ? 0 : text.length(),
+                                toolCalls,
+                                thinking == null ? 0 : thinking.length());
+                        synchronized (lock) {
+                            sink.complete();
+                        }
                     })
-                    // 阶段5：异常处理
-                    // 网络错误、模型错误、工具执行未捕获异常等导致流中断时触发
                     .onError(error -> {
                         log.error("TokenStream 流式生成异常", error);
-                        sink.error(error);
+                        synchronized (lock) {
+                            sink.error(error);
+                        }
                     })
                     .start();
         });

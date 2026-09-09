@@ -73,6 +73,7 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
                 } else if (MessageTypeEnum.AI.getValue().equals(chatHistory.getMessageType())){
                     // <aiThinking> 只给前端回放；喂给模型的记忆必须去掉 reasoning
                     String messageForMemory = ChatThinkingCodec.stripThinking(chatHistory.getMessage());
+                    messageForMemory = ChatThinkingCodec.stripNativeThink(messageForMemory);
                     if (StrUtil.isBlank(messageForMemory)) {
                         continue;
                     }
