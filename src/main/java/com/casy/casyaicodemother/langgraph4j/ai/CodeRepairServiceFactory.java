@@ -87,7 +87,8 @@ public class CodeRepairServiceFactory {
                 .chatMemoryProvider(memoryId -> MessageWindowChatMemory.builder()
                         .id(memoryId + ":repair")
                         .chatMemoryStore(redisChatMemoryStore)
-                        .maxMessages(16)
+                        // 修复同样多轮读写文件，窗口需容纳 assistant(tool_calls)+tool 配对
+                        .maxMessages(60)
                         .build())
                 .tools(wrapToolsWithRepair(toolManager.getAllTools()))
                 .toolArgumentsErrorHandler((error, context) -> ToolErrorHandlerResult.text(

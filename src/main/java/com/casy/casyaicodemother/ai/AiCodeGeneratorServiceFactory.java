@@ -106,8 +106,11 @@ public class AiCodeGeneratorServiceFactory {
         if (provider == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的模型类型：" + modelType.getModelName());
         }
-        MessageWindowChatMemory chatMemory = MessageWindowChatMemory.builder().id(appId).chatMemoryStore(redisChatMemoryStore).maxMessages(20).build();
-        chatHistoryService.loadChatHistoryToMemory(appId, chatMemory, 20);
+        // 记忆窗口要足够大：Vue 工具生成一轮可能连续 20~30+ 条 assistant(tool_calls)+tool 消息，
+        // 窗口太小会把首条 user 消息和历史裁掉，导致 gpt-5.5 等 OpenAI 系拒绝
+        // （“缺少用户消息开头 / 消息序列被切坏”类 upstream invalid request）。
+        MessageWindowChatMemory chatMemory = MessageWindowChatMemory.builder().id(appId).chatMemoryStore(redisChatMemoryStore).maxMessages(60).build();
+        chatHistoryService.loadChatHistoryToMemory(appId, chatMemory, 60);
         // 根据代码生成类型选择不同的模型配置，vue工程项目需要用到工具
         return switch (codeGenType) {
             // Vue 项目生成使用pro模型

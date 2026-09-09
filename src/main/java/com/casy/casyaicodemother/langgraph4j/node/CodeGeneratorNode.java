@@ -1,6 +1,8 @@
 package com.casy.casyaicodemother.langgraph4j.node;
 
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
 import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.core.AiCodeGeneratorFacade;
 import com.casy.casyaicodemother.core.vue.VueProjectVersionManager;
@@ -18,6 +20,7 @@ import org.bsc.langgraph4j.prebuilt.MessagesState;
 import reactor.core.publisher.Flux;
 
 import java.time.Duration;
+import java.util.Map;
 
 import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
@@ -26,6 +29,27 @@ import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
  */
 @Slf4j
 public class CodeGeneratorNode {
+
+    /**
+     * 工具名 → 前端工具徽标标签名（markdownRenderer 白名单：fileWrite/fileModify/fileRead/fileDelete/dirRead）。
+     * 工作流对话输出与 AiMarkdownMessage 相同的 <标签> 语法，复用同一套带图标的徽标样式。
+     */
+    private static final Map<String, String> TOOL_TAG_NAMES = Map.of(
+            "writeFile", "fileWrite",
+            "modifyFile", "fileModify",
+            "readFile", "fileRead",
+            "deleteFile", "fileDelete",
+            "readDir", "dirRead"
+    );
+
+    /** 工具名 → 展示用中文动作（失败行与兜底展示） */
+    private static final Map<String, String> TOOL_LABELS = Map.of(
+            "writeFile", "写入文件",
+            "modifyFile", "修改文件",
+            "deleteFile", "删除文件",
+            "readFile", "读取文件",
+            "readDir", "浏览目录"
+    );
 
     public static AsyncNodeAction<MessagesState<String>> create() {
         return node_async(state -> {
@@ -54,14 +78,19 @@ public class CodeGeneratorNode {
             Flux<String> codeStream = codeGeneratorFacade.generateAndSaveCodeStream(
                     userMessage, generationType, generationModel, appId, userMessageId, specifiedVersionDir);
             // 代码流本身不进对话（避免把 HTML 源码刷到左侧）。先提示「正在生成」，
-            // 再每 1.6s 推一个点，避免长节点期间 SSE 完全静默。
+            // 再把 Vue 工程逐条工具执行结果翻译成进度推给前端；非 Vue 没有工具事件则按心跳兜底。
             WorkflowChatEmitter.emitChunked(appId, Boolean.TRUE.equals(context.getEditMode())
                     ? "\n正在按你的要求修改已有网站…\n"
                     : "\n代码生成中，模型正在输出…\n");
+            boolean isVueWorkflow = generationType == CodeGenTypeEnum.VUE_PROJECT;
             java.util.concurrent.atomic.AtomicLong lastBeat = new java.util.concurrent.atomic.AtomicLong(System.currentTimeMillis());
             codeStream
                     .doOnNext(chunk -> {
                         long now = System.currentTimeMillis();
+                        // Vue 工程：把 token 流里的 tool_executed 事件翻译成工作流对话的工具调用过程
+                        if (isVueWorkflow) {
+                            forwardToolExecuted(appId, chunk);
+                        }
                         if (now - lastBeat.get() >= 1600) {
                             lastBeat.set(now);
                             // ping 在 Reactor 线程，必须带 appId，不能靠 ThreadLocal
@@ -84,6 +113,68 @@ public class CodeGeneratorNode {
             }
             return WorkflowContext.saveContext(context);
         });
+    }
+
+    /**
+     * 把 Vue TokenStream 的 tool_executed JSON 事件转成一行可读进度推给工作流对话。
+     * <p>
+     * 只转发“动作+文件路径”，不转发 readFile/readDir 的返回正文与 writeFile 的参数内容，
+     * 避免把整份源码/大目录树刷到左侧对话；失败时带上前 160 字原因帮助定位。
+     */
+    private static void forwardToolExecuted(Long appId, String chunk) {
+        if (appId == null || StrUtil.isBlank(chunk)) {
+            return;
+        }
+        JSONObject msg;
+        try {
+            msg = JSONUtil.parseObj(chunk);
+        } catch (Exception ignored) {
+            return;
+        }
+        if (!"tool_executed".equals(msg.getStr("type"))) {
+            return;
+        }
+        String name = StrUtil.blankToDefault(msg.getStr("name"), "");
+        String label = TOOL_LABELS.getOrDefault(name, name);
+        String path = extractToolPath(msg.getStr("arguments"));
+        boolean failed = Boolean.TRUE.equals(msg.getBool("failed"));
+        if (!failed) {
+            // 成功：复用与 AiMarkdownMessage 相同的工具徽标标签，前端渲染成带图标的徽标
+            String tag = TOOL_TAG_NAMES.getOrDefault(name, "toolCall");
+            String content = path != null ? "`" + path + "`" : "完成";
+            WorkflowChatEmitter.emitChunked(appId, "- <" + tag + ">" + content + "</" + tag + ">\n");
+            return;
+        }
+        // 失败：普通行更醒目（徽标没有失败态）
+        StringBuilder line = new StringBuilder("- ⚠️ ").append(label);
+        if (path != null) {
+            line.append(" `").append(path).append('`');
+        }
+        String reason = StrUtil.blankToDefault(msg.getStr("result"), "未知错误");
+        line.append(" 失败：").append(truncate(reason, 160)).append('\n');
+        WorkflowChatEmitter.emitChunked(appId, line.toString());
+    }
+
+    /** 从 writeFile 等 arguments JSON 中提取相对路径（relativeFilePath / relativeDirPath） */
+    private static String extractToolPath(String arguments) {
+        if (StrUtil.isBlank(arguments)) {
+            return null;
+        }
+        try {
+            JSONObject args = JSONUtil.parseObj(arguments);
+            String path = StrUtil.blankToDefault(args.getStr("relativeFilePath"),
+                    args.getStr("relativeDirPath"));
+            return StrUtil.isBlank(path) ? null : path;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static String truncate(String text, int max) {
+        if (text == null || text.length() <= max) {
+            return text;
+        }
+        return text.substring(0, max) + "…";
     }
 
     /**

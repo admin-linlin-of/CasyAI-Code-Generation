@@ -45,8 +45,9 @@ public class PromptSafetyInputGuardrail implements InputGuardrail {
     public InputGuardrailResult validate(UserMessage userMessage) {
         String input = userMessage.singleText();
         // 限制单次输入长度，避免超大 Prompt 打爆模型上下文
-        if (input.length() > 1000) {
-            return reject("LENGTH", "max=1000,actual=" + input.length(), input, "输入内容过长，不要超过 1000 字");
+        if (input.length() > 3100) {
+            return reject("LENGTH", "max=3000,actual=" + input.length(),
+                    input, "输入内容过长，不要超过 3000 字");
         }
         if (input.trim().isEmpty()) {
             return reject("EMPTY", "blank", input, "输入内容不能为空");

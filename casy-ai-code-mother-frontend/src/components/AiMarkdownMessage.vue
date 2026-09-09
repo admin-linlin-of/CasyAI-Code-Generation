@@ -3,24 +3,43 @@
     class="ai-md"
     :class="{ 'ai-md--typing': typing, 'ai-md--live': live }"
   >
-    <div v-if="showWf" class="wf">
+    <!-- ══ Agent 工作流：始终同一张「步骤列表」卡片 ══ -->
+    <div v-if="isAgent && !waiting && !waitingClassic" class="wf">
       <div class="wf__head">
         <span class="wf__mark" :class="{ 'is-run': live }" />
         <div class="wf__head-main">
-          <div class="wf__title">代码生成</div>
-          <div class="wf__sub">{{ workflowSub }}</div>
+          <div class="wf__title">代码生成工作流</div>
+          <div class="wf__sub">{{ live ? `已运行 ${formatElapsed(elapsed)}` : workflowSub }}</div>
         </div>
-        <span class="wf__count">{{ wfSteps.length }} 步</span>
+        <span class="wf__count">{{ live ? liveCountText : `${wfSteps.length} 步` }}</span>
       </div>
-      <div class="wf__list">
+
+      <!-- 生成中：以“当前执行步骤”行承载实时输出（工具徽标/文字），样式与结束态一致 -->
+      <div v-if="live" class="wf__list">
+        <div class="wf-step is-open is-now">
+          <div class="wf-step__row">
+            <span class="wf-step__dot" />
+            <span class="wf-step__name">{{ currentHint }}</span>
+            <span class="wf-step__chev" />
+          </div>
+          <div class="wf-step__detail">
+            <div class="wf-step__md ai-md__body">
+              <div v-if="html" v-html="html" />
+              <span v-if="typing" class="ai-md__cursor" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 结束：步骤行收起，可点击展开 -->
+      <div v-else-if="wfSteps.length" class="wf__list">
         <div
           v-for="(s, i) in wfSteps"
           :key="s.no"
           class="wf-step"
           :class="{
             'is-open': isStepOpen(s.no),
-            'is-now': live && i === wfSteps.length - 1,
-            'is-done': !live || i < wfSteps.length - 1,
+            'is-done': i < wfSteps.length - 1,
           }"
         >
           <button type="button" class="wf-step__row" @click="toggleStep(s.no)">
@@ -29,14 +48,18 @@
             <span class="wf-step__chev" />
           </button>
           <div v-show="isStepOpen(s.no)" class="wf-step__detail">
-            <div v-if="s.body" class="wf-step__md" v-html="toHtml(s.body)" />
-            <div v-else class="wf-step__pending">进行中…</div>
+            <div v-if="s.body" class="wf-step__md ai-md__body" v-html="toHtml(s.body)" />
+            <div v-else class="wf-step__pending">本步无文字记录</div>
           </div>
         </div>
       </div>
-      <div v-if="workflow?.footer" class="wf__result" v-html="toHtml(workflow.footer)" />
+      <div v-else class="wf__plain ai-md__body">
+        <div v-if="html" v-html="html" />
+      </div>
+      <div v-if="!live && workflow?.footer" class="wf__result" v-html="toHtml(workflow.footer)" />
     </div>
 
+    <!-- ══ 生成中 & 尚无正文：Agent 等待卡片 ══ -->
     <div v-else-if="waiting" class="ai-md__think">
       <div class="ai-md__think-head">
         <span class="ai-md__orb" />
@@ -55,6 +78,7 @@
       <div class="ai-md__elapsed">已运行 {{ formatElapsed(elapsed) }}</div>
     </div>
 
+    <!-- ══ 生成中 & 尚无正文：传统模式等待卡片 ══ -->
     <div v-else-if="waitingClassic" class="ai-md__think ai-md__think--classic">
       <div class="ai-md__think-head">
         <span class="ai-md__orb" />
@@ -64,6 +88,7 @@
       <div class="ai-md__elapsed">已运行 {{ formatElapsed(elapsed) }}</div>
     </div>
 
+    <!-- ══ 传统模式（agent=false）：普通气泡，生成中带状态条 ══ -->
     <template v-else>
       <div v-if="live" class="ai-md__status">
         <div class="ai-md__status-row">
@@ -93,7 +118,7 @@ const STREAM_CPS = 36
 const CATCHUP_CPS = 72
 
 type WfStep = { no: string; title: string; body: string }
-type WfView = { title: string; status: string; steps: WfStep[]; footer: string }
+type WfView = { title: string; status: string; steps: WfStep[]; footer: string; head: string }
 
 const props = defineProps<{
   content: string
@@ -156,7 +181,8 @@ const parseWorkflow = (raw: string): WfView | null => {
       last.body = last.body.slice(0, cut).trim()
     }
   }
-  return { title, status, steps, footer }
+  // head：首个步骤之前的全部原始 Markdown（含各节点实时推送的工具徽标/进度）
+  return { title, status, steps, footer, head: head.trim() }
 }
 
 const cleanContent = computed(() => stripHeartbeat(props.content))
@@ -173,9 +199,16 @@ const waitingClassic = computed(
   () => !props.agent && live.value && cleanContent.value.trim().length === 0,
 )
 const visibleRaw = computed(() => cleanContent.value.slice(0, displayLen.value))
-const workflow = computed(() => parseWorkflow(visibleRaw.value))
+const workflow = computed(() => parseWorkflow(cleanContent.value))
 const wfSteps = computed(() => workflow.value?.steps ?? [])
-const showWf = computed(() => !!workflow.value || (!!props.agent && live.value))
+const isAgent = computed(() => !!props.agent)
+/** 首个步骤之前的过程记录（工具徽标、节点实时输出），渲染在步骤列表上方 */
+const wfIntroHtml = computed(() => {
+  const head = workflow.value?.head
+  if (!head) return ''
+  // 去掉与 wf 头部重复的标题行
+  return toHtml(head.replace(/^\s*#+\s*代码生成工作流\s*\n?/, ''))
+})
 const html = computed(() => renderMarkdown(aiContentToMarkdown(visibleRaw.value)))
 const typing = computed(
   () => everStreamed.value && displayLen.value < cleanContent.value.length,
@@ -193,6 +226,10 @@ const toolActionCount = computed(() => {
   const m = cleanContent.value.match(/<(?:fileWrite|fileModify|fileRead|fileDelete|dirRead)>/g)
   return m?.length ?? 0
 })
+/** Agent 卡片头部右侧计数：生成中显示已调用工具数，结束显示步骤数 */
+const liveCountText = computed(() =>
+  toolActionCount.value > 0 ? `已调用 ${toolActionCount.value} 次工具` : '执行中',
+)
 const currentHint = computed(() => {
   const last = workflow.value?.steps.at(-1)?.title
   if (last) return `正在${last}`
@@ -282,7 +319,7 @@ const showInstant = () => {
 watch(
   () => cleanContent.value.length,
   () => {
-    if (!everStreamed.value || showWf.value) {
+    if (!everStreamed.value || !props.streaming) {
       showInstant()
       return
     }
@@ -295,15 +332,10 @@ watch(
   (streaming) => {
     if (streaming) {
       everStreamed.value = true
-      if (showWf.value) showInstant()
-      else ensureAnim()
+      ensureAnim()
       return
     }
-    if (!everStreamed.value || showWf.value) {
-      showInstant()
-      return
-    }
-    ensureAnim()
+    showInstant()
   },
   { immediate: true },
 )
@@ -338,8 +370,8 @@ onBeforeUnmount(() => {
   margin-bottom: 10px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: linear-gradient(135deg, rgba(22, 119, 255, 0.08), rgba(22, 119, 255, 0.03));
-  border: 1px solid rgba(22, 119, 255, 0.22);
+  background: rgba(22, 119, 255, 0.05);
+  border: 1px solid rgba(22, 119, 255, 0.16);
 }
 
 .ai-md__status-row {
@@ -727,6 +759,46 @@ onBeforeUnmount(() => {
   border-radius: 4px;
   background: #f5f5f5;
   color: #595959;
+}
+
+/* 完成视图顶部的过程记录区：滚动展示各节点实时推送内容（含工具徽标） */
+.wf__intro {
+  margin: 0 12px 4px;
+  padding: 10px 12px;
+  max-height: 240px;
+  overflow: auto;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.025);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary, #595959);
+}
+
+.wf__intro :deep(.ai-tool-call) {
+  margin: 3px 0;
+}
+
+/* 生成中实时过程区：不限制高度、无底色块，跟卡片同底色随内容自然生长 */
+.wf__intro--live {
+  max-height: none;
+  margin-bottom: 2px;
+  border: 0;
+  background: transparent;
+  padding: 4px 12px;
+}
+
+.wf__running-tip {
+  color: #8c8c8c;
+  font-size: 13px;
+}
+
+/* 无步骤标记时的兜底正文区（仍在同一张工作流卡片内） */
+.wf__plain {
+  padding: 6px 14px 12px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-main);
 }
 
 .wf__result {

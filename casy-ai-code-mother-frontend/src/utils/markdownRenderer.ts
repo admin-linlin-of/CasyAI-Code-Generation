@@ -36,14 +36,14 @@ const md = new MarkdownIt({
 // markdown-it 开启了 html=false，因此这些标签会先被安全转义；
 // 这里再通过白名单把固定工具标签转换成前端样式化的工具徽标。
 const TOOL_TAGS: Record<string, { label: string; className: string }> = {
-  fileWrite: { label: '写入', className: 'file-write' },
-  fileModify: { label: '修改', className: 'file-modify' },
-  fileRead: { label: '读取', className: 'file-read' },
-  fileDelete: { label: '删除', className: 'file-delete' },
-  dirRead: { label: '目录', className: 'dir-read' },
-  toolCall: { label: '工具', className: 'tool-call' },
+  fileWrite: { label: '📝 写入', className: 'file-write' },
+  fileModify: { label: '🔧 修改', className: 'file-modify' },
+  fileRead: { label: '📖 读取', className: 'file-read' },
+  fileDelete: { label: '🗑️ 删除', className: 'file-delete' },
+  dirRead: { label: '📁 目录', className: 'dir-read' },
+  toolCall: { label: '🛠️ 工具', className: 'tool-call' },
 }
-const DEFAULT_TOOL_TAG = { label: '工具', className: 'tool-call' }
+const DEFAULT_TOOL_TAG = { label: '🛠️ 工具', className: 'tool-call' }
 
 // 只匹配 TOOL_TAGS 中声明过的已转义标签，避免用户或模型输出的任意 HTML 被激活，
 // 同时允许我们约定好的工具标记渲染成动态徽标。

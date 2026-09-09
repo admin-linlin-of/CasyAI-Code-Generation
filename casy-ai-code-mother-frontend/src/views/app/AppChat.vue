@@ -136,7 +136,7 @@
           </div>
           <a-textarea
             v-model:value="inputMessage"
-            :maxlength="1200"
+            :maxlength="1000"
             :rows="3"
             placeholder="继续描述你的页面需求...（可 Ctrl+V 粘贴图片）"
             show-count
@@ -247,6 +247,20 @@
               <a-button type="primary" :loading="retryingBuild" @click="retryBuild()"
                 >重新打包</a-button
               >
+            </a-empty>
+          </div>
+
+          <!-- 本轮生成失败（传统/工作流/连接中断）：直接失败态，不显示“预览准备中” -->
+          <div v-else-if="rightPanelMode === 'generation-failed'" class="preview-building">
+            <a-empty>
+              <template #description>
+                <div class="build-fail-title">生成失败</div>
+                <pre v-if="generationFailedText" class="build-error-text">{{
+                  generationFailedText.slice(0, 500)
+                }}</pre>
+                <div class="gen-fail-tip">请查看左侧对话中的失败原因，或重新发送需求</div>
+              </template>
+              <a-button type="primary" @click="generationFailedText = ''">知道了</a-button>
             </a-empty>
           </div>
 
@@ -687,6 +701,13 @@ const previewUrl = ref('')
 const staticBaseUrl = ref('')
 /** 是否展示右侧预览区（生成结束后或已有历史时为 true） */
 const showPreview = ref(false)
+/** 本轮生成失败文案；非空表示本次生成失败，右侧面板显示失败态 */
+const generationFailedText = ref('')
+/** 判定一段回复文本是否表示“生成失败”（传统前缀 / 工作流失败 / 连接中断） */
+const isGenerationFailure = (text: string): boolean => {
+  const t = (text ?? '').trim()
+  return t.startsWith('生成失败') || t.startsWith('❌') || t.includes('工作流执行失败')
+}
 /** Vue 项目：当前版本 npm build 轮询中 */
 const previewBuilding = ref(false)
 const retryingBuild = ref(false)
@@ -1095,6 +1116,7 @@ type RightPanelMode =
   | 'code-live'
   | 'code'
   | 'build-failed'
+  | 'generation-failed'
   | 'building'
   | 'waiting-preview'
   | 'preview-ready'
@@ -1105,6 +1127,8 @@ const rightPanelMode = computed((): RightPanelMode => {
     if (rightViewMode.value === 'code' && hasCodeContent.value) return 'code-live'
     return 'generating'
   }
+  // 本轮生成以失败结束：右侧直接显示失败态，不再误进“预览准备中”
+  if (generationFailedText.value) return 'generation-failed'
   if (rightViewMode.value === 'code' && hasCodeContent.value) return 'code'
   if (rightViewMode.value !== 'preview' || !showPreview.value) return 'idle'
   if (selectedVersionBuildFailed.value) return 'build-failed'
@@ -1545,6 +1569,7 @@ const startStream = (messageText: string) => {
   generating.value = true
   startGenTimer()
   showPreview.value = false
+  generationFailedText.value = ''
   rightViewMode.value = 'code'
   if (isVueProject.value) {
     resetProjectFiles()
@@ -1607,10 +1632,14 @@ const startStream = (messageText: string) => {
       const data = JSON.parse(event.data) as { message?: string }
       if (data.message) errorMessage = data.message
     } catch {}
-    aiMsg.content = '❌ ' + errorMessage
+    // 保留已生成的部分内容，再追加明确异常
+    const prefix = aiMsg.content.trim() ? `${aiMsg.content.trimEnd()}\n\n` : ''
+    aiMsg.content = `${prefix}❌ ${errorMessage}`
     aiMsg.streaming = false
     generating.value = false
+    generationFailedText.value = `❌ ${errorMessage}`
     stopGenTimer()
+    stopBuildTimer()
     message.error(errorMessage)
     closeEventSource()
     scrollToBottom()
@@ -1628,10 +1657,12 @@ const startStream = (messageText: string) => {
     aiMsg.streaming = false
     generating.value = false
     stopGenTimer()
+    stopBuildTimer()
     closeEventSource()
-    // 错误信息已通过 onmessage 写入 aiMsg.content，跳过预览加载
-    const isError = aiMsg.content.startsWith('生成失败')
-    if (isError) {
+    // 传统前缀“生成失败”、工作流“工作流执行失败”、❌ 等都属于失败：
+    // 直接展示失败态，不进入“加载版本/等预览”流程
+    if (isGenerationFailure(aiMsg.content)) {
+      generationFailedText.value = aiMsg.content.trim()
       scrollToBottom()
       return
     }
@@ -1648,19 +1679,24 @@ const startStream = (messageText: string) => {
     await loadSavedCodeFiles()
   })
 
-  // 连接异常且未收到任何内容时的兜底（如网络中断）
+  // 连接异常（后端出错 / 服务停止 / 网络中断）：停表并始终给出可见异常，
+  // 不再静默丢弃已收到的部分内容
   eventSource.onerror = () => {
     closeEventSource()
-    if (!finished) {
-      finished = true
-      aiMsg.streaming = false
-      generating.value = false
-      stopGenTimer()
-      if (!aiMsg.content.trim()) {
-        aiMsg.content = '生成失败，请重试'
-      }
-      scrollToBottom()
+    if (finished) return
+    finished = true
+    aiMsg.streaming = false
+    generating.value = false
+    stopGenTimer()
+    stopBuildTimer()
+    if (!aiMsg.content.trim()) {
+      aiMsg.content = '❌ 生成失败：连接中断，请检查后端服务后重试'
+    } else if (!aiMsg.content.includes('❌')) {
+      aiMsg.content = `${aiMsg.content.trimEnd()}\n\n❌ 连接中断，请检查后端服务后重试`
     }
+    generationFailedText.value = aiMsg.content.trim()
+    message.error('生成中断：与服务器的连接已断开')
+    scrollToBottom()
   }
 }
 
@@ -2023,8 +2059,9 @@ onBeforeUnmount(() => {
 }
 
 .message-item--ai .message-item__content {
-  background: rgba(22, 119, 255, 0.08);
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
@@ -2492,6 +2529,12 @@ onBeforeUnmount(() => {
   margin-bottom: 8px;
   color: var(--text-main);
   font-weight: 500;
+}
+
+.gen-fail-tip {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .build-error-text {

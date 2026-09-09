@@ -2,9 +2,13 @@ package com.casy.casyaicodemother.langgraph4j.node;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
+import com.casy.casyaicodemother.constant.AppConstant;
+import com.casy.casyaicodemother.core.vue.VueProjectVersionManager;
 import com.casy.casyaicodemother.langgraph4j.ai.CodeQualityCheckService;
 import com.casy.casyaicodemother.langgraph4j.model.QualityResult;
 import com.casy.casyaicodemother.langgraph4j.state.WorkflowContext;
+import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
+import com.casy.casyaicodemother.service.AppVersionService;
 import com.casy.casyaicodemother.util.SpringContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.AsyncNodeAction;
@@ -37,7 +41,20 @@ public class CodeQualityCheckNode {
             QualityResult qualityResult;
             try {
                 // 1. 读取并拼接代码文件内容
-                String codeContent = readAndConcatenateCodeFiles(generatedCodeDir);
+                String codeContent =
+                        readAndConcatenateCodeFiles(generatedCodeDir); // 读取 generatedCodeDir 这个路径下的所有代码文件，拼成一段文本交给 AI 质检。 这里的 generatedCodeDir 是工作流上下文里记录的“代码在哪”的路径，它不一定等于磁盘上真实的代码位置。
+                // 1.1 兜底：当前记录为空目录/无文件（例如首次生成未写文件、修复节点才真正产出 v1 的情况）时，
+                // 自动回退到该 app 最新版本目录并回写 context，让后续「项目构建/代码修复」也使用正确路径，
+                // 避免“文件已生成但质检一直说未找到”的假失败循环。
+                if (StrUtil.isBlank(codeContent)) {
+                    String resolved = resolveLatestGeneratedDir(context);
+                    if (StrUtil.isNotBlank(resolved) && !resolved.equals(generatedCodeDir)) {
+                        log.warn("generatedCodeDir={} 下未找到代码，回退到最新版本目录: {}", generatedCodeDir, resolved);
+                        context.setGeneratedCodeDir(resolved);
+                        generatedCodeDir = resolved;
+                        codeContent = readAndConcatenateCodeFiles(generatedCodeDir);
+                    }
+                }
                 if (StrUtil.isBlank(codeContent)) {
                     log.warn("未找到可检查的代码文件");
                     qualityResult = QualityResult.builder()
@@ -62,6 +79,34 @@ public class CodeQualityCheckNode {
             context.setQualityResult(qualityResult);
             return WorkflowContext.saveContext(context);
         });
+    }
+
+    /**
+     * 按 app 当前最新版本重新解析落盘目录（HTML/MULTI_FILE 与 Vue 的路径规则不同）。
+     * 与 {@link CodeGeneratorNode} 的 resolveGeneratedCodeDir 保持一致。
+     */
+    private static String resolveLatestGeneratedDir(WorkflowContext context) {
+        Long appId = context.getAppId();
+        CodeGenTypeEnum generationType = context.getGenerationType();
+        if (appId == null || generationType == null) {
+            return "";
+        }
+        try {
+            AppVersionService appVersionService = SpringContextUtil.getBean(AppVersionService.class);
+            String versionDir = appVersionService.getLatestCodeDir(appId);
+            if (StrUtil.isBlank(versionDir)) {
+                return "";
+            }
+            if (generationType == CodeGenTypeEnum.VUE_PROJECT) {
+                VueProjectVersionManager versionManager = SpringContextUtil.getBean(VueProjectVersionManager.class);
+                return versionManager.getVersionDir(appId, versionDir).getAbsolutePath();
+            }
+            return String.format("%s/%s_%s_%s",
+                    AppConstant.CODE_OUTPUT_ROOT_DIR, generationType.getValue(), appId, versionDir);
+        } catch (Exception e) {
+            log.warn("回退解析最新代码目录失败，appId={}", appId, e);
+            return "";
+        }
     }
 
     /**

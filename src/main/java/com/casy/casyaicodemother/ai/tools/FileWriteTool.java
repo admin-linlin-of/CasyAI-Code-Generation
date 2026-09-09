@@ -31,9 +31,14 @@ public class FileWriteTool extends BaseTool {
     public String writeFile(
             @P("Relative file path") String relativeFilePath,
             @P("File content to write") String content,
-            @P(value = "Whether to append content. Use false for first chunk and true for following chunks", required = false) boolean append,
+            @P(value = "Whether to append content. Use false for first chunk and true for following chunks", required = false) Boolean append,
             @ToolMemoryId Long appId
     ) {
+        // append 使用包装类型 Boolean：模型经常漏传这个可选参数，若声明为原始 boolean，
+        // langchain4j 会用 null 去填原始类型，反射拆箱时报
+        // “ValueConversions.primitiveConversion(Wrapper,Object,boolean) is null”的底层异常。
+        // 包装类型缺失时为 null，这里统一按 false（覆盖写）处理。
+        boolean appendFlag = append != null && append;
         // 关键：在触碰 Paths.get / 文件系统之前先校验必填参数。
         // 否则 relativeFilePath=null 会抛 NullPointerException，模型只收到“java.lang.NullPointerException”，
         // 无法定位缺哪个参数，导致同一条错误调用被反复重试（见日志中大量 tool 内容为 NPE 的记录）。
@@ -44,7 +49,7 @@ public class FileWriteTool extends BaseTool {
         }
         // .vue 是「成对结构标签」文件：append 续写极易造成重复 </template>/游离 </div>，导致 npm build 的 Invalid end tag。
         // 直接拒绝并要求整文件重写（或 readFile 后 modifyFile 局部修改），从源头避免这类结构性损坏。
-        if (append && relativeFilePath.toLowerCase().endsWith(".vue")) {
+        if (appendFlag && relativeFilePath.toLowerCase().endsWith(".vue")) {
             throw new IllegalArgumentException(
                     getToolName() + " 禁止对 .vue 文件使用 append 续写：会破坏 <template>/<script> 的成对闭合"
                             + "（典型后果：重复 </template>、游离 </div>，npm run build 报 Invalid end tag）。"
@@ -65,7 +70,7 @@ public class FileWriteTool extends BaseTool {
             if (parentDir != null) {
                 Files.createDirectories(parentDir);
             }
-            if (append) {
+            if (appendFlag) {
                 Files.write(path, content.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             } else {
                 Files.write(path, content.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
