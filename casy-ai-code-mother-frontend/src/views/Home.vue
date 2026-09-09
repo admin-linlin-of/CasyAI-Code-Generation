@@ -128,7 +128,7 @@
                 <span v-else class="app-card__placeholder">
                   {{ displayAppName(app.appName, app.initPrompt).slice(0, 1) }}
                 </span>
-                <span v-if="app.appTypes?.length" class="app-card__tag">{{ app.appTypes[0] }}</span>
+                <span v-if="app.appTypes?.length" class="app-card__tag">{{ formatAppTypeLabel(app.appTypes[0]) }}</span>
                 <div class="app-card__mask">
                   <a-button class="card-hover-button" @click.stop="goChat(toAppId(app.id))">
                     查看对话
@@ -182,11 +182,16 @@
           </div>
 
           <div class="showcase-block__filters">
-            <span class="home-pill home-pill--active">全部</span>
-            <span class="home-pill">网站</span>
-            <span class="home-pill">工具</span>
-            <span class="home-pill">博客</span>
-            <span class="home-pill">管理后台</span>
+            <button
+              v-for="opt in featuredTypeFilters"
+              :key="opt.value || 'all'"
+              class="home-pill"
+              :class="{ 'home-pill--active': goodFilterType === opt.value }"
+              type="button"
+              @click="selectGoodAppType(opt.value)"
+            >
+              {{ opt.label }}
+            </button>
           </div>
 
           <div class="app-grid">
@@ -201,7 +206,7 @@
                 <span v-else class="app-card__placeholder">
                   {{ displayAppName(app.appName, app.initPrompt).slice(0, 1) }}
                 </span>
-                <span v-if="app.appTypes?.length" class="app-card__tag">{{ app.appTypes[0] }}</span>
+                <span v-if="app.appTypes?.length" class="app-card__tag">{{ formatAppTypeLabel(app.appTypes[0]) }}</span>
                 <div class="app-card__mask">
                   <a-button class="card-hover-button" @click.stop="goChat(toAppId(app.id))">
                     预览
@@ -247,6 +252,7 @@ import { useRouter } from 'vue-router'
 import { addApp, listGoodAppVoByPage, listMyAppVoByPage } from '@/api/appController'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { useAiModelOptions } from '@/composables/useAiModelOptions'
+import { APP_TYPE_LABEL_MAP, APP_TYPE_OPTIONS } from '@/constant/appType'
 import { deriveAppName, displayAppName } from '@/utils/appName'
 
 const router = useRouter()
@@ -304,6 +310,13 @@ const goodTotal = ref(0)
 const goodPageNum = ref(1)
 const goodPageSize = ref(8)
 const goodSearchName = ref('')
+const goodFilterType = ref('')
+const featuredTypeFilters = [{ value: '', label: '全部' }, ...APP_TYPE_OPTIONS]
+
+const formatAppTypeLabel = (type?: string) => {
+  if (!type) return ''
+  return APP_TYPE_LABEL_MAP[type] || type
+}
 
 const trimmedPrompt = computed(() => initPrompt.value.trim())
 const toAppId = (id?: string | number) => {
@@ -378,13 +391,20 @@ const loadGoodApps = async (page = 1, pageSize = goodPageSize.value) => {
     pageNum: goodPageNum.value,
     pageSize: goodPageSize.value,
     appName: goodSearchName.value || undefined,
+    appTypes: goodFilterType.value ? [goodFilterType.value] : undefined,
     sortField: 'priority',
     sortOrder: 'descend',
   })
   if (res.data.code === 0 && res.data.data) {
     goodApps.value = res.data.data.records ?? []
-    goodTotal.value = res.data.data.totalRow ?? 0
+    goodTotal.value = Number(res.data.data.totalRow ?? 0)
   }
+}
+
+const selectGoodAppType = (type: string) => {
+  if (goodFilterType.value === type) return
+  goodFilterType.value = type
+  void loadGoodApps(1)
 }
 const goChat = (id?: string) => {
   if (!id) return
@@ -856,8 +876,13 @@ html[data-theme='dark'] :deep(.showcase-search .ant-input-group-addon .ant-input
   font-size: 13px;
   font-weight: 500;
   line-height: 1.4;
-  cursor: default;
+  cursor: pointer;
   transition: all 0.2s ease;
+}
+
+.home-pill:hover:not(.home-pill--active) {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--accent);
 }
 
 .home-pill--active {

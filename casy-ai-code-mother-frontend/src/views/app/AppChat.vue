@@ -1755,18 +1755,26 @@ const startStream = (messageText: string) => {
         // 工作流 HTML/多文件：代码只进右侧面板，不污染工作流步骤卡片
         liveCodeBuffer.value += data.c ?? ''
       } else {
-        aiMsg.content += data.c ?? ''
-        if (isGenerationFailure(data.c ?? '') || isGenerationFailure(aiMsg.content)) {
+        const chunk = data.c ?? ''
+        aiMsg.content += chunk
+        // 传统 HTML / 多文件的代码也在这条文本流里。必须写入 liveCodeBuffer，
+        // displayVirtualFiles 才能响应式更新，右侧打字机才会动。
+        if (!isVueProject.value && chunk) {
+          liveCodeBuffer.value += chunk
+        }
+        if (isGenerationFailure(chunk) || isGenerationFailure(aiMsg.content)) {
           generationFailedText.value = extractGenerationFailureText(aiMsg.content)
         }
-        if (!isVueProject.value) scheduleCodeRefresh()
       }
     } catch {
-      aiMsg.content += event.data ?? ''
-      if (isGenerationFailure(event.data ?? '') || isGenerationFailure(aiMsg.content)) {
+      const rawChunk = event.data ?? ''
+      aiMsg.content += rawChunk
+      if (!isVueProject.value && rawChunk) {
+        liveCodeBuffer.value += rawChunk
+      }
+      if (isGenerationFailure(rawChunk) || isGenerationFailure(aiMsg.content)) {
         generationFailedText.value = extractGenerationFailureText(aiMsg.content)
       }
-      if (!isVueProject.value) scheduleCodeRefresh()
     }
     scrollToBottom()
   }

@@ -1,14 +1,16 @@
 import type { CodeFields } from '@/utils/aiContentMarkdown'
 
-/** 与后端 CodeParserConstant 保持一致的正则 */
-const HTML_FENCE = /```html\s*(?:\r\n|\r|\n)?([\s\S]*?)(?:```|$)/i
-const HTML_FENCE_CLOSED = /```html\s*(?:\r\n|\r|\n)?([\s\S]*?)```/i
-const CSS_FENCE = /```css\s*(?:\r\n|\r|\n)?([\s\S]*?)(?:```|$)/i
-const CSS_FENCE_CLOSED = /```css\s*(?:\r\n|\r|\n)?([\s\S]*?)```/i
-const JS_FENCE = /```(?:js|javascript)\s*(?:\r\n|\r|\n)?([\s\S]*?)(?:```|$)/i
-const JS_FENCE_CLOSED = /```(?:js|javascript)\s*(?:\r\n|\r|\n)?([\s\S]*?)```/i
+/** 与后端 CodeParserConstant 保持一致的正则；围栏语言名允许前后空白，便于流式输出 */
+const HTML_FENCE = /```\s*html\s*(?:\r\n|\r|\n)?([\s\S]*?)(?:```|$)/i
+const HTML_FENCE_CLOSED = /```\s*html\s*(?:\r\n|\r|\n)?([\s\S]*?)```/i
+const CSS_FENCE = /```\s*css\s*(?:\r\n|\r|\n)?([\s\S]*?)(?:```|$)/i
+const CSS_FENCE_CLOSED = /```\s*css\s*(?:\r\n|\r|\n)?([\s\S]*?)```/i
+const JS_FENCE = /```\s*(?:js|javascript)\s*(?:\r\n|\r|\n)?([\s\S]*?)(?:```|$)/i
+const JS_FENCE_CLOSED = /```\s*(?:js|javascript)\s*(?:\r\n|\r|\n)?([\s\S]*?)```/i
 const LOOSE_HTML =
   /(?:<!DOCTYPE\s+html[^>]*>[\s\S]*?<\/html>|<html\b[^>]*>[\s\S]*?<\/html>)/is
+/** 流式尚未输出 </html> 时，仍把已出现的文档骨架送给编辑器打字机 */
+const LOOSE_HTML_STREAM = /(?:<!DOCTYPE\s+html\b[\s\S]*|<html\b[^>]*>[\s\S]*)/is
 const LOOSE_CSS = /css\s*格式\s*(?:\r\n|\r|\n)([\s\S]*?)(?=(?:\r\n|\r|\n)\s*```|$)/is
 const LOOSE_JS =
   /(?:js|javascript)\s*格式\s*(?:\r\n|\r|\n)([\s\S]*?)(?=(?:\r\n|\r|\n)\s*```|$)/is
@@ -66,6 +68,7 @@ export function extractCodeFields(raw: string): CodeFields {
     matchGroup(HTML_FENCE_CLOSED, raw),
     matchGroup(HTML_FENCE, raw),
     matchFull(LOOSE_HTML, raw),
+    matchFull(LOOSE_HTML_STREAM, raw),
   )
   const cssCode = firstNonBlank(
     matchGroup(CSS_FENCE_CLOSED, raw),
