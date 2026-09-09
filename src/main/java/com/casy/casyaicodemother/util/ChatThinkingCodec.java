@@ -23,6 +23,7 @@ public final class ChatThinkingCodec {
         if (StrUtil.isBlank(thinking)) {
             return normalizedBody;
         }
+        // 标签仅存在于 t_chat_history；loadChatHistoryToMemory 会 stripThinking
         return "<aiThinking>" + thinking.trim() + "</aiThinking>\n\n" + normalizedBody;
     }
 

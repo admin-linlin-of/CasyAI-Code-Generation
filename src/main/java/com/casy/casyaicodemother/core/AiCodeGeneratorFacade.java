@@ -79,12 +79,15 @@ public class AiCodeGeneratorFacade {
         }
         return switch (codeGenTypeEnum) {
             case HTML -> {
-                Flux<String> stringFlux = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId).generateHtmlCodeStream(userMessage);
-                yield processCodeStream(stringFlux, CodeGenTypeEnum.HTML, modelTypeEnum, appId, userMessageId);
+                // TokenStream 才能拿到 onPartialThinking；旧 Flux 入口看不到思考过程
+                TokenStream tokenStream = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId)
+                        .generateHtmlCodeTokenStream(userMessage);
+                yield processTextTokenStream(tokenStream, CodeGenTypeEnum.HTML, modelTypeEnum, appId, userMessageId);
             }
             case MULTI_FILE -> {
-                Flux<String> stringFlux = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId).generateMultiFileCodeStream(userMessage);
-                yield processCodeStream(stringFlux, CodeGenTypeEnum.MULTI_FILE, modelTypeEnum, appId, userMessageId);
+                TokenStream tokenStream = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId)
+                        .generateMultiFileCodeTokenStream(userMessage);
+                yield processTextTokenStream(tokenStream, CodeGenTypeEnum.MULTI_FILE, modelTypeEnum, appId, userMessageId);
             }
             case VUE_PROJECT -> {
                 // 每轮用户对话都先建新版本，再让 read/modify/write 打到该目录。
@@ -129,6 +132,42 @@ public class AiCodeGeneratorFacade {
 
 
     /**
+     * HTML / 多文件：TokenStream 同时推送思考 token 与正文，流结束后再解析落盘。
+     * <p>
+     * 思考必须打成 {@code {"c":"...","t":"thinking"}}：前端按 {@code t===thinking} 写入折叠块，
+     * {@link com.casy.casyaicodemother.core.handler.SimpleTextStreamHandler} 也靠该标记把思考
+     * 从正文里拆出去。思考片段<strong>不能</strong>写入 {@code codeBuilder}，否则解析器会把
+     * reasoning 当成代码。
+     */
+    private Flux<String> processTextTokenStream(TokenStream tokenStream, CodeGenTypeEnum codeGenType,
+                                                ModelTypeEnum modelTypeEnum, Long appId, Long userMessageId) {
+        StringBuilder codeBuilder = new StringBuilder();
+        Flux<String> live = Flux.create(sink -> tokenStream
+                // 模型开启 returnThinking 时才会回调；Flash 默认关闭则整段不触发
+                .onPartialThinking((PartialThinking partialThinking) -> {
+                    String text = partialThinking.text();
+                    if (StrUtil.isBlank(text)) {
+                        return;
+                    }
+                    sink.next(JSONUtil.toJsonStr(java.util.Map.of("c", text, "t", "thinking")));
+                })
+                .onPartialResponse(partialResponse -> {
+                    if (partialResponse != null) {
+                        // 仅正文进入解析缓冲（设计说明 + 代码围栏）
+                        codeBuilder.append(partialResponse);
+                        sink.next(partialResponse);
+                    }
+                })
+                .onCompleteResponse(response -> sink.complete())
+                .onError(error -> {
+                    log.error("HTML/多文件 TokenStream 异常", error);
+                    sink.error(error);
+                })
+                .start());
+        return live.concatWith(Flux.defer(() -> saveParsedCode(codeBuilder.toString(), codeGenType, modelTypeEnum, appId, userMessageId)));
+    }
+
+    /**
      * 流式收集模型输出，流结束后解析并落盘。
      * <p>
      * 版本目录仍由 {@link AppVersionService#createCodeVersion} 生成，不在此处改写 versionDir 规则。
@@ -136,31 +175,40 @@ public class AiCodeGeneratorFacade {
      */
     private Flux<String> processCodeStream(Flux<String> codeStream, CodeGenTypeEnum codeGenType, ModelTypeEnum modelTypeEnum, Long appId, Long userMessageId) {
         StringBuilder codeBuilder = new StringBuilder();
-        return codeStream.doOnNext(codeBuilder::append).concatWith(Flux.defer(() -> {
-            String completeCode = codeBuilder.toString();
-            log.info("AI最终的响应：{}", completeCode);
-            if (StrUtil.isBlank(completeCode)) {
-                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "模型未返回代码内容，无法保存文件");
+        return codeStream.doOnNext(chunk -> {
+            // 旧 Flux 入口若混入 thinking JSON，同样不能进解析缓冲
+            if (isThinkingSseChunk(chunk)) {
+                return;
             }
-            // 使用执行器解析代码
-            Object parsedResult = CodeParserExecutor.executeParser(codeGenType, completeCode);
-            // 添加新增版本
-            String versionDir;
-            if (appId == 741582369L) {
-                versionDir = "v1";
-            } else {
-                versionDir = appVersionService.createCodeVersion(appId, modelTypeEnum, userMessageId);
-            }
+            codeBuilder.append(chunk);
+        }).concatWith(Flux.defer(() ->
+                saveParsedCode(codeBuilder.toString(), codeGenType, modelTypeEnum, appId, userMessageId)));
+    }
 
-            // 使用执行器保存代码
-            File savedDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenType, appId, versionDir);
-            log.info("保存成功，路径为：{}", savedDir.getAbsolutePath());
-            // 传统生成不会走工作流 SitePreviewNode；写盘后即可截封面
-            if (savedDir != null) {
-                SitePreviewNode.submit(appId, savedDir.getAbsolutePath(), codeGenType);
-            }
-            return Flux.empty();
-        }));
+    /** SSE 思考片段：{@code {"c":"...","t":"thinking"}}，与 Vue 工程前端约定一致 */
+    private static boolean isThinkingSseChunk(String chunk) {
+        return chunk != null && chunk.startsWith("{") && chunk.contains("\"t\":\"thinking\"");
+    }
+
+    private Flux<String> saveParsedCode(String completeCode, CodeGenTypeEnum codeGenType,
+                                        ModelTypeEnum modelTypeEnum, Long appId, Long userMessageId) {
+        log.info("AI最终的响应：{}", completeCode);
+        if (StrUtil.isBlank(completeCode)) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "模型未返回代码内容，无法保存文件");
+        }
+        Object parsedResult = CodeParserExecutor.executeParser(codeGenType, completeCode);
+        String versionDir;
+        if (appId == 741582369L) {
+            versionDir = "v1";
+        } else {
+            versionDir = appVersionService.createCodeVersion(appId, modelTypeEnum, userMessageId);
+        }
+        File savedDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenType, appId, versionDir);
+        log.info("保存成功，路径为：{}", savedDir.getAbsolutePath());
+        if (savedDir != null) {
+            SitePreviewNode.submit(appId, savedDir.getAbsolutePath(), codeGenType);
+        }
+        return Flux.empty();
     }
 
     /**
