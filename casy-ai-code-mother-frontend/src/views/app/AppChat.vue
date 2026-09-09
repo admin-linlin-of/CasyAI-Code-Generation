@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <!--
     应用对话页：左聊天 | 中代码/预览 | 右版本列表
     脚本区见文件顶部 JSDoc 流程说明
@@ -35,7 +35,16 @@
 
     <div ref="layoutRef" class="core-layout">
       <section class="chat-panel" :style="{ width: `${chatWidth}px` }">
-        <div ref="messageRef" class="message-list">
+        <!-- 上一次生成以失败收尾时，刷新/重新进入后提示：对话记录已保留，可直接继续而不是重开 -->
+        <a-alert
+          v-if="lastErrorNotice"
+          class="chat-error-banner"
+          type="warning"
+          show-icon
+          :message="`上一次生成未成功：${lastErrorNotice.reason}`"
+          :description="lastErrorNotice.description"
+        />
+        <div ref="messageRef" class="message-list" @scroll="handleChatScroll">
           <div v-if="historyHasMore" class="load-more">
             <a-button :loading="loadingMoreHistory" type="link" @click="loadMoreHistory">
               加载更多
@@ -59,7 +68,7 @@
               <!-- AI 消息：Markdown + 高亮 + 打字机；用户消息：纯文本 + 粘贴图片缩略图 -->
               <AiMarkdownMessage
                 v-if="msg.role === 'ai'"
-                :content="msg.content"
+                :content="aiBubbleContent(msg)"
                 :streaming="msg.streaming"
                 :agent="agentMode === '1'"
               />
@@ -80,6 +89,17 @@
           </div>
           <a-empty v-if="messages.length === 0" description="发送消息开始生成" />
         </div>
+        <!-- 用户向上翻阅历史时停止自动滚动，出现「回到最新」悬浮按钮 -->
+        <button
+          v-if="!autoScrollStick && messages.length > 0"
+          type="button"
+          class="chat-jump-bottom"
+          title="回到最新消息"
+          @click="jumpToLatest"
+        >
+          <DownOutlined />
+          <span>回到最新</span>
+        </button>
         <div class="input-area">
           <a-alert
             v-if="selectedVisualElement"
@@ -453,7 +473,7 @@
  * <h3>代码展示数据来源</h3>
  * 优先从最新 AI 消息解析虚拟文件；解析不到则读 staticBaseUrl 下已落盘文件（loadSavedCodeFiles）。
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { deleteApp, deployApp, getAppVoById, updateApp } from '@/api/appController'
@@ -466,6 +486,7 @@ import { useLoginUserStore } from '@/stores/loginUser'
 import { useAiModelOptions } from '@/composables/useAiModelOptions'
 import {
   CheckCircleOutlined,
+  DownOutlined,
   EditOutlined,
   LeftOutlined,
   RightOutlined,
@@ -1176,6 +1197,70 @@ const applyHistoryRecords = (records: API.ChatHistoryVO[], prepend: boolean) => 
   historyHasMore.value = records.length >= HISTORY_PAGE_SIZE
 }
 
+// ─── 上一次生成失败提示 ───────────────────────────────────────
+/** 是否为「生成失败」的 AI 消息（saveErrorMessage 统一以“生成失败：”开头） */
+const isErrorAiMessage = (m?: ChatMessage): boolean => {
+  if (!m || m.role !== 'ai') return false
+  const text = m.content?.trim() ?? ''
+  return text.startsWith('生成失败') || text.startsWith('❌')
+}
+
+/** 从错误消息文本中提取可读原因（去掉“生成失败：/❌”前缀，超长截断） */
+const extractErrorReason = (content: string): string => {
+  const text = (content ?? '')
+    .replace(/^生成失败[:：]?\s*/, '')
+    .replace(/^❌\s*/, '')
+    .trim()
+  return text.length > 120 ? `${text.slice(0, 120)}…` : text || '生成中断，详见对话记录'
+}
+
+type LastErrorNotice = { reason: string; description: string } | null
+
+/**
+ * 会话里最新一条 AI 消息若是失败记录，则返回提示信息。
+ * 说明：刷新 / 重新进入页面时对话历史已从 t_chat_history 加载（含出错前保留的
+ * 深度思考、工具调用与生成内容），因此不会再回到“空对话”状态；这里只负责告知用户，
+ * 并提供入口继续在原记录上对话或重新发送需求。
+ */
+const lastErrorNotice = computed<LastErrorNotice>(() => {
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    const m = messages.value[i]
+    if (m?.role !== 'ai') continue
+    if (!isErrorAiMessage(m)) return null
+    // 最新一条 AI 消息是失败记录 → 会话以失败收尾
+    const reason = extractErrorReason(m.content)
+    // 判断出错前是否保留了实质内容（正常 ai 内容 / 深度思考）
+    const hasKeptContent = messages.value.some(
+      (x) => x.role === 'ai' && x !== m && !isErrorAiMessage(x) && (x.content?.trim() || x.thinking?.trim()),
+    )
+    return {
+      reason,
+      description: hasKeptContent
+        ? '已加载并保留错误前的对话记录（含深度思考、工具调用与已生成内容），可直接继续对话或补充需求，无需重新开始。'
+        : '本次生成未能保留有效内容，可直接重新发送需求。',
+    }
+  }
+  return null
+})
+
+/** 首次加载历史后发现上次生成失败时，弹窗提醒一次（避免每次进页面都弹） */
+const lastErrorModalShown = ref(false)
+const notifyLastGenerationErrorOnce = () => {
+  const notice = lastErrorNotice.value
+  if (!notice || lastErrorModalShown.value) return
+  lastErrorModalShown.value = true
+  Modal.warning({
+    title: '上一次生成未成功',
+    content: h(
+      'div',
+      { style: 'white-space: pre-wrap;' },
+      `原因：${notice.reason}\n\n${notice.description}\n\n页面已加载历史对话记录，可直接在记录上继续对话或重新发送需求。`,
+    ),
+    okText: '知道了，查看记录',
+    centered: true,
+  })
+}
+
 /**
  * 加载对话历史（分页，按 create_time 降序取一页后反转成时间正序）。
  * @param lastCreateTime 有值时为「加载更多」，取比游标更早的消息
@@ -1265,10 +1350,72 @@ const selectVersion = async (version: API.AppVersion) => {
   }
 }
 
+// ─── 聊天区自动滚动策略 ────────────────────────────────────────
+/** 距底部多少像素以内视为“停靠底部” */
+const CHAT_BOTTOM_TOLERANCE = 64
+/** 用户是否停靠在底部；向上翻阅历史后为 false，此时新内容不再强制下拉 */
+const autoScrollStick = ref(true)
+
+/** message-list 滚动：仅在用户自行滚动时更新停靠状态 */
+const handleChatScroll = () => {
+  const el = messageRef.value
+  if (!el) return
+  autoScrollStick.value = el.scrollHeight - el.scrollTop - el.clientHeight < CHAT_BOTTOM_TOLERANCE
+}
+
+/**
+ * 滚动到底部。
+ * 默认仅在用户仍停靠底部时跟随；生成中若用户正在阅读上方历史，不会被强制拉回。
+ */
 const scrollToBottom = async () => {
   await nextTick()
-  if (!messageRef.value) return
-  messageRef.value.scrollTop = messageRef.value.scrollHeight
+  const el = messageRef.value
+  if (!el) return
+  if (!autoScrollStick.value) return
+  el.scrollTop = el.scrollHeight
+}
+
+/** 「回到最新」按钮：恢复停靠并立即滚到底部 */
+const jumpToLatest = () => {
+  autoScrollStick.value = true
+  void scrollToBottom()
+}
+
+// ─── 聊天区隐藏大段代码（代码统一展示在右侧代码区） ─────────────
+const CODE_FENCE_BLOCK =
+  /```(?:html|css|js|jsx|javascript|json|xml|vue)?\s*(?:\r\n|\r|\n)?[\s\S]*?```/gi
+const LOOSE_HTML_DOC = /(?:<!DOCTYPE\s+html[^>]*>\s*)?<html\b[^>]*>[\s\S]*?<\/html>/is
+
+/** 过滤聊天正文里的大段代码（围栏代码块 / 裸 HTML / JSON 代码包），只保留叙述文字 */
+const stripChatCode = (raw: string): string => {
+  if (!raw) return ''
+  const trimmed = raw.trim()
+  // 整体是 {htmlCode/cssCode/jsCode…} 的代码 JSON（含流式中未闭合的情况）→ 不进入聊天区
+  if (trimmed.startsWith('{') && /"(?:htmlCode|cssCode|jsCode)"/.test(trimmed)) {
+    return ''
+  }
+  let text = raw.replace(CODE_FENCE_BLOCK, '').replace(LOOSE_HTML_DOC, '')
+  // 流式中尚未闭合的代码围栏：截掉其后的尾部，避免半截代码显示在聊天区
+  const lastFence = text.lastIndexOf('```')
+  if (lastFence >= 0) {
+    text = text.slice(0, lastFence)
+  }
+  return text.replace(/\n{3,}/g, '\n\n').trim()
+}
+
+const CHAT_CODE_PLACEHOLDER = '（已生成代码：请查看右侧「代码 / 预览」区域）'
+
+/**
+ * AI 消息在聊天区展示的正文：
+ * - HTML / 多文件模式：模型正文几乎全是代码，聊天区只显示叙述文字，代码由
+ *   latestAiContent 解析进右侧虚拟文件（打字机渐进展示），不回灌到聊天气泡。
+ * - Vue 工程模式：聊天区只收到叙述与工具摘要，原样展示。
+ */
+const aiBubbleContent = (msg: ChatMessage): string => {
+  const raw = msg.content ?? ''
+  if (!raw.trim()) return raw
+  if (isVueProject.value) return raw
+  return stripChatCode(raw) || CHAT_CODE_PLACEHOLDER
 }
 
 const closeEventSource = () => {
@@ -1546,6 +1693,8 @@ const sendMessage = () => {
   inputMessage.value = ''
   clearPendingImages()
   resetVisualEditor()
+  // 发送后跟随最新内容（用户主动发送视为想回到底部）
+  autoScrollStick.value = true
   scrollToBottom()
   startStream(promptText)
 }
@@ -1710,6 +1859,8 @@ onMounted(async () => {
     await loadSavedCodeFiles()
     await scrollToBottom()
   }
+  // 上次生成以失败收尾：弹窗提示一次（历史记录已在上面加载，不会回到“新对话”空状态）
+  notifyLastGenerationErrorOnce()
   // 新建应用从列表页跳转：?autoStart=1&initPrompt=... 自动发起首轮生成
 })
 
@@ -1795,6 +1946,31 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  position: relative;
+}
+
+/* 生成中向上翻阅历史后出现的「回到最新」悬浮按钮 */
+.chat-jump-bottom {
+  position: absolute;
+  right: 18px;
+  bottom: 98px;
+  z-index: 8;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid rgba(22, 119, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1677ff;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  transition: background 0.2s ease;
+}
+
+.chat-jump-bottom:hover {
+  background: #fff;
 }
 
 .preview-panel {
@@ -1808,6 +1984,12 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow: auto;
   padding: 14px;
+}
+
+.chat-error-banner {
+  flex-shrink: 0;
+  margin: 12px 12px 0;
+  text-align: left;
 }
 
 .load-more {

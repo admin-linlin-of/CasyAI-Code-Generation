@@ -1,5 +1,6 @@
 package com.casy.casyaicodemother.ai.tools;
 
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.core.CodeGenContextHolder;
@@ -26,6 +27,16 @@ public class FileModifyTool extends BaseTool {
             @P("New replacement content") String newContent,
             @ToolMemoryId Long appId
     ) {
+        // 与 FileWriteTool 同理：先校验必填参数，避免 Paths.get(null)/contains(null) 抛无信息 NPE
+        requireRelativeFilePath(relativeFilePath);
+        if (StrUtil.isBlank(oldContent)) {
+            throw new IllegalArgumentException(
+                    getToolName() + " 工具缺少必填参数 oldContent（要替换的原文内容），本次未修改任何文件。请补上该参数后重试。");
+        }
+        if (newContent == null) {
+            throw new IllegalArgumentException(
+                    getToolName() + " 工具缺少必填参数 newContent（替换后的新内容），本次未修改任何文件。请补上该参数后重试。");
+        }
         try {
             Path path = Paths.get(relativeFilePath);
             if (!path.isAbsolute()) {
@@ -50,7 +61,7 @@ public class FileModifyTool extends BaseTool {
         } catch (IOException e) {
             String errorMessage = "Failed to modify file: " + relativeFilePath + ", error: " + e.getMessage();
             log.error(errorMessage, e);
-            return errorMessage;
+            throw new IllegalStateException(errorMessage, e);
         }
     }
 
@@ -67,6 +78,7 @@ public class FileModifyTool extends BaseTool {
     @Override
     public String generateToolExecutedResult(JSONObject arguments) {
         String relativeFilePath = arguments.getStr("relativeFilePath");
-        return String.format("[Tool] %s `%s`", getDisplayName(), relativeFilePath);
+        return String.format("[Tool] %s `%s`", getDisplayName(),
+                StrUtil.blankToDefault(relativeFilePath, "(未提供 relativeFilePath)"));
     }
 }

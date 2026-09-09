@@ -72,7 +72,23 @@ public class JsonMessageStreamHandler {
                     return Mono.empty();
                 }))
                 // 流中途异常时持久化错误，Controller 层 onErrorResume 负责推送给前端
-                .doOnError(error -> chatHistoryService.saveErrorMessage(appId, userMessageId, error.getMessage(), loginUser));
+                .doOnError(error -> {
+                    // 异常中断（如达到工具调用上限、服务重启、网络异常）时，已产生的深度思考/文本/工具摘要
+                    // 此前只缓存在内存 StringBuilder 中，若不落库，用户回首页再进对话将看不到任何生成记录。
+                    // 因此先把已生成的部分内容存为一条 ai 消息（思考用 <aiThinking> 包裹、工具用标签包裹，
+                    // 与正常收尾格式一致，前端按同一规则还原），再存错误行。
+                    String aiResponse = chatHistoryStringBuilder.toString();
+                    String thinking = thinkingHistoryBuilder.toString();
+                    if (StrUtil.isNotBlank(aiResponse) || StrUtil.isNotBlank(thinking)) {
+                        try {
+                            chatHistoryService.saveAiMessage(appId, userMessageId,
+                                    ChatThinkingCodec.composeForSave(thinking, aiResponse), loginUser);
+                        } catch (Exception saveException) {
+                            log.error("保存异常中断前的部分生成内容失败，appId: {}", appId, saveException);
+                        }
+                    }
+                    chatHistoryService.saveErrorMessage(appId, userMessageId, error.getMessage(), loginUser);
+                });
     }
 
     /**

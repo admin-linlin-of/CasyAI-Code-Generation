@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.SignalType;
 
 import java.io.File;
 
@@ -89,8 +90,14 @@ public class AiCodeGeneratorFacade {
                 // 供 FileWriteTool 首次写文件时 createCodeVersion 使用（工具本身只能拿到 appId）
                 CodeGenContextHolder.set(appId, modelTypeEnum, userMessageId, versionDir);
                 TokenStream tokenStream = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId).generateVueProjectCodeStream(appId, userMessage);
-                // 流结束（成功/失败/取消）后清理上下文，避免内存泄漏
-                yield processTokenStream(tokenStream).doFinally(signal -> CodeGenContextHolder.remove(appId));
+                // 流结束（成功/失败/取消）后清理上下文，避免内存泄漏；
+                // 异常/取消时失效服务缓存：避免 langchain4j 记忆里残留“孤儿 tool_calls”污染下一次请求
+                yield processTokenStream(tokenStream).doFinally(signal -> {
+                    if (signal != SignalType.ON_COMPLETE) {
+                        aiCodeGeneratorServiceFactory.evictService(modelTypeEnum, codeGenTypeEnum, appId);
+                    }
+                    CodeGenContextHolder.remove(appId);
+                });
             }
             default -> {
                 String errorMessage = "不支持的生成类型：" + codeGenTypeEnum.getValue();
@@ -106,7 +113,12 @@ public class AiCodeGeneratorFacade {
                                          ModelTypeEnum modelType, Long appId, Long userMessageId, String versionDir) {
         CodeGenContextHolder.set(appId, modelType, userMessageId, versionDir, codeGenType);
         TokenStream tokenStream = codeRepairServiceFactory.getService(modelType).repairCode(appId, repairMessage);
-        return processTokenStream(tokenStream).doFinally(signal -> CodeGenContextHolder.remove(appId));
+        return processTokenStream(tokenStream).doFinally(signal -> {
+            if (signal != SignalType.ON_COMPLETE) {
+                codeRepairServiceFactory.evictService(modelType);
+            }
+            CodeGenContextHolder.remove(appId);
+        });
     }
 
 

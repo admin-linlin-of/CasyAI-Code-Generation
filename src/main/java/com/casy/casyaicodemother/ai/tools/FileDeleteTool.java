@@ -1,5 +1,6 @@
 package com.casy.casyaicodemother.ai.tools;
 
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.core.CodeGenContextHolder;
@@ -29,6 +30,7 @@ public class FileDeleteTool extends BaseTool{
             String relativeFilePath,
             @ToolMemoryId Long appId
     ) {
+        requireRelativeFilePath(relativeFilePath);
         try {
             // 获取当前编辑的版本
             Path path = Paths.get(relativeFilePath);
@@ -54,7 +56,7 @@ public class FileDeleteTool extends BaseTool{
         } catch (IOException e) {
             String errorMessage = "删除文件失败: " + relativeFilePath + ", 错误: " + e.getMessage();
             log.error(errorMessage, e);
-            return errorMessage;
+            throw new IllegalStateException(errorMessage, e);
         }
     }
 
@@ -89,6 +91,7 @@ public class FileDeleteTool extends BaseTool{
     @Override
     public String generateToolExecutedResult(JSONObject arguments) {
         String relativeFilePath = arguments.getStr("relativeFilePath");
-        return String.format("[工具调用] %s %s", getDisplayName(), relativeFilePath);
+        return String.format("[工具调用] %s %s", getDisplayName(),
+                StrUtil.blankToDefault(relativeFilePath, "(未提供 relativeFilePath)"));
     }
 }

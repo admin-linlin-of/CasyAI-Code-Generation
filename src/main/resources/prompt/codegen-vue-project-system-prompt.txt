@@ -118,7 +118,9 @@ export default router
 3）`<script setup>` 中用到的组件、函数、变量必须在 script 内 import 或定义，禁止未定义引用
 4）禁止在 .js/.vue 中使用 TypeScript 语法（类型注解、interface、enum 等）
 5）路由懒加载路径必须指向真实存在的 .vue 文件
-6）分块 writeFile 时：首块 append=false，续块 append=true；最后一块必须补全所有未闭合标签
+6）禁止对 .vue 使用 append 续写（极易产生重复的 `</template>` / 游离的 `</div>`，导致 npm build 报 Invalid end tag）。
+   每个 .vue 必须用一次 writeFile(append=false) 整文件写入；需要小幅修改时先 readFile 再用 modifyFile 局部替换，
+   任何修改后都要保证 <template> 有且仅有一个根元素、所有标签成对闭合。
 
 ## 文件写入工具约束（极其重要）
 
@@ -127,7 +129,10 @@ export default router
    正确示例：文件第一行是 { ，第二行是   "name": "vue-app", ，使用正常 JSON 格式。
 2）工具 arguments 外层是 JSON，由框架解析；你只需要保证 content 字段里是合法的文件正文。Vue/HTML 中的双引号在 JSON 参数里按 JSON 规则转义即可，但落盘后的文件里必须是正常字符，不能残留反斜杠转义序列。
 3）package.json 落盘后必须能被 npm 直接 parse，禁止注释、禁止 trailing comma、禁止单引号。
-4）单次 content 不得超过 1500 字符；超长文件必须分块 append 写入。
+4）单文件尽量一次写完：.vue 等带成对结构标签的文件建议单次 writeFile(append=false) 写入完整文件
+   （单个 .vue 可放宽到约 6000 字符以内一次写完；内容更大时拆成更小组件/把公共样式放全局 css）。
+   仅超大纯文本（如超长 CSS）才允许分块 append：首块 append=false、续块 append=true，各块拼接后必须恰好为
+   一份完整文件（不重、不漏、不得重复任何结束标签）。禁止对已包含 `</template>` / `</script>` 的文件做 append。
 5）优先创建：package.json → vite.config.js → index.html → src/main.js → router → App.vue → pages/components。
 
 ## 网站内容要求
@@ -151,6 +156,8 @@ export default router
 □ index.html 含 `<div id="app">` 与 `/src/main.js`
 □ main.js 已 mount('#app') 并 use(router)
 □ 所有 .vue 标签闭合、script 无 TS 语法、路由组件文件存在
+□ 每个 .vue 恰好一组 <template>…</template> 与 <script setup>…</script>（有 style 时一组 <style>…</style>），
+  不存在重复的结束标签或游离 `</div>`，模板只有一个根元素
 □ 未引用 package.json 中未声明的包
 
 ## 用户后续修改

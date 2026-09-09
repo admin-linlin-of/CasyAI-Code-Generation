@@ -118,10 +118,15 @@ public class AiCodeGeneratorServiceFactory {
                             // 用 RepairingToolExecutor 包装默认执行器，在 Jackson 解析前先尝试修复 LLM 返回的非法 tool arguments JSON
                             .tools(wrapToolsWithRepair(toolManager.getAllTools()))
                             // 修复仍失败时，将错误文本回传 LLM 让其自行纠正（而非直接中断流式生成）
-                            .toolArgumentsErrorHandler((error, context) -> ToolErrorHandlerResult.text("工具参数 JSON 解析失败：" + error.getMessage() + "。请确保 content 中双引号转义为 \\\"，换行用 \\n；单块不超过1500字符，大文件分块 append=false/true 写入。")) // TODO 这个提示在多个工具时就不合适了
+                            .toolArgumentsErrorHandler((error, context) -> ToolErrorHandlerResult.text("工具参数 JSON 解析失败：" + error.getMessage()
+                                    + "。请检查后重试：① 每次工具调用都必须带全必填参数（writeFile 必须含 relativeFilePath 与 content；modifyFile 必须含 relativeFilePath、oldContent、newContent）；"
+                                    + "② content 中双引号转义为 \\\"，换行用 \\n；③ 单块不超过1500字符，大文件分块写入时 append=false 开头、append=true 续写，且每个分块都要带相同的 relativeFilePath。"))
                             // hallucinatedToolNameStrategy（幻觉工具名称策略）配置了找不到工具时的处理策略，可以让框架帮我们处理 AI 出现幻觉的情况，比如告诉 AI “找不到工具”
                             // 防止 AI 一直无限循环调用工具，包括：
-                            .maxSequentialToolsInvocations(20)  // 最多连续调用 20 次工具
+                            // 注意：该上限按「本轮生成内所有包含工具调用的模型回复轮数」累计，文本段落不会重置计数。
+                            // Vue 工程合理生成往往需要 20+ 轮文件写入（本次日志实测 26 轮仍被判超限导致误报“生成失败”），
+                            // 因此给足余量：既能容纳完整项目生成，又保留对病态无限循环的兜底。
+                            .maxSequentialToolsInvocations(100)  // 最多连续 100 轮工具调用
                             // 调大对话记忆的容量，否则 AI 会中途断片儿，忘记已经生成了哪些文件 (调大了最大的token数）
                             // 尝试换其他的 AI 大模型、优化提示词（已优化）
                             .inputGuardrails(new PromptSafetyInputGuardrail())  // 添加输入护轨
@@ -149,6 +154,24 @@ public class AiCodeGeneratorServiceFactory {
 
     private String getCacheKey(ModelTypeEnum modelTypeEnum, CodeGenTypeEnum codeGenType, Long appId) {
         return String.format("%s_%s_%s", modelTypeEnum.getModelName(), codeGenType.getValue(), appId);
+    }
+
+    /**
+     * 失效指定 app 的 AI 服务缓存（下次请求会从 t_chat_history 重建干净记忆）。
+     * <p>
+     * 背景：流式工具调用中途异常/取消时，langchain4j 可能已在对话记忆里写入
+     * “带 tool_calls 的 assistant 消息”，却来不及补对应 tool 结果（孤儿 tool_calls）。
+     * 该记忆会随下一次请求发往模型，DeepSeek/OpenAI 会拒绝：
+     * “An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'”。
+     * 因此在流异常/取消后失效缓存，避免复用损坏的记忆。
+     */
+    public void evictService(ModelTypeEnum modelType, CodeGenTypeEnum codeGenType, Long appId) {
+        if (modelType == null || codeGenType == null || appId == null) {
+            return;
+        }
+        String key = getCacheKey(modelType, codeGenType, appId);
+        serviceCache.invalidate(key);
+        log.info("流式生成异常/取消，已失效 AI 服务缓存: {}", key);
     }
 
     /**

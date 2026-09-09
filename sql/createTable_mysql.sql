@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS t_app
 CREATE TABLE IF NOT EXISTS t_chat_history
 (
     id           BIGINT      NOT NULL PRIMARY KEY COMMENT 'id',
-    message      TEXT        NOT NULL COMMENT '消息',
+    message      MEDIUMTEXT  NOT NULL COMMENT '消息（深度思考+正文+工具标签可能很长，须大于 64KB）',
     message_type VARCHAR(32) NOT NULL COMMENT 'user/ai',
     app_id       BIGINT      NOT NULL COMMENT '应用id',
     user_id      BIGINT      NOT NULL COMMENT '创建用户id',

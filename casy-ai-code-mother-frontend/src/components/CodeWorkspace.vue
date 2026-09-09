@@ -72,7 +72,7 @@
           <MonacoEditor
             v-if="activeFlatFile"
             :language="activeFlatFile.language"
-            :model-value="activeFlatFile.content"
+            :model-value="flatShownContent"
             :read-only="readOnly"
           />
         </div>
@@ -82,7 +82,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { FileOutlined } from '@ant-design/icons-vue'
 import CodeViewerPanel from '@/components/CodeViewerPanel.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
@@ -144,6 +144,81 @@ const activeProjectFile = computed(() =>
 
 /** flat 模式当前选中的 VirtualFile */
 const activeFlatFile = computed(() => props.files.find((file) => file.path === flatActivePath.value))
+
+// ─── flat 模式打字机：生成中按行块渐进显示当前文件，结束后全量补齐 ──
+const flatReveal = ref<Record<string, number>>({})
+let flatTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 当前文件实际给 Monaco 的文本（打字机未追上时只是 content 的前缀） */
+const flatShownContent = computed(() => {
+  const file = activeFlatFile.value
+  if (!file || !props.generating) return file?.content ?? ''
+  const reached = flatReveal.value[file.path] ?? 0
+  return file.content.slice(0, Math.min(reached, file.content.length))
+})
+
+const clearFlatTimer = () => {
+  if (flatTimer) {
+    clearTimeout(flatTimer)
+    flatTimer = null
+  }
+}
+
+const flatTick = () => {
+  flatTimer = null
+  const file = activeFlatFile.value
+  if (!file || !props.generating) return
+  const reached = flatReveal.value[file.path] ?? 0
+  const target = file.content.length
+  if (reached >= target) return
+  // 剩余内容约 1/12 步进（至少 2 字符），20ms 一帧形成“正在写入”效果
+  const remain = target - reached
+  const step = Math.max(2, Math.ceil(remain / 12))
+  flatReveal.value = { ...flatReveal.value, [file.path]: Math.min(target, reached + step) }
+  flatTimer = setTimeout(flatTick, 20)
+}
+
+const ensureFlatTypewriter = () => {
+  const file = activeFlatFile.value
+  if (props.generating && file?.content) {
+    if ((flatReveal.value[file.path] ?? 0) < file.content.length) {
+      if (!flatTimer) flatTimer = setTimeout(flatTick, 20)
+    }
+    return
+  }
+  clearFlatTimer()
+}
+
+watch(
+  () => [props.generating, props.files, flatActivePath.value, activeFlatFile.value?.content] as const,
+  ensureFlatTypewriter,
+  { deep: true, immediate: true },
+)
+
+// 生成结束（done / 历史加载）→ 全部内容立即补全；新一轮生成开始 → 清空进度重新打字
+watch(
+  () => props.generating,
+  (isGenerating) => {
+    clearFlatTimer()
+    if (isGenerating) {
+      flatReveal.value = {}
+      return
+    }
+    const full: Record<string, number> = {}
+    for (const file of props.files) full[file.path] = file.content.length
+    flatReveal.value = full
+  },
+  { immediate: true },
+)
+
+watch(
+  () => props.files,
+  (files) => {
+    if (!files.length) flatReveal.value = {}
+  },
+)
+
+onBeforeUnmount(clearFlatTimer)
 
 /** 用户点击树节点 → 更新 activePath（会同步到 store） */
 const onTreeSelect = (path: string) => {

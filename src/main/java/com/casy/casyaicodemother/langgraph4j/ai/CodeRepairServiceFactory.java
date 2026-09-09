@@ -65,6 +65,18 @@ public class CodeRepairServiceFactory {
         return serviceCache.get(modelType, this::createService);
     }
 
+    /**
+     * 失效修复服务缓存（同 {@link com.casy.casyaicodemother.ai.AiCodeGeneratorServiceFactory#evictService}，
+     * 修复流同样会因中途异常留下“孤儿 tool_calls”记忆）。
+     */
+    public void evictService(ModelTypeEnum modelType) {
+        if (modelType == null) {
+            return;
+        }
+        serviceCache.invalidate(modelType);
+        log.info("修复流异常/取消，已失效修复服务缓存: {}", modelType);
+    }
+
     private CodeRepairService createService(ModelTypeEnum modelType) {
         ModelProvider provider = providerMap.get(modelType);
         if (provider == null) {
@@ -82,6 +94,9 @@ public class CodeRepairServiceFactory {
                         "工具参数 JSON 解析失败：" + error.getMessage()))
                 .hallucinatedToolNameStrategy(request ->
                         ToolExecutionResultMessage.from(request, "Error: there is no tool called " + request.name()))
+                // 修复可能涉及多轮文件写入/校验；上限给足余量（与 AiCodeGeneratorServiceFactory 一致），
+                // 避免合法修复因 langchain4j 顺序工具调用计数超限而被误判为失败。
+                .maxSequentialToolsInvocations(100)
                 .build();
     }
 

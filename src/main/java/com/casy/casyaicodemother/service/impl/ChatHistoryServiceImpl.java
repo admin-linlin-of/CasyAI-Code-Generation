@@ -31,6 +31,7 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -249,8 +250,10 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "消息内容不能为空");
         ThrowUtils.throwIf(StrUtil.isBlank(messageType), ErrorCode.PARAMS_ERROR, "消息类型不能为空");
         ThrowUtils.throwIf(loginUser == null || loginUser.getId() == null || loginUser.getId() <= 0, ErrorCode.PARAMS_ERROR, "用户ID不能为空");
+        // 兜底：即使某列仍是 TEXT(64KB)，也保证不因超长导致整条记录写库失败
+        String safeMessage = clampToUtf8Bytes(message, ChatHistoryConstant.MAX_MESSAGE_SAFE_BYTES);
         ChatHistory chatHistory = ChatHistory.builder()
-                .message(message)
+                .message(safeMessage)
                 .messageType(messageType)
                 .appId(appId)
                 .userId(loginUser.getId())
@@ -259,6 +262,37 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         boolean result = save(chatHistory);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         return chatHistory.getId();
+    }
+
+    /**
+     * 将消息截断到指定 UTF-8 字节数以内（按字符边界截断，不切断多字节字符）。
+     * <p>
+     * Vue 流式生成会把整轮深度思考 + 工具标签合成一条 ai 消息，可能很大；
+     * 若数据库字段容量不足（如 MySQL TEXT 仅 64KB）会抛 Data truncation。
+     * 此处做防御性截断：优先建议把字段升级为 MEDIUMTEXT（见 sql/upgrade_t_chat_history_message_to_mediumtext.sql），
+     * 截断只是避免极端情况下整轮对话记录丢失的最后保障。
+     */
+    private static String clampToUtf8Bytes(String message, int maxBytes) {
+        if (message == null || maxBytes <= 0) {
+            return message;
+        }
+        if (message.getBytes(StandardCharsets.UTF_8).length <= maxBytes) {
+            return message;
+        }
+        // 二分查找：在不超过 maxBytes 的前提下取尽量长的前缀（不含截断提示，避免提示本身占掉预算）
+        int low = 0;
+        int high = message.length();
+        while (low < high) {
+            int mid = (low + high + 1) >>> 1;
+            if (message.substring(0, mid).getBytes(StandardCharsets.UTF_8).length <= maxBytes) {
+                low = mid;
+            } else {
+                high = mid - 1;
+            }
+        }
+        String truncated = message.substring(0, low) + "\n…(内容过长，已截断保存)";
+        log.warn("对话消息超过 {} 字节，已截断保存，原始长度：{} 字符", maxBytes, message.length());
+        return truncated;
     }
 
     /**
