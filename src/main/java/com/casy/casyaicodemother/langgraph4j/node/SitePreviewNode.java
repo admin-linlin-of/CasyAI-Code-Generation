@@ -23,7 +23,8 @@ import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
  * Chrome 截图很慢，放进主链路会堵住质检/构建。真正的截图在
  * {@link AppService#generateAppCoverAsync} 虚拟线程里跑。
  * HTML/多文件在代码生成节点就能 submit；Vue 要等 dist 打出来，在项目构建成功后再 submit。
- * 本节点用 ConcurrentHashMap#computeIfAbsent 兜底：前面没提交过就补一次，提交过则复用同一个 Future。
+ * 本节点用 ConcurrentHashMap#compute 兜底：前面没提交过就补一次；
+ * 进行中的任务复用，已结束的任务允许新一轮重新截图（多版本生成）。
  * </p>
  */
 @Slf4j
@@ -48,7 +49,7 @@ public class SitePreviewNode {
     }
 
     /**
-     * 异步提交截图。同一 appId 已有任务则忽略。
+     * 异步提交截图。同一 appId 正在跑的任务会复用；已结束的任务会被新一轮替换。
      * HTML 在代码写盘后即可调；Vue 必须在 npm build 成功、dist 存在后再调。
      */
     public static void submit(Long appId, String generatedCodeDir, CodeGenTypeEnum generationType) {
@@ -59,7 +60,10 @@ public class SitePreviewNode {
         if (StrUtil.isBlank(previewUrl)) {
             return;
         }
-        JOBS.computeIfAbsent(appId, id -> {
+        JOBS.compute(appId, (id, existing) -> {
+            if (existing != null && !existing.isDone()) {
+                return existing;
+            }
             log.info("提交网站预览截图任务 appId={}, url={}", id, previewUrl);
             AppService appService = SpringContextUtil.getBean(AppService.class);
             return appService.generateAppCoverAsync(id, previewUrl);

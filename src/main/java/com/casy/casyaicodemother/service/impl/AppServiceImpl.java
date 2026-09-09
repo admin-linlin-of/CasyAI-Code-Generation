@@ -32,6 +32,7 @@ import com.casy.casyaicodemother.model.enums.VersionDeployStatusEnum;
 import com.casy.casyaicodemother.model.vo.app.AppVO;
 import com.casy.casyaicodemother.model.vo.user.UserVO;
 import com.casy.casyaicodemother.service.*;
+import com.casy.casyaicodemother.util.AppNameUtils;
 import com.casy.casyaicodemother.util.NumberUtils;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
@@ -119,9 +120,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         app.setPriority(0);
         app.setIsPublish(AppConstant.APP_NOT_PUBLISH);
         String appName = appAddRequest.getAppName();
-        if (StrUtil.isBlank(appName)) {
-            // 应用名称暂时为 initPrompt 前 12 位
-            appName = initPrompt.substring(0, Math.min(initPrompt.length(), 12));
+        if (StrUtil.isBlank(appName) || isTruncatedPromptName(appName, initPrompt)) {
+            appName = AppNameUtils.derive(initPrompt);
         }
         app.setAppName(appName);
         List<String> appTypes = appAddRequest.getAppTypes();
@@ -577,5 +577,13 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             return true;
         }
         return app.getUserId().equals(loginUser.getId());
+    }
+
+    /** 首页曾把提示词前 12 字直接当应用名，创建时改提炼完整标题 */
+    private static boolean isTruncatedPromptName(String appName, String initPrompt) {
+        if (StrUtil.isBlank(appName) || StrUtil.isBlank(initPrompt)) {
+            return false;
+        }
+        return initPrompt.startsWith(appName) && initPrompt.length() > appName.length() && appName.length() <= 16;
     }
 }

@@ -268,6 +268,43 @@ VALUES
      '如果用户需求涉及 Vue 项目、多个页面、多个组件、路由、状态管理、复杂文件结构、持续迭代已有项目、长上下文理解，选择 CLAUDESONNET。')
 ON CONFLICT (model_code) DO NOTHING;
 
+CREATE TABLE IF NOT EXISTS t_sys_param
+(
+    id          BIGINT        NOT NULL PRIMARY KEY,
+    param_key   VARCHAR(128)  NOT NULL,
+    param_value VARCHAR(1024) NULL,
+    param_name  VARCHAR(128)  NOT NULL,
+    remark      VARCHAR(512)  NULL,
+    enabled     SMALLINT      NOT NULL DEFAULT 1,
+    is_public   SMALLINT      NOT NULL DEFAULT 0,
+    sort_order  INT           NOT NULL DEFAULT 100,
+    create_time TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_delete   SMALLINT      NOT NULL DEFAULT 0,
+    CONSTRAINT uk_sys_param_key UNIQUE (param_key)
+);
+
+CREATE TRIGGER update_sys_param_modtime
+    BEFORE UPDATE ON t_sys_param
+    FOR EACH ROW
+EXECUTE FUNCTION update_modified_column();
+
+COMMENT ON TABLE t_sys_param IS '系统参数';
+COMMENT ON COLUMN t_sys_param.param_key IS '参数键，如 site.github.url';
+COMMENT ON COLUMN t_sys_param.param_value IS '参数值';
+COMMENT ON COLUMN t_sys_param.param_name IS '展示名称';
+COMMENT ON COLUMN t_sys_param.remark IS '备注';
+COMMENT ON COLUMN t_sys_param.enabled IS '1 启用，0 停用';
+COMMENT ON COLUMN t_sys_param.is_public IS '1 未登录可读取';
+COMMENT ON COLUMN t_sys_param.sort_order IS '排序，越小越靠前';
+
+INSERT INTO t_sys_param (id, param_key, param_value, param_name, remark, enabled, is_public, sort_order)
+VALUES
+    (1, 'site.github.url', '', 'GitHub 仓库地址', '首页左上角 GitHub 图标跳转地址，留空则不显示图标', 1, 1, 10),
+    (2, 'site.gitee.url', 'https://gitee.com/linlinyes/casy-ai-code-mother', 'Gitee 仓库地址',
+     '首页左上角 Gitee 图标跳转地址，留空则不显示图标', 1, 1, 20)
+ON CONFLICT (param_key) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS t_guardrail_event
 (
     id             BIGINT       NOT NULL PRIMARY KEY,

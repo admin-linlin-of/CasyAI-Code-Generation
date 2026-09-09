@@ -9,6 +9,7 @@ import com.casy.casyaicodemother.core.save.CodeFileSaverExecutor;
 import com.casy.casyaicodemother.exception.BusinessException;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.langgraph4j.ai.CodeRepairServiceFactory;
+import com.casy.casyaicodemother.langgraph4j.node.SitePreviewNode;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.model.enums.ModelTypeEnum;
 import com.casy.casyaicodemother.service.AppVersionService;
@@ -154,6 +155,10 @@ public class AiCodeGeneratorFacade {
             // 使用执行器保存代码
             File savedDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenType, appId, versionDir);
             log.info("保存成功，路径为：{}", savedDir.getAbsolutePath());
+            // 传统生成不会走工作流 SitePreviewNode；写盘后即可截封面
+            if (savedDir != null) {
+                SitePreviewNode.submit(appId, savedDir.getAbsolutePath(), codeGenType);
+            }
             return Flux.empty();
         }));
     }

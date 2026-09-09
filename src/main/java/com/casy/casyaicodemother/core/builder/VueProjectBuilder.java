@@ -6,6 +6,8 @@ import cn.hutool.core.util.RuntimeUtil;
 import cn.hutool.core.util.StrUtil;
 import com.casy.casyaicodemother.core.vue.VueProjectNodeModulesLinker;
 import com.casy.casyaicodemother.core.vue.VueProjectVersionManager;
+import com.casy.casyaicodemother.langgraph4j.node.SitePreviewNode;
+import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.model.enums.VersionBuildStatusEnum;
 import com.casy.casyaicodemother.service.AppVersionService;
 import jakarta.annotation.Resource;
@@ -116,11 +118,15 @@ public class VueProjectBuilder {
 
     /**
      * 根据构建结果更新版本状态；失败时附带 error 写入 build_error。
+     * 打包成功后提交封面截图：传统生成走异步 build，原先不会进工作流的 SitePreviewNode，
+     * 首页卡片封面会一直空着。工作流里 ProjectBuilderNode 还会再 submit 一次，同 appId 会复用任务。
      */
     private boolean finishBuild(Long appId, String codeDir, BuildOutcome outcome) {
         if (appId != null && codeDir != null) {
             if (outcome.success) {
                 appVersionService.updateBuildStatus(appId, codeDir, VersionBuildStatusEnum.SUCCESS);
+                File versionDir = versionManager.getVersionDir(appId, codeDir);
+                SitePreviewNode.submit(appId, versionDir.getAbsolutePath(), CodeGenTypeEnum.VUE_PROJECT);
             } else {
                 appVersionService.updateBuildStatus(appId, codeDir, VersionBuildStatusEnum.FAILED, outcome.error);
             }

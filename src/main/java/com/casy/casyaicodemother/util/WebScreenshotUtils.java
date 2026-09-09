@@ -180,19 +180,28 @@ public class WebScreenshotUtils {
     }
 
     /**
-     * 等待页面加载完成
+     * 等待页面加载完成。
+     * Vue 工程 document.readyState 会在 #app 挂载前就变成 complete，只等 HTML 容易截到白屏。
      */
     private static void waitForPageLoad(WebDriver driver) {
         try {
-            // 创建等待页面加载对象
-            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
-            // 等待 document.readyState 为complete
-            wait.until(webDriver ->
-                    ((JavascriptExecutor) webDriver).executeScript("return document.readyState")
-                            .equals("complete")
-            );
-            // 额外等待一段时间，确保动态内容加载完成
-            Thread.sleep(2000);
+            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(15));
+            wait.until(webDriver -> {
+                JavascriptExecutor js = (JavascriptExecutor) webDriver;
+                Object ready = js.executeScript("return document.readyState");
+                if (!"complete".equals(ready)) {
+                    return false;
+                }
+                Object painted = js.executeScript(
+                        "var app = document.querySelector('#app') || document.querySelector('#root');"
+                                + "if (app) {"
+                                + "  return app.childElementCount > 0 || ((app.innerText || '').trim().length > 0);"
+                                + "}"
+                                + "return document.body && ((document.body.innerText || '').trim().length > 0);");
+                return Boolean.TRUE.equals(painted);
+            });
+            // 再留一点时间给字体/图片
+            Thread.sleep(1500);
             log.info("页面加载完成");
         } catch (Exception e) {
             log.error("等待页面加载时出现异常，继续执行截图", e);

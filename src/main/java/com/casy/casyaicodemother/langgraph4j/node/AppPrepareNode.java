@@ -11,6 +11,7 @@ import com.casy.casyaicodemother.model.entity.User;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.service.AppService;
 import com.casy.casyaicodemother.service.UserService;
+import com.casy.casyaicodemother.util.AppNameUtils;
 import com.casy.casyaicodemother.util.SpringContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.AsyncNodeAction;
@@ -43,7 +44,7 @@ public class AppPrepareNode {
                 AppAddRequest request = new AppAddRequest();
                 String prompt = context.getOriginalPrompt();
                 request.setInitPrompt(prompt);
-                request.setAppName(prompt.substring(0, Math.min(prompt.length(), 12)));
+                request.setAppName(AppNameUtils.derive(prompt));
                 // 首页下拉框已选类型则带入，否则交给 createApp 内部 AI 路由
                 if (context.getGenerationType() != null) {
                     request.setCodeGenType(context.getGenerationType().getValue());

@@ -291,13 +291,68 @@ flowchart TB
 ## 仓库结构
 
 ```
-casy-ai-code-mother/                 # Spring Boot
-  src/main/java/.../ai/          # 多模型、护轨、工具
-  src/main/java/.../core/        # 门面、解析、保存、Vue 构建、流处理
-  src/main/java/.../langgraph4j/ # 工作流节点与并发图
-  src/main/java/.../controller/   # HTTP / SSE
-  src/main/resources/prompt/      # 系统提示词与路由 prompt
-casy-ai-code-mother-frontend/     # Vue 3 工作台
+casy-ai-code-mother/
+├── README.md                              # 项目说明（本文件）
+├── pom.xml                                # 后端 Maven 依赖
+├── img.png                                # 系统架构图
+├── sql/                                   # 建表与升级脚本
+│   ├── createTable_mysql.sql
+│   ├── createTable_postgresql.sql
+│   └── upgrade_t_sys_param.sql
+├── doc/                                   # 设计笔记、示例提示词
+├── src/main/java/com/casy/casyaicodemother/
+│   ├── CasyAiCodeMotherApplication.java   # 启动类
+│   ├── ai/                                # 多模型接入、护轨、工具
+│   │   ├── AiCodeGeneratorServiceFactory.java
+│   │   ├── claude/                        # Claude Sonnet 接入
+│   │   ├── deepseek/                      # DeepSeek Flash / Pro
+│   │   ├── gpt/                           # GPT OpenAI 兼容协议
+│   │   ├── routing/                       # 类型/模型路由模型
+│   │   ├── guardrail/                     # 输入护轨、输出重试
+│   │   └── tools/                         # writeFile / modifyFile 等
+│   ├── core/                              # 代码生成门面与落盘
+│   │   ├── AiCodeGeneratorFacade.java     # 对外唯一入口
+│   │   ├── parser/                        # HTML / 多文件解析
+│   │   ├── save/                          # 模板方法写盘
+│   │   ├── handler/                       # SSE 流后处理
+│   │   ├── builder/                       # Vue npm build + 进度 SSE
+│   │   └── vue/                           # 版本目录、共用 node_modules
+│   ├── langgraph4j/                       # Agent 工作流
+│   │   ├── workflow/                      # 并发图编排
+│   │   ├── node/                          # 准备、路由、生成、质检、修复、预览
+│   │   └── node/concurrent/               # 搜图四路并行 + 聚合
+│   ├── controller/                        # HTTP / SSE 接口
+│   ├── service/                           # 应用、对话、版本、截图、参数
+│   ├── mapper/                            # MyBatis-Flex Mapper
+│   ├── model/                             # entity / dto / vo / enums
+│   ├── config/                            # Redis、Sa-Token、OSS、HTTP Client
+│   ├── ratelimiter/                       # 接口限流切面
+│   └── manager/oss/                       # 封面图上传
+├── src/main/resources/
+│   ├── application.yaml                   # 主配置（local / prod 覆盖）
+│   ├── prompt/                            # 系统提示词与路由 prompt
+│   ├── mapper/                            # XML Mapper
+│   └── nginx.conf
+└── casy-ai-code-mother-frontend/          # Vue 3 工作台
+    ├── vite.config.ts
+    ├── src/
+    │   ├── views/
+    │   │   ├── Home.vue                   # 首页创建应用
+    │   │   ├── about/                     # 关于作者 / 关于项目
+    │   │   ├── app/                       # 对话、应用/版本/历史管理
+    │   │   ├── ai/                        # 模型管理
+    │   │   ├── sys/                       # 系统参数
+    │   │   └── user/                      # 登录注册、用户管理
+    │   ├── components/                    # 顶栏、代码工作区、Monaco、文件树
+    │   ├── api/                           # OpenAPI 生成的接口
+    │   ├── stores/                        # Pinia（登录态、主题）
+    │   ├── router/                        # 路由
+    │   └── utils/                         # Markdown、预览、可视化选元素
+    └── doc/                               # 前端文档与简历等
+
+# 运行时生成（不入库）
+tmp/code_output/                           # 预览源码与 Vue dist
+tmp/code_deploy/                           # 部署静态站
 ```
 
 ---
@@ -318,3 +373,9 @@ pnpm dev
 ```
 
 接口文档：Knife4j（SpringDoc OpenAPI 3）。
+
+## 项目截图
+
+![image-20260908233534620](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20260908233534620.png)
+
+![image-20260908233638246](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20260908233638246.png)
