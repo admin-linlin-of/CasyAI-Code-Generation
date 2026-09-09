@@ -15,7 +15,7 @@ import { canAccessRoute } from '@/utils/access'
 // 只在应用首次路由跳转时请求一次 /user/get/login，避免每次切换路由都发请求
 let firstFetchLoginUser = true
 
-const WHITE_LIST = ['/', '/user/login', '/user/register']
+const WHITE_LIST = ['/', '/user/login', '/user/register', '/about/author', '/about/project']
 
 router.beforeEach(async (to) => {
   if (WHITE_LIST.includes(to.path)) {

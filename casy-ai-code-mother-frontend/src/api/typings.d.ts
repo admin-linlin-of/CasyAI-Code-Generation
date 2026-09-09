@@ -457,4 +457,43 @@ declare namespace API {
     data?: AiModel[]
     message?: string
   }
+
+  type SysParam = {
+    id?: string
+    paramKey?: string
+    paramValue?: string
+    paramName?: string
+    remark?: string
+    enabled?: number
+    isPublic?: number
+    sortOrder?: number
+    createTime?: string
+    updateTime?: string
+  }
+
+  type SysParamAddRequest = {
+    paramKey?: string
+    paramValue?: string
+    paramName?: string
+    remark?: string
+    enabled?: number
+    isPublic?: number
+    sortOrder?: number
+  }
+
+  type SysParamUpdateRequest = SysParamAddRequest & {
+    id?: string
+  }
+
+  type BaseResponseListSysParam = {
+    code?: number
+    data?: SysParam[]
+    message?: string
+  }
+
+  type BaseResponseMapStringString = {
+    code?: number
+    data?: Record<string, string>
+    message?: string
+  }
 }

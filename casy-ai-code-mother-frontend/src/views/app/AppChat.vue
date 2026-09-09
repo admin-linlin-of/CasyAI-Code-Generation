@@ -6,13 +6,23 @@
   <div class="app-chat-page">
     <header class="top-bar">
       <div class="top-bar__main">
-        <div class="top-bar__name">{{ appInfo?.appName || `应用 #${appId}` }}</div>
-        <div class="top-bar__meta">
-          <a-tag>{{ currentCodeGenTypeLabel }}</a-tag>
-          <a-tag>{{ currentModelTypeLabel }}</a-tag>
+        <button class="top-bar__back" type="button" aria-label="返回首页" @click="router.push('/')">
+          <LeftOutlined />
+        </button>
+        <span class="top-bar__mark" aria-hidden="true">{{ appTitleInitial }}</span>
+        <div class="top-bar__identity">
+          <a-tooltip :title="appTitle">
+            <div class="top-bar__name-wrap">
+              <h1 class="top-bar__name">{{ appTitle }}</h1>
+            </div>
+          </a-tooltip>
+          <div class="top-bar__meta">
+            <span class="top-bar__pill">{{ currentCodeGenTypeLabel }}</span>
+            <span class="top-bar__pill">{{ currentModelTypeLabel }}</span>
+          </div>
         </div>
       </div>
-      <a-space>
+      <a-space class="top-bar__actions">
         <a-select v-model:value="modelType" style="width: 220px">
           <a-select-option
             v-for="opt in modelTypeOptions"
@@ -510,6 +520,7 @@ import {
   getStaticBaseUrl,
   getStaticPreviewUrl,
 } from '@/utils/previewUrl'
+import { displayAppName } from '@/utils/appName'
 import AiMarkdownMessage from '@/components/AiMarkdownMessage.vue'
 import CodeWorkspace from '@/components/CodeWorkspace.vue'
 import { useProjectFileStore } from '@/composables/useProjectFileStore'
@@ -730,24 +741,28 @@ const restoreAgentMode = () => {
 const modelTypeLabelMap = computed<Record<string, string>>(() =>
   Object.fromEntries(modelTypeOptions.value.map((option) => [option.value, option.label])),
 )
-const codeGenTypeLabelMap: Record<string, string> = {
-  [CodeGenTypeEnum.HTML]: 'HTML 模式',
-  [CodeGenTypeEnum.MULTI_FILE]: '多文件模式',
-  [CodeGenTypeEnum.VUE_PROJECT]: 'Vue 工程模式',
-}
 
 /** 当前应用详情；codeGenType 区分 HTML / MULTI_FILE / VUE_PROJECT */
 const appInfo = ref<API.AppVO>()
 const isVueProject = computed(() => appInfo.value?.codeGenType === CodeGenTypeEnum.VUE_PROJECT)
 const currentCodeGenTypeLabel = computed(() => {
   const codeGenType = appInfo.value?.codeGenType
-  if (!codeGenType) return '生成类型：自动选择中'
-  return `生成类型：${codeGenTypeLabelMap[codeGenType] || codeGenType}`
+  if (!codeGenType) return '类型待定'
+  const shortMap: Record<string, string> = {
+    [CodeGenTypeEnum.HTML]: 'HTML',
+    [CodeGenTypeEnum.MULTI_FILE]: '多文件',
+    [CodeGenTypeEnum.VUE_PROJECT]: 'Vue 工程',
+  }
+  return shortMap[codeGenType] || codeGenType
 })
 const currentModelTypeLabel = computed(() => {
   const currentModelType = selectedVersion.value?.modelType || modelType.value
-  return `模型：${modelTypeLabelMap.value[currentModelType] || currentModelType || '自动选择'}`
+  return modelTypeLabelMap.value[currentModelType] || currentModelType || '自动模型'
 })
+const appTitle = computed(() =>
+  displayAppName(appInfo.value?.appName, appInfo.value?.initPrompt, `应用 #${appId.value}`),
+)
+const appTitleInitial = computed(() => (appTitle.value || '应').slice(0, 1))
 const autoStartPrompt = computed(() => {
   if (route.query.autoStart !== '1') return ''
   return typeof route.query.initPrompt === 'string' ? route.query.initPrompt.trim() : ''
@@ -2026,25 +2041,78 @@ onBeforeUnmount(() => {
 }
 
 .top-bar {
-  height: 56px;
-  padding: 0 18px;
+  height: 64px;
+  padding: 0 16px 0 10px;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
   background: var(--bg-card);
 }
 
 .top-bar__main {
   min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.top-bar__back {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-sub);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.top-bar__back:hover {
+  background: color-mix(in srgb, var(--text-main) 6%, transparent);
+  color: var(--text-main);
+}
+
+.top-bar__mark {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #1677ff 0%, #06b6d4 100%);
+  box-shadow: 0 6px 14px -8px rgba(22, 119, 255, 0.7);
+}
+
+.top-bar__identity {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
+}
+
+.top-bar__name-wrap {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .top-bar__name {
-  font-size: 18px;
-  font-weight: 600;
+  margin: 0;
+  max-width: 100%;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--text-main);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2054,18 +2122,27 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  font-size: 12px;
 }
 
-.top-bar__meta :deep(.ant-tag) {
-  margin-inline-end: 0;
-  color: var(--text-secondary);
-  background: transparent;
-  border-color: var(--border-color);
+.top-bar__pill {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--tag-text);
+  background: var(--tag-bg);
+  border: 1px solid var(--tag-border);
+}
+
+.top-bar__actions {
+  flex-shrink: 0;
 }
 
 .core-layout {
-  height: calc(100vh - 120px);
+  height: calc(100vh - 128px);
   display: flex;
   align-items: stretch;
   padding: 12px;

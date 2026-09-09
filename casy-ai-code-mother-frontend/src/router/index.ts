@@ -9,6 +9,9 @@ import AppEdit from '@/views/app/AppEdit.vue'
 import ChatHistoryManage from '@/views/app/ChatHistoryManage.vue'
 import VersionManage from '@/views/app/VersionManage.vue'
 import AiModelManage from '@/views/ai/AiModelManage.vue'
+import SysParamManage from '@/views/sys/SysParamManage.vue'
+import AboutAuthor from '@/views/about/AboutAuthor.vue'
+import AboutProject from '@/views/about/AboutProject.vue'
 import ROLE_ENUM from '@/constant/constant.ts'
 
 const router = createRouter({
@@ -19,6 +22,16 @@ const router = createRouter({
       name: '主页',
       component: Home,
       // 无 meta.roles：登录即可访问
+    },
+    {
+      path: '/about/author',
+      name: '关于作者',
+      component: AboutAuthor,
+    },
+    {
+      path: '/about/project',
+      name: '关于项目',
+      component: AboutProject,
     },
     {
       path: '/user/login',
@@ -76,6 +89,14 @@ const router = createRouter({
       path: '/aiModel/manage',
       name: '模型管理',
       component: AiModelManage,
+      meta: {
+        roles: [ROLE_ENUM.ADMIN],
+      },
+    },
+    {
+      path: '/sysParam/manage',
+      name: '参数管理',
+      component: SysParamManage,
       meta: {
         roles: [ROLE_ENUM.ADMIN],
       },
