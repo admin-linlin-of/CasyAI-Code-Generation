@@ -3,7 +3,6 @@ package com.casy.casyaicodemother.ai.tools;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
-import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.core.CodeGenContextHolder;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
@@ -13,7 +12,6 @@ import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 import java.util.Set;
 
@@ -47,13 +45,7 @@ public class FileDirReadTool extends BaseTool{
             @ToolMemoryId Long appId
     ) {
         try {
-            // 获取当前编辑的版本
-            Path path = Paths.get(relativeDirPath == null ? "" : relativeDirPath);
-            if (!path.isAbsolute()) {
-                String projectDirName = CodeGenContextHolder.getProjectDirName(appId);
-                Path projectRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, projectDirName);
-                path = projectRoot.resolve(relativeDirPath == null ? "" : relativeDirPath);
-            }
+            Path path = CodeGenContextHolder.resolveProjectPath(appId, relativeDirPath);
             File targetDir = path.toFile();
             if (!targetDir.exists() || !targetDir.isDirectory()) {
                 return "错误：目录不存在或不是目录 - " + relativeDirPath;

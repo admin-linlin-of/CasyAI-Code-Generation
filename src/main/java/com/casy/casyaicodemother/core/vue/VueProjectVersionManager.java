@@ -35,11 +35,10 @@ import java.util.regex.Pattern;
  * 多版本生成流程（配合 {@link com.casy.casyaicodemother.service.impl.AppVersionServiceImpl#createCodeVersion}）：
  * <pre>
  * 用户发消息
- *   → AI 首次 writeFile
- *   → createCodeVersion
+ *   → generateAndSaveCodeStream 开头 createCodeVersion
  *        ├─ v1：仅创建空目录
  *        └─ v2+：copyVersionProject(上一版 → 新版)，排除 node_modules/dist
- *   → AI 写入/覆盖文件（可能只改一个 .vue）
+ *   → AI read / modify / write 都落在新版本目录
  *   → 流结束 → 前端调用 /tAppVersion/build → VueProjectBuilder
  *        ├─ 同步 package.json 到 shared
  *        ├─ shared 里 npm install（依赖未变则跳过）

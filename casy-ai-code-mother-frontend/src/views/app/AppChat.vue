@@ -70,7 +70,7 @@
                 v-if="msg.role === 'ai'"
                 :content="aiBubbleContent(msg)"
                 :streaming="msg.streaming"
-                :agent="agentMode === '1'"
+                :agent="isWorkflowAiMessage(msg)"
               />
               <template v-else>
                 <!-- 用户气泡内展示本轮粘贴并上传成功的图片 -->
@@ -185,25 +185,8 @@
           </a>
         </div>
         <div class="preview-panel__body" :class="{ 'preview-panel__body--busy': panelShowActivity }">
-          <!-- 生成中：尚无文件 / 预览 Tab -->
-          <div v-if="rightPanelMode === 'generating'" class="preview-generating preview-generating--panel">
-            <span class="preview-generating__orb" />
-            <div class="preview-generating__title">{{ genPreviewHint }}</div>
-            <div class="preview-generating__elapsed">已运行 {{ formatDuration(genElapsed) }}</div>
-            <div v-if="projectFilePaths.length" class="preview-generating__stat">
-              已写入 {{ projectFilePaths.length }} 个文件
-            </div>
-            <ul v-if="recentProjectFiles.length" class="preview-generating__files">
-              <li v-for="path in recentProjectFiles" :key="path">{{ path }}</li>
-            </ul>
-            <div class="preview-generating__bar" />
-            <div class="preview-generating__tip">
-              {{ rightViewMode === 'code' ? '文件写入后将在此实时展示' : '生成完成后将自动进入预览' }}
-            </div>
-          </div>
-
-          <!-- 生成中 + 已有文件：代码 Tab 实时编辑区 -->
-          <div v-else-if="rightPanelMode === 'code-live'" class="code-live-wrap">
+          <!-- 生成中 + 代码 Tab：始终展示编辑区（打字机 + 波浪），无文件时显示空态 -->
+          <div v-if="rightPanelMode === 'code-live'" class="code-live-wrap">
             <CodeWorkspace
               :mode="isVueProject ? 'tree' : 'flat'"
               :files="displayVirtualFiles"
@@ -217,10 +200,25 @@
               <span class="preview-panel__activity-dot" />
               <span>{{ genPreviewHint }}</span>
               <span class="code-live-wrap__time">{{ formatDuration(genElapsed) }}</span>
-              <span v-if="projectFilePaths.length" class="code-live-wrap__count">
-                {{ projectFilePaths.length }} 个文件
+              <span v-if="liveFileCount > 0" class="code-live-wrap__count">
+                {{ liveFileCount }} 个文件
               </span>
             </div>
+          </div>
+
+          <!-- 生成中：预览 Tab / 等待提示 -->
+          <div v-else-if="rightPanelMode === 'generating'" class="preview-generating preview-generating--panel">
+            <span class="preview-generating__orb" />
+            <div class="preview-generating__title">{{ genPreviewHint }}</div>
+            <div class="preview-generating__elapsed">已运行 {{ formatDuration(genElapsed) }}</div>
+            <div v-if="liveFileCount > 0" class="preview-generating__stat">
+              已写入 {{ liveFileCount }} 个文件
+            </div>
+            <ul v-if="recentProjectFiles.length" class="preview-generating__files">
+              <li v-for="path in recentProjectFiles" :key="path">{{ path }}</li>
+            </ul>
+            <div class="preview-generating__bar" />
+            <div class="preview-generating__tip">生成完成后将自动进入预览，也可切换到「代码」查看实时输出</div>
           </div>
 
           <!-- 静态代码浏览 -->
@@ -518,6 +516,7 @@ import { useProjectFileStore } from '@/composables/useProjectFileStore'
 import { APP_TYPE_OPTIONS } from '@/constant/appType'
 import { APP_NOT_PUBLISH, APP_PUBLISHED } from '@/constant/constant'
 import {
+  codesToVirtualFiles,
   fetchSavedVirtualFiles,
   hasVirtualFileContent,
   parseAiContentToVirtualFiles,
@@ -650,12 +649,84 @@ const detailPublished = computed({
   },
 })
 const modelType = ref(typeof route.query.modelType === 'string' ? route.query.modelType : '')
-const agentMode = ref(route.query.agent === '1' || route.query.agent === 'true' ? '1' : '0')
 const { modelTypeOptions, loadAiModels } = useAiModelOptions()
 const agentModeOptions = [
   { value: '0', label: '传统生成' },
   { value: '1', label: 'Agent 工作流' },
 ]
+
+const AGENT_MODE_STORAGE_PREFIX = 'casy.agentMode.'
+
+const agentModeStorageKey = (id: string) => `${AGENT_MODE_STORAGE_PREFIX}${id}`
+
+const parseQueryAgent = (): '0' | '1' | null => {
+  const raw = route.query.agent
+  if (raw === '1' || raw === 'true') return '1'
+  if (raw === '0' || raw === 'false') return '0'
+  return null
+}
+
+const readStoredAgentMode = (id: string): '0' | '1' | null => {
+  if (!id) return null
+  try {
+    const value = localStorage.getItem(agentModeStorageKey(id))
+    if (value === '0' || value === '1') return value
+  } catch {
+    // 隐私模式等读失败时忽略
+  }
+  return null
+}
+
+const writeStoredAgentMode = (id: string, mode: string) => {
+  if (!id || (mode !== '0' && mode !== '1')) return
+  try {
+    localStorage.setItem(agentModeStorageKey(id), mode)
+  } catch {
+    // 写入失败不影响对话
+  }
+}
+
+const looksLikeWorkflowContent = (content: string) =>
+  content.includes('代码生成工作流') || /\*\*步骤\s+\d+/.test(content)
+
+/** 用最近一条 AI 回复判断该应用上次走的是工作流还是传统生成 */
+const inferAgentModeFromMessages = (): '0' | '1' | null => {
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    const msg = messages.value[i]
+    if (!msg || msg.role !== 'ai') continue
+    const raw = msg.content ?? ''
+    if (!raw.trim()) continue
+    return looksLikeWorkflowContent(raw) ? '1' : '0'
+  }
+  return null
+}
+
+const queryAgent = parseQueryAgent()
+const agentMode = ref(queryAgent ?? readStoredAgentMode(appId.value) ?? '0')
+if (queryAgent) {
+  writeStoredAgentMode(appId.value, queryAgent)
+}
+
+watch(agentMode, (mode) => {
+  writeStoredAgentMode(appId.value, mode)
+})
+
+/**
+ * 关闭再打开对话页时 URL 里通常没有 agent。
+ * 优先用本机记住的选择；没有则看历史最后一条 AI 消息是不是工作流输出。
+ */
+const restoreAgentMode = () => {
+  if (parseQueryAgent()) return
+  const stored = readStoredAgentMode(appId.value)
+  if (stored) {
+    agentMode.value = stored
+    return
+  }
+  const inferred = inferAgentModeFromMessages()
+  if (inferred) {
+    agentMode.value = inferred
+  }
+}
 const modelTypeLabelMap = computed<Record<string, string>>(() =>
   Object.fromEntries(modelTypeOptions.value.map((option) => [option.value, option.label])),
 )
@@ -1086,6 +1157,11 @@ watch(canUseVisualEditor, (canUse) => {
 
 /** 从后端静态目录加载的代码（刷新页面或 SSE 解析失败时使用） */
 const savedVirtualFiles = ref<VirtualFile[]>([])
+/**
+ * 工作流 HTML/多文件：代码流不进聊天正文，走 t=code 专用通道，
+ * 在此缓冲后解析成虚拟文件，供代码区实时打字机展示。
+ */
+const liveCodeBuffer = ref('')
 
 /** 取最后一条 AI 消息的内容，用于解析虚拟文件 */
 const latestAiContent = computed(() => {
@@ -1096,10 +1172,15 @@ const latestAiContent = computed(() => {
   return ''
 })
 
-/** 优先从 SSE 聊天内容解析，解析不到则用静态目录文件 */
+/** 优先实时缓冲 / 聊天解析，解析不到则用静态目录文件；生成中无内容时给空骨架 */
 const displayVirtualFiles = computed(() => {
+  if (liveCodeBuffer.value.trim()) {
+    const fromLive = parseAiContentToVirtualFiles(liveCodeBuffer.value)
+    if (hasVirtualFileContent(fromLive)) return fromLive
+  }
   const fromChat = parseAiContentToVirtualFiles(latestAiContent.value)
   if (hasVirtualFileContent(fromChat)) return fromChat
+  if (generating.value) return codesToVirtualFiles({})
   return savedVirtualFiles.value
 })
 
@@ -1122,9 +1203,15 @@ type RightPanelMode =
   | 'preview-ready'
   | 'idle'
 
+const liveFileCount = computed(() => {
+  if (isVueProject.value) return projectFilePaths.value.length
+  return displayVirtualFiles.value.filter((f) => f.content.trim()).length
+})
+
 const rightPanelMode = computed((): RightPanelMode => {
   if (generating.value) {
-    if (rightViewMode.value === 'code' && hasCodeContent.value) return 'code-live'
+    // 生成中切到代码 Tab 就立刻进实时编辑区（打字机 + 波浪），不必等首个文件
+    if (rightViewMode.value === 'code') return 'code-live'
     return 'generating'
   }
   // 本轮生成以失败结束：右侧直接显示失败态，不再误进“预览准备中”
@@ -1430,6 +1517,16 @@ const stripChatCode = (raw: string): string => {
 const CHAT_CODE_PLACEHOLDER = '（已生成代码：请查看右侧「代码 / 预览」区域）'
 
 /**
+ * 工作流气泡判定：正在以 Agent 工作流生成，或历史正文本身就是步骤卡片。
+ * 不能把当前下拉框的 agentMode 套到所有 AI 消息上，否则传统生成记录会被
+ * 包进「代码生成工作流」卡片，看起来像另一种输出格式。
+ */
+const isWorkflowAiMessage = (msg: ChatMessage) => {
+  if (msg.streaming && agentMode.value === '1') return true
+  return looksLikeWorkflowContent(msg.content ?? '')
+}
+
+/**
  * AI 消息在聊天区展示的正文：
  * - HTML / 多文件模式：模型正文几乎全是代码，聊天区只显示叙述文字，代码由
  *   latestAiContent 解析进右侧虚拟文件（打字机渐进展示），不回灌到聊天气泡。
@@ -1571,8 +1668,11 @@ const startStream = (messageText: string) => {
   showPreview.value = false
   generationFailedText.value = ''
   rightViewMode.value = 'code'
+  liveCodeBuffer.value = ''
   if (isVueProject.value) {
     resetProjectFiles()
+  } else {
+    savedVirtualFiles.value = codesToVirtualFiles({})
   }
   const aiMsg: ChatMessage = { role: 'ai', content: '', thinking: '', streaming: true }
   messages.value.push(aiMsg)
@@ -1581,6 +1681,7 @@ const startStream = (messageText: string) => {
   url.searchParams.set('message', messageText)
   url.searchParams.set('modelType', modelType.value)
   url.searchParams.set('agent', String(agentMode.value === '1'))
+  writeStoredAgentMode(appId.value, agentMode.value)
   eventSource = new EventSource(url.toString(), { withCredentials: true })
   let finished = false
 
@@ -1601,13 +1702,16 @@ const startStream = (messageText: string) => {
       }
       if (data.t === 'thinking') {
         aiMsg.thinking = (aiMsg.thinking ?? '') + (data.c ?? '')
-      } else if (data.t === 'file' && isVueProject.value) {
+      } else if (data.t === 'file') {
         ingestFileEvent({
           path: data.path ?? '',
           content: data.content ?? data.c ?? '',
           append: data.append,
           done: data.done,
         })
+      } else if (data.t === 'code') {
+        // 工作流 HTML/多文件：代码只进右侧面板，不污染工作流步骤卡片
+        liveCodeBuffer.value += data.c ?? ''
       } else {
         aiMsg.content += data.c ?? ''
         if (!isVueProject.value) scheduleCodeRefresh()
@@ -1888,6 +1992,7 @@ onMounted(async () => {
   }
   await loadVersions()
   await loadChatHistory()
+  restoreAgentMode()
   // 已有历史：直接进预览并加载落盘代码
   if (messages.value.length > 0) {
     showPreview.value = true

@@ -331,7 +331,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      * @param message 用户提示词
      * @param modelType 模型类型
      * @param loginUser 登录用户
-     * @param versionDir 版本目录，于用在修改时指定目录
+     * @param versionDir 历史参数，对话生成已忽略（每轮自动新建版本）；修复流不走此方法
      * @return 消息流
      */
     @Override
@@ -358,10 +358,11 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         Flux<String> codeStream;
         if (Boolean.TRUE.equals(agent)) {
             codeStream = new CodeGenConcurrentWorkflow().executeWorkflowWithFlux(
-                    message, appId, loginUser.getId(), codeGenTypeEnum, modelTypeEnum, userMessageId, versionDir);
+                    message, appId, loginUser.getId(), codeGenTypeEnum, modelTypeEnum, userMessageId, null);
             return new SimpleTextStreamHandler().handle(codeStream, chatHistoryService, appId, userMessageId, loginUser);
         }
-        codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, modelTypeEnum, appId, userMessageId, versionDir);
+        // 每轮对话新建版本：Vue 在流开始时 createCodeVersion；不要把前端传入的旧 versionDir 写回去。
+        codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, modelTypeEnum, appId, userMessageId, null);
         return streamHandlerExecutor.doExecute(codeStream, chatHistoryService, appId, userMessageId, loginUser, codeGenTypeEnum);
     }
 

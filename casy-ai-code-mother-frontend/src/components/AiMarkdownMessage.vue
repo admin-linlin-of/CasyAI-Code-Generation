@@ -3,43 +3,26 @@
     class="ai-md"
     :class="{ 'ai-md--typing': typing, 'ai-md--live': live }"
   >
-    <!-- ══ Agent 工作流：始终同一张「步骤列表」卡片 ══ -->
-    <div v-if="isAgent && !waiting && !waitingClassic" class="wf">
+    <!-- ══ Agent 工作流：生成中/结束后都是同一张可折叠步骤卡片 ══ -->
+    <div v-if="isAgent" class="wf">
       <div class="wf__head">
         <span class="wf__mark" :class="{ 'is-run': live }" />
         <div class="wf__head-main">
           <div class="wf__title">代码生成工作流</div>
           <div class="wf__sub">{{ live ? `已运行 ${formatElapsed(elapsed)}` : workflowSub }}</div>
         </div>
-        <span class="wf__count">{{ live ? liveCountText : `${wfSteps.length} 步` }}</span>
+        <span class="wf__count">{{ `${displaySteps.length} 步` }}</span>
       </div>
 
-      <!-- 生成中：以“当前执行步骤”行承载实时输出（工具徽标/文字），样式与结束态一致 -->
-      <div v-if="live" class="wf__list">
-        <div class="wf-step is-open is-now">
-          <div class="wf-step__row">
-            <span class="wf-step__dot" />
-            <span class="wf-step__name">{{ currentHint }}</span>
-            <span class="wf-step__chev" />
-          </div>
-          <div class="wf-step__detail">
-            <div class="wf-step__md ai-md__body">
-              <div v-if="html" v-html="html" />
-              <span v-if="typing" class="ai-md__cursor" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 结束：步骤行收起，可点击展开 -->
-      <div v-else-if="wfSteps.length" class="wf__list">
+      <div class="wf__list">
         <div
-          v-for="(s, i) in wfSteps"
+          v-for="(s, i) in displaySteps"
           :key="s.no"
           class="wf-step"
           :class="{
             'is-open': isStepOpen(s.no),
-            'is-done': i < wfSteps.length - 1,
+            'is-done': !live || i < displaySteps.length - 1,
+            'is-now': live && i === displaySteps.length - 1,
           }"
         >
           <button type="button" class="wf-step__row" @click="toggleStep(s.no)">
@@ -53,29 +36,7 @@
           </div>
         </div>
       </div>
-      <div v-else class="wf__plain ai-md__body">
-        <div v-if="html" v-html="html" />
-      </div>
       <div v-if="!live && workflow?.footer" class="wf__result" v-html="toHtml(workflow.footer)" />
-    </div>
-
-    <!-- ══ 生成中 & 尚无正文：Agent 等待卡片 ══ -->
-    <div v-else-if="waiting" class="ai-md__think">
-      <div class="ai-md__think-head">
-        <span class="ai-md__orb" />
-        <span :key="currentHint" class="ai-md__shimmer">{{ currentHint }}</span>
-      </div>
-      <ul class="ai-md__wait-steps">
-        <li
-          v-for="(step, i) in WAITING_STEPS"
-          :key="step"
-          :class="{ 'is-done': i < visualStep, 'is-now': i === visualStep }"
-        >
-          {{ step }}
-        </li>
-      </ul>
-      <div class="ai-md__bar" />
-      <div class="ai-md__elapsed">已运行 {{ formatElapsed(elapsed) }}</div>
     </div>
 
     <!-- ══ 生成中 & 尚无正文：传统模式等待卡片 ══ -->
@@ -112,7 +73,6 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { aiContentToMarkdown } from '@/utils/aiContentMarkdown'
 import { renderMarkdown } from '@/utils/markdownRenderer'
 
-const WAITING_STEPS = ['理解需求', '规划结构', '准备素材', '生成代码']
 const WAITING_HINTS = ['正在理解需求', '正在规划页面结构', '正在准备素材', '正在生成代码']
 const STREAM_CPS = 36
 const CATCHUP_CPS = 72
@@ -192,8 +152,6 @@ let rafId = 0
 let lastTs = 0
 
 const live = computed(() => !!props.streaming)
-/** 假步骤进度仅 Agent 工作流在尚无 Markdown 输出时使用 */
-const waiting = computed(() => !!props.agent && live.value && cleanContent.value.trim().length === 0)
 /** 传统模式首包未到：展示计时卡片，不显示工作流假步骤 */
 const waitingClassic = computed(
   () => !props.agent && live.value && cleanContent.value.trim().length === 0,
@@ -202,12 +160,42 @@ const visibleRaw = computed(() => cleanContent.value.slice(0, displayLen.value))
 const workflow = computed(() => parseWorkflow(cleanContent.value))
 const wfSteps = computed(() => workflow.value?.steps ?? [])
 const isAgent = computed(() => !!props.agent)
-/** 首个步骤之前的过程记录（工具徽标、节点实时输出），渲染在步骤列表上方 */
-const wfIntroHtml = computed(() => {
-  const head = workflow.value?.head
-  if (!head) return ''
-  // 去掉与 wf 头部重复的标题行
-  return toHtml(head.replace(/^\s*#+\s*代码生成工作流\s*\n?/, ''))
+/** 代码生成节点会先推工具徽标，步骤标题要等节点结束后才到，需把这段尾巴挪到「代码生成」 */
+const LIVE_GEN_TAIL_RE =
+  /(?:^|\n)(?:代码生成中|正在按你的要求修改已有网站|[ \t]*- <(?:fileWrite|fileModify|fileRead|fileDelete|dirRead)>)/
+
+const displaySteps = computed((): WfStep[] => {
+  const steps = wfSteps.value.map((s) => ({ ...s }))
+  if (!steps.length) {
+    const body = (workflow.value?.head || cleanContent.value)
+      .replace(/^\s*#+\s*代码生成工作流\s*\n?/, '')
+      .trim()
+    let title = '初始化'
+    if (cleanContent.value.includes('代码生成中') || parseLatestToolHint(cleanContent.value)) {
+      title = '代码生成'
+    }
+    return [{ no: 'pending', title, body }]
+  }
+  let extra = ''
+  for (const s of steps) {
+    const cut = s.body.search(LIVE_GEN_TAIL_RE)
+    if (cut < 0) continue
+    extra = [extra, s.body.slice(cut).trim()].filter(Boolean).join('\n')
+    s.body = s.body.slice(0, cut).trim()
+  }
+  if (!extra) return steps
+  const genStep = steps.find((s) => s.title === '代码生成')
+  if (genStep) {
+    genStep.body = [genStep.body, extra].filter(Boolean).join('\n')
+    return steps
+  }
+  if (live.value) {
+    steps.push({ no: 'live-gen', title: '代码生成', body: extra })
+  } else {
+    const last = steps[steps.length - 1]
+    last.body = [last.body, extra].filter(Boolean).join('\n')
+  }
+  return steps
 })
 const html = computed(() => renderMarkdown(aiContentToMarkdown(visibleRaw.value)))
 const typing = computed(
@@ -220,16 +208,11 @@ let hintTimer = 0
 let elapsedTimer = 0
 const opened = ref<Record<string, boolean>>({})
 
-const visualStep = computed(() => Math.min(WAITING_STEPS.length - 1, Math.floor(elapsed.value / 4)))
 const latestToolHint = computed(() => parseLatestToolHint(cleanContent.value))
 const toolActionCount = computed(() => {
   const m = cleanContent.value.match(/<(?:fileWrite|fileModify|fileRead|fileDelete|dirRead)>/g)
   return m?.length ?? 0
 })
-/** Agent 卡片头部右侧计数：生成中显示已调用工具数，结束显示步骤数 */
-const liveCountText = computed(() =>
-  toolActionCount.value > 0 ? `已调用 ${toolActionCount.value} 次工具` : '执行中',
-)
 const currentHint = computed(() => {
   const last = workflow.value?.steps.at(-1)?.title
   if (last) return `正在${last}`
@@ -245,6 +228,8 @@ const workflowSub = computed(() => {
 
 const isStepOpen = (no: string) => {
   if (opened.value[no] !== undefined) return opened.value[no]
+  // 生成中默认展开当前（最后）一步，结束后全部收起，点击再看详情
+  if (live.value) return displaySteps.value.at(-1)?.no === no
   return false
 }
 
@@ -269,7 +254,7 @@ watch(
     hintIndex.value = 0
     elapsed.value = 0
     opened.value = {}
-    if (props.agent) {
+    if (!props.agent) {
       hintTimer = window.setInterval(() => {
         hintIndex.value = (hintIndex.value + 1) % WAITING_HINTS.length
       }, 1800)
@@ -319,7 +304,8 @@ const showInstant = () => {
 watch(
   () => cleanContent.value.length,
   () => {
-    if (!everStreamed.value || !props.streaming) {
+    // 工作流按步骤解析，不再对整段 Markdown 打字，避免步骤标题被拆成普通正文
+    if (props.agent || !everStreamed.value || !props.streaming) {
       showInstant()
       return
     }
@@ -332,7 +318,8 @@ watch(
   (streaming) => {
     if (streaming) {
       everStreamed.value = true
-      ensureAnim()
+      if (!props.agent) ensureAnim()
+      else showInstant()
       return
     }
     showInstant()

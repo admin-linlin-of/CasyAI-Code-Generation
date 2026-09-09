@@ -1,28 +1,8 @@
-<!--
-  CodeWorkspace — 右侧「代码」面板总容器（左树 + 右编辑器）
-
-  两种模式（由 AppChat 根据应用类型传入 mode）：
-
-  ┌─ mode=flat ─────────────────────────────────────────────┐
-  │  HTML / MULTI_FILE：固定 3 文件（index.html 等）         │
-  │  左侧：扁平 file-list                                    │
-  │  右侧：Tab + MonacoEditor（直接绑 content，无打字机）     │
-  └──────────────────────────────────────────────────────────┘
-
-  ┌─ mode=tree ─────────────────────────────────────────────┐
-  │  VUE_PROJECT：多目录多文件                               │
-  │  左侧：ProjectFileTree                                   │
-  │  右侧：CodeViewerPanel（Monaco + 打字机）                │
-  │  数据来自 useProjectFileStore（projectFiles / paths）    │
-  └──────────────────────────────────────────────────────────┘
--->
 <template>
-  <div class="code-workspace">
-    <!-- ── 左侧：文件列表 / 目录树 ── -->
+  <div class="code-workspace" :class="{ 'code-workspace--live': generating }">
     <aside class="code-workspace__tree">
       <div class="code-workspace__tree-title">文件</div>
 
-      <!-- Vue 项目：树形目录 -->
       <ProjectFileTree
         v-if="mode === 'tree'"
         :paths="projectPaths"
@@ -31,12 +11,15 @@
         @select="onTreeSelect"
       />
 
-      <!-- HTML/MULTI_FILE：三文件扁平列表 -->
       <ul v-else class="file-list">
         <li
           v-for="file in files"
           :key="file.path"
-          :class="['file-list__item', { 'file-list__item--active': file.path === flatActivePath }]"
+          :class="[
+            'file-list__item',
+            { 'file-list__item--active': file.path === flatActivePath },
+            { 'file-list__item--writing': generating && file.content.trim() },
+          ]"
           @click="flatActivePath = file.path"
         >
           <FileOutlined class="file-list__icon" />
@@ -45,9 +28,7 @@
       </ul>
     </aside>
 
-    <!-- ── 右侧：编辑器区域 ── -->
     <div class="code-workspace__editor">
-      <!-- Vue 项目：带打字机的 CodeViewerPanel -->
       <template v-if="mode === 'tree'">
         <CodeViewerPanel
           :file="activeProjectFile"
@@ -56,7 +37,6 @@
         />
       </template>
 
-      <!-- 传统三文件：Tab + Monaco 直出 -->
       <template v-else>
         <div class="code-workspace__tabs">
           <span
@@ -67,16 +47,26 @@
           >
             {{ file.path }}
           </span>
+          <span v-if="generating && activeFlatFile?.content" class="code-workspace__badge">写入中</span>
         </div>
         <div class="code-workspace__monaco">
           <MonacoEditor
             v-if="activeFlatFile"
             :language="activeFlatFile.language"
-            :model-value="flatShownContent"
+            :model-value="activeFlatFile.content"
+            :display-value="flatShownContent"
             :read-only="readOnly"
+            :streaming="generating"
           />
+          <div v-else class="code-workspace__empty">等待模型输出代码…</div>
         </div>
       </template>
+
+      <div v-if="generating" class="code-wave" aria-hidden="true">
+        <span class="code-wave__line code-wave__line--1" />
+        <span class="code-wave__line code-wave__line--2" />
+        <span class="code-wave__line code-wave__line--3" />
+      </div>
     </div>
   </div>
 </template>
@@ -92,17 +82,11 @@ import type { VirtualFile } from '@/utils/virtualFiles'
 
 const props = withDefaults(
   defineProps<{
-    /** flat=三文件模式；tree=Vue 多文件目录树模式 */
     mode?: 'flat' | 'tree'
-    /** flat 模式：虚拟文件列表（来自 AI 解析或静态目录） */
     files?: VirtualFile[]
-    /** tree 模式：store 中的 ProjectFile 对象列表 */
     projectFiles?: ProjectFile[]
-    /** tree 模式：扁平 path 列表，供 buildFileTree */
     projectPaths?: string[]
-    /** tree 模式：当前选中文件，与 AppChat v-model:active-path 双向绑定 */
     activePath?: string
-    /** 是否处于 SSE 生成中（传给 CodeViewerPanel 控制打字机） */
     generating?: boolean
     readOnly?: boolean
   }>(),
@@ -120,39 +104,35 @@ const emit = defineEmits<{
   'update:activePath': [path: string]
 }>()
 
-/** flat 模式内部维护的当前文件 path */
 const flatActivePath = ref('index.html')
 
-/**
- * tree 模式的 activePath 代理：
- * get 读 props.activePath；set 通过 emit 通知 AppChat / store 更新
- */
 const treeActivePath = computed({
   get: () => props.activePath ?? '',
   set: (path: string) => emit('update:activePath', path),
 })
 
-/** 从 projectFiles 筛出 status=generating 的 path，供树节点绿色高亮 */
 const generatingPaths = computed(
-  () => new Set(props.projectFiles.filter((f) => f.status === 'generating').map((f) => f.path)),
+  () =>
+    new Set(
+      props.projectFiles
+        .filter((f) => f.status === 'generating' || (props.generating && f.content.trim()))
+        .map((f) => f.path),
+    ),
 )
 
-/** 当前选中的 ProjectFile 对象，传给 CodeViewerPanel */
 const activeProjectFile = computed(() =>
   props.projectFiles.find((file) => file.path === treeActivePath.value),
 )
 
-/** flat 模式当前选中的 VirtualFile */
 const activeFlatFile = computed(() => props.files.find((file) => file.path === flatActivePath.value))
 
-// ─── flat 模式打字机：生成中按行块渐进显示当前文件，结束后全量补齐 ──
 const flatReveal = ref<Record<string, number>>({})
 let flatTimer: ReturnType<typeof setTimeout> | null = null
 
-/** 当前文件实际给 Monaco 的文本（打字机未追上时只是 content 的前缀） */
 const flatShownContent = computed(() => {
   const file = activeFlatFile.value
-  if (!file || !props.generating) return file?.content ?? ''
+  if (!file) return ''
+  if (!props.generating) return file.content
   const reached = flatReveal.value[file.path] ?? 0
   return file.content.slice(0, Math.min(reached, file.content.length))
 })
@@ -168,21 +148,24 @@ const flatTick = () => {
   flatTimer = null
   const file = activeFlatFile.value
   if (!file || !props.generating) return
-  const reached = flatReveal.value[file.path] ?? 0
+  let current = flatReveal.value[file.path] ?? 0
   const target = file.content.length
-  if (reached >= target) return
-  // 剩余内容约 1/12 步进（至少 2 字符），20ms 一帧形成“正在写入”效果
-  const remain = target - reached
-  const step = Math.max(2, Math.ceil(remain / 12))
-  flatReveal.value = { ...flatReveal.value, [file.path]: Math.min(target, reached + step) }
-  flatTimer = setTimeout(flatTick, 20)
+  if (current > target) {
+    current = 0
+    flatReveal.value = { ...flatReveal.value, [file.path]: 0 }
+  }
+  if (current >= target) return
+  const remain = target - current
+  const step = Math.max(3, Math.min(48, Math.ceil(remain / 10)))
+  flatReveal.value = { ...flatReveal.value, [file.path]: Math.min(target, current + step) }
+  flatTimer = setTimeout(flatTick, 16)
 }
 
 const ensureFlatTypewriter = () => {
   const file = activeFlatFile.value
-  if (props.generating && file?.content) {
+  if (props.generating && file) {
     if ((flatReveal.value[file.path] ?? 0) < file.content.length) {
-      if (!flatTimer) flatTimer = setTimeout(flatTick, 20)
+      if (!flatTimer) flatTimer = setTimeout(flatTick, 16)
     }
     return
   }
@@ -195,13 +178,13 @@ watch(
   { deep: true, immediate: true },
 )
 
-// 生成结束（done / 历史加载）→ 全部内容立即补全；新一轮生成开始 → 清空进度重新打字
 watch(
   () => props.generating,
   (isGenerating) => {
     clearFlatTimer()
     if (isGenerating) {
       flatReveal.value = {}
+      ensureFlatTypewriter()
       return
     }
     const full: Record<string, number> = {}
@@ -220,14 +203,10 @@ watch(
 
 onBeforeUnmount(clearFlatTimer)
 
-/** 用户点击树节点 → 更新 activePath（会同步到 store） */
 const onTreeSelect = (path: string) => {
   treeActivePath.value = path
 }
 
-/**
- * flat 模式：流式生成时若当前文件仍空，自动切到第一个有内容的文件。
- */
 watch(
   () => props.files,
   (files) => {
@@ -240,10 +219,6 @@ watch(
   { deep: true, immediate: true },
 )
 
-/**
- * tree 模式：路径列表变化时，若当前选中 path 不存在，默认打开第一项。
- * 场景：首次 refreshFromServer 或生成过程中新增文件。
- */
 watch(
   () => props.projectPaths,
   (paths) => {
@@ -261,6 +236,7 @@ watch(
   display: flex;
   height: 100%;
   min-height: 0;
+  position: relative;
 }
 
 .code-workspace__tree {
@@ -305,6 +281,10 @@ watch(
   color: #1677ff;
 }
 
+.file-list__item--writing .file-list__name {
+  color: #52c41a;
+}
+
 .file-list__icon {
   font-size: 12px;
   opacity: 0.7;
@@ -322,10 +302,12 @@ watch(
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  position: relative;
 }
 
 .code-workspace__tabs {
   display: flex;
+  align-items: center;
   gap: 2px;
   padding: 0 8px;
   border-bottom: 1px solid var(--border-color);
@@ -347,10 +329,74 @@ watch(
   border-bottom-color: #1677ff;
 }
 
+.code-workspace__badge {
+  margin-left: 8px;
+  font-size: 11px;
+  color: #52c41a;
+}
+
 .code-workspace__monaco {
   flex: 1;
   min-height: 240px;
   display: flex;
   flex-direction: column;
+}
+
+.code-workspace__empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.code-wave {
+  pointer-events: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 72px;
+  overflow: hidden;
+  z-index: 2;
+}
+
+.code-wave__line {
+  position: absolute;
+  left: -20%;
+  width: 140%;
+  height: 48px;
+  border-radius: 50%;
+  opacity: 0.55;
+}
+
+.code-wave__line--1 {
+  bottom: -18px;
+  background: radial-gradient(ellipse at center, rgba(22, 119, 255, 0.28), transparent 68%);
+  animation: code-wave-drift 2.8s ease-in-out infinite;
+}
+
+.code-wave__line--2 {
+  bottom: -28px;
+  background: radial-gradient(ellipse at center, rgba(82, 196, 26, 0.2), transparent 70%);
+  animation: code-wave-drift 3.6s ease-in-out infinite reverse;
+}
+
+.code-wave__line--3 {
+  bottom: -10px;
+  background: radial-gradient(ellipse at center, rgba(105, 177, 255, 0.22), transparent 65%);
+  animation: code-wave-drift 2.2s ease-in-out infinite;
+  animation-delay: -0.8s;
+}
+
+@keyframes code-wave-drift {
+  0%,
+  100% {
+    transform: translateX(-6%) translateY(6px) scaleY(0.85);
+  }
+  50% {
+    transform: translateX(6%) translateY(-4px) scaleY(1.15);
+  }
 }
 </style>

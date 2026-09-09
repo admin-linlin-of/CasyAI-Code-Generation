@@ -86,9 +86,14 @@ public class AiCodeGeneratorFacade {
                 yield processCodeStream(stringFlux, CodeGenTypeEnum.MULTI_FILE, modelTypeEnum, appId, userMessageId);
             }
             case VUE_PROJECT -> {
-                // 流开始前：把 modelType、userMessageId 放进 CodeGenContextHolder，
-                // 供 FileWriteTool 首次写文件时 createCodeVersion 使用（工具本身只能拿到 appId）
-                CodeGenContextHolder.set(appId, modelTypeEnum, userMessageId, versionDir);
+                // 每轮用户对话都先建新版本，再让 read/modify/write 打到该目录。
+                // 不能再等首次 writeFile：修改模式几乎只用 modifyFile，否则会一直覆盖 v1。
+                // versionDir 非空只用于修复流（repairCodeStream），生成入口应传 null。
+                String resolvedVersionDir = StrUtil.isBlank(versionDir)
+                        ? appVersionService.createCodeVersion(appId, modelTypeEnum, userMessageId)
+                        : versionDir;
+                log.info("Vue 工程本轮版本 appId={}, versionDir={}", appId, resolvedVersionDir);
+                CodeGenContextHolder.set(appId, modelTypeEnum, userMessageId, resolvedVersionDir);
                 TokenStream tokenStream = aiCodeGeneratorServiceFactory.getService(modelTypeEnum, codeGenTypeEnum, appId).generateVueProjectCodeStream(appId, userMessage);
                 // 流结束（成功/失败/取消）后清理上下文，避免内存泄漏；
                 // 异常/取消时失效服务缓存：避免 langchain4j 记忆里残留“孤儿 tool_calls”污染下一次请求

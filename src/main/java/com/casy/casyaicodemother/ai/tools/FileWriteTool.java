@@ -2,7 +2,6 @@ package com.casy.casyaicodemother.ai.tools;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
-import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.core.CodeGenContextHolder;
 import com.casy.casyaicodemother.service.AppVersionService;
 import dev.langchain4j.agent.tool.P;
@@ -16,7 +15,6 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 
 @Slf4j
@@ -57,15 +55,7 @@ public class FileWriteTool extends BaseTool {
                             + "或先 readFile 该文件再用 modifyFile 精确替换需要改动的片段。本次未写入任何内容。");
         }
         try {
-            Path path = Paths.get(relativeFilePath);
-            if (!path.isAbsolute()) {
-                String versionDir = CodeGenContextHolder.getOrCreateVersionDir(appId, appVersionService);
-                String projectDirName = versionDir != null
-                        ? CodeGenContextHolder.buildProjectDirName(appId, versionDir)
-                        : CodeGenContextHolder.getProjectDirName(appId);
-                Path projectRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, projectDirName);
-                path = projectRoot.resolve(relativeFilePath);
-            }
+            Path path = CodeGenContextHolder.resolveProjectPathForWrite(appId, relativeFilePath, appVersionService);
             Path parentDir = path.getParent();
             if (parentDir != null) {
                 Files.createDirectories(parentDir);

@@ -72,13 +72,12 @@ public class CodeGeneratorNode {
                     Boolean.TRUE.equals(context.getEditMode()) ? "修改" : "生成",
                     generationType.getValue(), generationType.getText(), appId);
 
-            // 多次对话可指定已有版本目录；为空则 HTML/MULTI_FILE 在 processCodeStream 内 createCodeVersion，
-            // VUE_PROJECT 由 CodeGenContextHolder 首次写文件时创建，不能写死 v1。
-            String specifiedVersionDir = StrUtil.isBlank(context.getVersionDir()) ? null : context.getVersionDir();
+            // 每轮对话新建版本：Vue 在 generateAndSaveCodeStream 开头 createCodeVersion（v2+ 复制上一版）；
+            // HTML/MULTI_FILE 在流结束落盘时创建。修复节点走 repairCodeStream，不会进这里。
             Flux<String> codeStream = codeGeneratorFacade.generateAndSaveCodeStream(
-                    userMessage, generationType, generationModel, appId, userMessageId, specifiedVersionDir);
+                    userMessage, generationType, generationModel, appId, userMessageId, null);
             // 代码流本身不进对话（避免把 HTML 源码刷到左侧）。先提示「正在生成」，
-            // 再把 Vue 工程逐条工具执行结果翻译成进度推给前端；非 Vue 没有工具事件则按心跳兜底。
+            // 再把 Vue 工程逐条工具执行结果翻译成进度推给前端；非 Vue 把源码走 t=code 推到右侧代码区。
             WorkflowChatEmitter.emitChunked(appId, Boolean.TRUE.equals(context.getEditMode())
                     ? "\n正在按你的要求修改已有网站…\n"
                     : "\n代码生成中，模型正在输出…\n");
@@ -87,13 +86,15 @@ public class CodeGeneratorNode {
             codeStream
                     .doOnNext(chunk -> {
                         long now = System.currentTimeMillis();
-                        // Vue 工程：把 token 流里的 tool_executed 事件翻译成工作流对话的工具调用过程
                         if (isVueWorkflow) {
                             forwardToolExecuted(appId, chunk);
+                        } else if (StrUtil.isNotBlank(chunk) && !chunk.contains("\"t\":\"ping\"")) {
+                            // HTML / 多文件：源码经 t=code 进右侧面板，不污染工作流步骤卡片
+                            WorkflowChatEmitter.emit(appId, cn.hutool.json.JSONUtil.toJsonStr(
+                                    java.util.Map.of("t", "code", "c", chunk)));
                         }
                         if (now - lastBeat.get() >= 1600) {
                             lastBeat.set(now);
-                            // ping 在 Reactor 线程，必须带 appId，不能靠 ThreadLocal
                             WorkflowChatEmitter.emitPing(appId);
                         }
                     })
@@ -143,6 +144,8 @@ public class CodeGeneratorNode {
             String tag = TOOL_TAG_NAMES.getOrDefault(name, "toolCall");
             String content = path != null ? "`" + path + "`" : "完成";
             WorkflowChatEmitter.emitChunked(appId, "- <" + tag + ">" + content + "</" + tag + ">\n");
+            // 写入/修改成功时同步推 t=file，右侧代码区实时打字机展示
+            emitWorkflowFileEvent(appId, name, msg.getStr("arguments"), path);
             return;
         }
         // 失败：普通行更醒目（徽标没有失败态）
@@ -167,6 +170,47 @@ public class CodeGeneratorNode {
             return StrUtil.isBlank(path) ? null : path;
         } catch (Exception ignored) {
             return null;
+        }
+    }
+
+    /**
+     * 工作流 Vue：把 writeFile / modifyFile 的结果推成 t=file，供右侧代码区实时展示。
+     * 不走聊天正文，避免步骤卡片被源码污染。
+     */
+    private static void emitWorkflowFileEvent(Long appId, String toolName, String arguments, String path) {
+        if (appId == null || StrUtil.isBlank(path)) {
+            return;
+        }
+        try {
+            if ("writeFile".equals(toolName)) {
+                JSONObject args = StrUtil.isBlank(arguments) ? new JSONObject() : JSONUtil.parseObj(arguments);
+                String content = args.getStr("content", "");
+                boolean append = Boolean.TRUE.equals(args.getBool("append"));
+                java.util.Map<String, Object> fileEvent = new java.util.LinkedHashMap<>();
+                fileEvent.put("t", "file");
+                fileEvent.put("path", path);
+                fileEvent.put("content", content);
+                fileEvent.put("append", append);
+                fileEvent.put("done", !append);
+                WorkflowChatEmitter.emit(appId, JSONUtil.toJsonStr(fileEvent));
+                return;
+            }
+            if ("modifyFile".equals(toolName)) {
+                java.nio.file.Path disk = com.casy.casyaicodemother.core.CodeGenContextHolder.resolveProjectPath(appId, path);
+                if (disk == null || !java.nio.file.Files.isRegularFile(disk)) {
+                    return;
+                }
+                String diskContent = java.nio.file.Files.readString(disk);
+                java.util.Map<String, Object> fileEvent = new java.util.LinkedHashMap<>();
+                fileEvent.put("t", "file");
+                fileEvent.put("path", path);
+                fileEvent.put("content", diskContent);
+                fileEvent.put("append", false);
+                fileEvent.put("done", true);
+                WorkflowChatEmitter.emit(appId, JSONUtil.toJsonStr(fileEvent));
+            }
+        } catch (Exception e) {
+            log.warn("工作流推送文件事件失败 appId={} path={}", appId, path, e);
         }
     }
 

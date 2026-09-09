@@ -2,19 +2,19 @@ package com.casy.casyaicodemother.ai.tools;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
-import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.core.CodeGenContextHolder;
+import com.casy.casyaicodemother.service.AppVersionService;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolMemoryId;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 /**
  * 文件删除工具
@@ -24,6 +24,10 @@ import java.nio.file.Paths;
 @Component
 public class FileDeleteTool extends BaseTool{
 
+    @Resource
+    @Lazy
+    private AppVersionService appVersionService;
+
     @Tool("删除指定路径的文件")
     public String deleteFile(
             @P("文件的相对路径")
@@ -32,13 +36,7 @@ public class FileDeleteTool extends BaseTool{
     ) {
         requireRelativeFilePath(relativeFilePath);
         try {
-            // 获取当前编辑的版本
-            Path path = Paths.get(relativeFilePath);
-            if (!path.isAbsolute()) {
-                String projectDirName = CodeGenContextHolder.getProjectDirName(appId);
-                Path projectRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, projectDirName);
-                path = projectRoot.resolve(relativeFilePath);
-            }
+            Path path = CodeGenContextHolder.resolveProjectPathForWrite(appId, relativeFilePath, appVersionService);
             if (!Files.exists(path)) {
                 return "警告：文件不存在，无需删除 - " + relativeFilePath;
             }

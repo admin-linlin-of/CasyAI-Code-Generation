@@ -2,23 +2,28 @@ package com.casy.casyaicodemother.ai.tools;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
-import com.casy.casyaicodemother.constant.AppConstant;
 import com.casy.casyaicodemother.core.CodeGenContextHolder;
+import com.casy.casyaicodemother.service.AppVersionService;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolMemoryId;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 
 @Slf4j
 @Component
 public class FileModifyTool extends BaseTool {
+
+    @Resource
+    @Lazy
+    private AppVersionService appVersionService;
 
     @Tool("Modify file content by replacing old content with new content")
     public String modifyFile(
@@ -38,12 +43,7 @@ public class FileModifyTool extends BaseTool {
                     getToolName() + " 工具缺少必填参数 newContent（替换后的新内容），本次未修改任何文件。请补上该参数后重试。");
         }
         try {
-            Path path = Paths.get(relativeFilePath);
-            if (!path.isAbsolute()) {
-                String projectDirName = CodeGenContextHolder.getProjectDirName(appId);
-                Path projectRoot = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, projectDirName);
-                path = projectRoot.resolve(relativeFilePath);
-            }
+            Path path = CodeGenContextHolder.resolveProjectPathForWrite(appId, relativeFilePath, appVersionService);
             if (!Files.exists(path) || !Files.isRegularFile(path)) {
                 return "Error: file does not exist or is not a regular file - " + relativeFilePath;
             }

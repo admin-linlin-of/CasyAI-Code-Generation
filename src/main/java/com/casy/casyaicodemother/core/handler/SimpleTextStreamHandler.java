@@ -32,7 +32,11 @@ public class SimpleTextStreamHandler {
         StringBuilder aiResponseBuilder = new StringBuilder();
         return originFlux
                 .doOnNext(chunk -> {
-                    if (chunk != null && chunk.contains("\"t\":\"ping\"")) {
+                    // ping / file / code 是控制事件，不进对话历史正文
+                    if (chunk != null && chunk.startsWith("{")
+                            && (chunk.contains("\"t\":\"ping\"")
+                            || chunk.contains("\"t\":\"file\"")
+                            || chunk.contains("\"t\":\"code\""))) {
                         return;
                     }
                     aiResponseBuilder.append(chunk);

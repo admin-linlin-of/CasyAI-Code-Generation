@@ -55,7 +55,7 @@ public class JsonMessageStreamHandler {
         return originFlux
                 // 1 个 chunk → List<String>（1~2 条）→ 每条各发 1 次 SSE
                 .concatMap(chunk -> Flux.fromIterable(
-                        handleJsonMessageChunks(chunk, chatHistoryStringBuilder, thinkingHistoryBuilder, seenToolIds)))
+                        handleJsonMessageChunks(chunk, chatHistoryStringBuilder, thinkingHistoryBuilder, seenToolIds, appId)))
                 .filter(StrUtil::isNotEmpty)// 过滤空串
                 // 流结束后统一收尾：空响应写入错误并推送到 SSE，避免 doOnComplete 抛异常导致前端收不到错误
                 .concatWith(Mono.defer(() -> {
@@ -102,7 +102,8 @@ public class JsonMessageStreamHandler {
     private List<String> handleJsonMessageChunks(String chunk,
                                                StringBuilder chatHistoryStringBuilder,
                                                StringBuilder thinkingHistoryBuilder,
-                                               Set<String> seenToolIds) {
+                                               Set<String> seenToolIds,
+                                               long appId) {
         // 解析 JSON
         StreamMessage streamMessage = JSONUtil.toBean(chunk, StreamMessage.class);
         StreamMessageTypeEnum typeEnum = StreamMessageTypeEnum.getEnumByValue(streamMessage.getType());
@@ -141,7 +142,7 @@ public class JsonMessageStreamHandler {
                 }
                 yield List.of();
             }
-            case TOOL_EXECUTED -> buildToolExecutedOutputs(chunk, chatHistoryStringBuilder);
+            case TOOL_EXECUTED -> buildToolExecutedOutputs(chunk, chatHistoryStringBuilder, appId);
             default -> {
                 log.error("不支持的消息类型：{}", typeEnum);
                 yield List.of();
@@ -163,7 +164,7 @@ public class JsonMessageStreamHandler {
      * @param chatHistoryStringBuilder 对话历史收集器，仅追加聊天摘要，不含文件正文
      * @return 1~2 条 SSE 字符串：必有聊天摘要；成功且有路径时追加 file 事件
      */
-    private List<String> buildToolExecutedOutputs(String chunk, StringBuilder chatHistoryStringBuilder) {
+    private List<String> buildToolExecutedOutputs(String chunk, StringBuilder chatHistoryStringBuilder, long appId) {
         // ── 步骤 1：反序列化工具执行结果 ──
         // ToolExecutedMessage 含 failed 标志；arguments 为 writeFile 入参 JSON 字符串
         ToolExecutedMessage toolExecutedMessage = JSONUtil.toBean(chunk, ToolExecutedMessage.class);
@@ -193,19 +194,49 @@ public class JsonMessageStreamHandler {
 
         // ── 步骤 5：成功时追加代码预览专用 file 事件 ──
         // 失败或无路径时不推 file 事件，前端代码面板不做无效更新
-        if (!failed && "writeFile".equals(toolName) && StrUtil.isNotBlank(relativeFilePath)) {
-            // LinkedHashMap 保证 JSON 字段顺序稳定，便于调试
-            String content = jsonObject.getStr("content", "");
-            boolean append = Boolean.TRUE.equals(jsonObject.getBool("append"));
-            Map<String, Object> fileEvent = new LinkedHashMap<>();
-            fileEvent.put("t", "file");           // 事件类型，AppController 识别后原样透传
-            fileEvent.put("path", relativeFilePath);
-            fileEvent.put("content", content);    // 完整写入内容，供 Monaco 实时展示
-            fileEvent.put("append", append);      // 前端按 append 决定拼接还是覆盖
-            fileEvent.put("done", true);          // 工具单次执行结束；分块写入时每次 TOOL_EXECUTED 均为 true
-            outputs.add(JSONUtil.toJsonStr(fileEvent)); // 「双路」= 同一条 SSE 连接、两次 onmessage，两种用途。用 List 只是 Java 里把两条字符串一起返回，后面 concatMap 会拆成两次推送。
+        if (!failed && StrUtil.isNotBlank(relativeFilePath)) {
+            if ("writeFile".equals(toolName)) {
+                String content = jsonObject.getStr("content", "");
+                boolean append = Boolean.TRUE.equals(jsonObject.getBool("append"));
+                Map<String, Object> fileEvent = new LinkedHashMap<>();
+                fileEvent.put("t", "file");
+                fileEvent.put("path", relativeFilePath);
+                fileEvent.put("content", content);
+                fileEvent.put("append", append);
+                // 分块追加时 done=false，让前端保持「写入中」状态并跑打字机；整文件覆盖视为本文件写完
+                fileEvent.put("done", !append);
+                outputs.add(JSONUtil.toJsonStr(fileEvent));
+            } else if ("modifyFile".equals(toolName)) {
+                String diskContent = readProjectFileContent(appId, relativeFilePath);
+                if (diskContent != null) {
+                    Map<String, Object> fileEvent = new LinkedHashMap<>();
+                    fileEvent.put("t", "file");
+                    fileEvent.put("path", relativeFilePath);
+                    fileEvent.put("content", diskContent);
+                    fileEvent.put("append", false);
+                    fileEvent.put("done", true);
+                    outputs.add(JSONUtil.toJsonStr(fileEvent));
+                }
+            }
         }
         return outputs;
+    }
+
+    /** 读取修改后的落盘全文，供代码区实时刷新；失败返回 null */
+    private String readProjectFileContent(long appId, String relativeFilePath) {
+        try {
+            if (appId <= 0) {
+                return null;
+            }
+            java.nio.file.Path path = com.casy.casyaicodemother.core.CodeGenContextHolder.resolveProjectPath(appId, relativeFilePath);
+            if (path == null || !java.nio.file.Files.isRegularFile(path)) {
+                return null;
+            }
+            return java.nio.file.Files.readString(path);
+        } catch (Exception e) {
+            log.warn("读取修改后文件失败 path={}", relativeFilePath, e);
+            return null;
+        }
     }
 
     private JSONObject parseToolArguments(String arguments) {
