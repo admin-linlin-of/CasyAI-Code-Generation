@@ -168,9 +168,11 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
     @Override
     public AppVersion getByAppIdAndCodeDir(Long appId, String codeDir) {
         ThrowUtils.throwIf(appId == null || StrUtil.isBlank(codeDir), ErrorCode.PARAMS_ERROR);
+        // 用列名而不是 AppVersion::getXxx：createCodeVersion / 构建回调可能跑在 ForkJoinPool，
+        // MyBatis-Flex LambdaUtil 会按该线程 TCCL 做 Class.forName，DevTools 下找不到实体类。
         return getOne(QueryWrapper.create()
-                .eq(AppVersion::getAppId, appId)
-                .eq(AppVersion::getCodeDir, codeDir));
+                .eq("app_id", appId)
+                .eq("code_dir", codeDir));
     }
 
     @Override
@@ -345,14 +347,18 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         Long userId = appVersionRequest.getUserId();
         String sortField = appVersionRequest.getSortField();
         String sortOrder = appVersionRequest.getSortOrder();
-        // 拼接查询条件
-        queryWrapper.eq(AppVersion::getId, id)
-                .like(AppVersion::getVersionNum, versionNum)
-                .eq(AppVersion::getCodeDir, codeDir)
-                .eq(AppVersion::getAppId, appId)
-                .eq(AppVersion::getModelType, modelType)
-                .eq(AppVersion::getChatHistoryId, chatHistoryId)
-                .eq(AppVersion::getUserId, userId)
+        // 用列名字符串，不要写 AppVersion::getId。
+        // HTML/多文件生成结束后 concatWith 会在 ForkJoinPool 里调 createCodeVersion → 本方法。
+        // LambdaUtil.getImplClass 用当前线程 TCCL 去 Class.forName("...AppVersion")；
+        // ForkJoinPool 的 TCCL 是 BuiltinClassLoader，再叠加 DevTools 双 ClassLoader，
+        // 就会 ClassNotFoundException: AppVersion。列名查询不走这条解析路径。
+        queryWrapper.eq("id", id)
+                .like("version_num", versionNum)
+                .eq("code_dir", codeDir)
+                .eq("app_id", appId)
+                .eq("model_type", modelType)
+                .eq("chat_history_id", chatHistoryId)
+                .eq("user_id", userId)
                 .orderBy(sortField, "ascend".equals(sortOrder));
         return queryWrapper;
     }

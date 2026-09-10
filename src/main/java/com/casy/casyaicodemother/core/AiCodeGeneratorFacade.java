@@ -155,8 +155,29 @@ public class AiCodeGeneratorFacade {
         return chunk != null && chunk.startsWith("{") && chunk.contains("\"t\":\"thinking\"");
     }
 
+    /**
+     * 流结束后解析并落盘。必须先切回业务 ClassLoader，再调 MyBatis-Flex。
+     * <p>
+     * 原因：本方法由 {@code concatWith(Flux.defer)} 触发，跑在 {@code ForkJoinPool.commonPool}。
+     * 该线程的 TCCL 是 JDK {@code BuiltinClassLoader}。MyBatis-Flex 解析
+     * {@code AppVersion::getId} 这类 lambda 时会 {@code Class.forName(实体类, TCCL)}。
+     * 本地 IDEA + DevTools 下业务类在 {@code RestartClassLoader}，父加载器找不到
+     * {@code AppVersion}，表现为 {@code ClassNotFoundException}。
+     * 这里把 TCCL 设成加载本类的 ClassLoader（有 DevTools 时即 RestartClassLoader）。
+     */
     private Flux<String> saveParsedCode(String completeCode, CodeGenTypeEnum codeGenType,
                                         ModelTypeEnum modelTypeEnum, Long appId, Long userMessageId) {
+        ClassLoader previous = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(AiCodeGeneratorFacade.class.getClassLoader());
+        try {
+            return doSaveParsedCode(completeCode, codeGenType, modelTypeEnum, appId, userMessageId);
+        } finally {
+            Thread.currentThread().setContextClassLoader(previous);
+        }
+    }
+
+    private Flux<String> doSaveParsedCode(String completeCode, CodeGenTypeEnum codeGenType,
+                                          ModelTypeEnum modelTypeEnum, Long appId, Long userMessageId) {
         // 解析前剥掉误混入的思考标签，避免当代码处理
         completeCode = ChatThinkingCodec.stripThinking(StrUtil.nullToEmpty(completeCode));
         completeCode = ChatThinkingCodec.stripNativeThink(completeCode);
