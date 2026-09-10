@@ -4,7 +4,6 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import com.casy.casyaicodemother.constant.AppConstant;
-import com.casy.casyaicodemother.constant.UserConstant;
 import com.casy.casyaicodemother.core.builder.VueBuildStatusNotifier;
 import com.casy.casyaicodemother.core.builder.VueProjectBuilder;
 import com.casy.casyaicodemother.core.vue.VueProjectVersionManager;
@@ -22,6 +21,7 @@ import com.casy.casyaicodemother.model.enums.VersionBuildStatusEnum;
 import com.casy.casyaicodemother.model.enums.VersionDeployStatusEnum;
 import com.casy.casyaicodemother.service.AppService;
 import com.casy.casyaicodemother.service.AppVersionService;
+import com.casy.casyaicodemother.util.AppAccessUtils;
 import com.casy.casyaicodemother.util.NumberUtils;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
@@ -259,7 +259,7 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         ThrowUtils.throwIf(appId == null || StrUtil.isBlank(codeDir), ErrorCode.PARAMS_ERROR);
         App app = appService.getAppById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
-        checkAppVersionViewAuth(app, loginUser);
+        checkAppVersionMutateAuth(app, loginUser);
         ThrowUtils.throwIf(CodeGenTypeEnum.VUE_PROJECT != CodeGenTypeEnum.getEnumByValue(app.getCodeGenType()),
                 ErrorCode.OPERATION_ERROR, "仅 Vue 项目支持打包");
         AppVersion appVersion = getByAppIdAndCodeDir(appId, codeDir);
@@ -279,7 +279,7 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
         ThrowUtils.throwIf(appId == null || StrUtil.isBlank(codeDir), ErrorCode.PARAMS_ERROR);
         App app = appService.getAppById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
-        checkAppVersionViewAuth(app, loginUser);
+        checkAppVersionMutateAuth(app, loginUser);
         ThrowUtils.throwIf(CodeGenTypeEnum.VUE_PROJECT != CodeGenTypeEnum.getEnumByValue(app.getCodeGenType()),
                 ErrorCode.OPERATION_ERROR, "仅 Vue 项目支持打包");
         AppVersion appVersion = getByAppIdAndCodeDir(appId, codeDir);
@@ -319,11 +319,15 @@ public class AppVersionServiceImpl extends ServiceImpl<AppVersionMapper, AppVers
 
     private void checkAppVersionViewAuth(App app, User loginUser) {
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR);
-        if (UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole())) {
-            return;
-        }
-        ThrowUtils.throwIf(!app.getUserId().equals(loginUser.getId()),
+        ThrowUtils.throwIf(!AppAccessUtils.canViewAppContent(app, loginUser),
                 ErrorCode.NO_AUTH_ERROR, "无权查看该应用版本");
+    }
+
+    /** 打包 / 重试打包：仅创建者或管理员 */
+    private void checkAppVersionMutateAuth(App app, User loginUser) {
+        ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR);
+        ThrowUtils.throwIf(!AppAccessUtils.isAdmin(loginUser) && !AppAccessUtils.isOwner(app, loginUser),
+                ErrorCode.NO_AUTH_ERROR, "无权操作该应用版本");
     }
 
     /**

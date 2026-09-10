@@ -167,7 +167,7 @@
             <div class="showcase-block__intro">
               <div class="eyebrow eyebrow--alt">FEATURED</div>
               <h2>精选案例</h2>
-              <p>看看别人用一句话生成了什么，点击即可预览并在此基础上继续创作</p>
+              <p>看看别人用一句话生成了什么，点击即可预览对话与生成结果</p>
             </div>
             <a-space :size="10" class="showcase-block__toolbar">
               <a-input-search

@@ -8,7 +8,6 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.casy.casyaicodemother.ai.AiCodeGenTypeRoutingService;
 import com.casy.casyaicodemother.constant.AppConstant;
-import com.casy.casyaicodemother.constant.UserConstant;
 import com.casy.casyaicodemother.core.AiCodeGeneratorFacade;
 import com.casy.casyaicodemother.core.builder.VueProjectBuilder;
 import com.casy.casyaicodemother.core.handler.SimpleTextStreamHandler;
@@ -32,6 +31,7 @@ import com.casy.casyaicodemother.model.enums.VersionDeployStatusEnum;
 import com.casy.casyaicodemother.model.vo.app.AppVO;
 import com.casy.casyaicodemother.model.vo.user.UserVO;
 import com.casy.casyaicodemother.service.*;
+import com.casy.casyaicodemother.util.AppAccessUtils;
 import com.casy.casyaicodemother.util.AppNameUtils;
 import com.casy.casyaicodemother.util.NumberUtils;
 import com.mybatisflex.core.paginate.Page;
@@ -342,8 +342,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 2. 查询应用信息
         App app = this.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
-        // 3. 验证用户是否有权限访问该应用，仅本人可以生成代码
-        checkAppAuth(app, loginUser, "");
+        // 3. 仅创建者可以继续对话生成代码（精选案例允许他人查看，但不能续聊）
+        checkAppAuth(app, loginUser, "仅应用创建者可以继续对话");
         // 4. 获取应用的代码生成类型
         String codeGenTypeStr = app.getCodeGenType();
         CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenTypeStr);
@@ -567,16 +567,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
      *
      * @param app       应用实体
      * @param loginUser 当前登录用户
-     * @return 管理员或创建者返回 true，否则 false
+     * @return 管理员、创建者或已公布精选案例返回 true
      */
     private boolean canViewInitPrompt(App app, User loginUser) {
-        if (loginUser == null) {
-            return false;
-        }
-        if (UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole())) {
-            return true;
-        }
-        return app.getUserId().equals(loginUser.getId());
+        return AppAccessUtils.canViewAppContent(app, loginUser);
     }
 
     /** 首页曾把提示词前 12 字直接当应用名，创建时改提炼完整标题 */

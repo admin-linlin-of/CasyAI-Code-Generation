@@ -4,7 +4,6 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.casy.casyaicodemother.constant.ChatHistoryConstant;
-import com.casy.casyaicodemother.constant.UserConstant;
 import com.casy.casyaicodemother.exception.ErrorCode;
 import com.casy.casyaicodemother.exception.ThrowUtils;
 import com.casy.casyaicodemother.mapper.AppMapper;
@@ -19,6 +18,7 @@ import com.casy.casyaicodemother.model.vo.chathistory.ChatHistoryVO;
 import com.casy.casyaicodemother.model.vo.user.UserVO;
 import com.casy.casyaicodemother.service.ChatHistoryService;
 import com.casy.casyaicodemother.service.UserService;
+import com.casy.casyaicodemother.util.AppAccessUtils;
 import com.casy.casyaicodemother.util.ChatThinkingCodec;
 import com.casy.casyaicodemother.util.NumberUtils;
 import com.mybatisflex.core.paginate.Page;
@@ -305,10 +305,7 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
      */
     private void checkChatHistoryViewAuth(App app, User loginUser) {
         ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR);
-        if (UserConstant.ADMIN_ROLE.equals(loginUser.getUserRole())) {
-            return;
-        }
-        ThrowUtils.throwIf(!app.getUserId().equals(loginUser.getId()),
+        ThrowUtils.throwIf(!AppAccessUtils.canViewAppContent(app, loginUser),
                 ErrorCode.NO_AUTH_ERROR, "无权查看该应用对话历史");
     }
 

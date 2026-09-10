@@ -9,6 +9,7 @@ import com.casy.casyaicodemother.model.entity.User;
 import com.casy.casyaicodemother.model.enums.CodeGenTypeEnum;
 import com.casy.casyaicodemother.service.AppCodeFileService;
 import com.casy.casyaicodemother.service.AppService;
+import com.casy.casyaicodemother.util.AppAccessUtils;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
@@ -50,6 +51,8 @@ public class AppCodeFileServiceImpl implements AppCodeFileService {
 
         App app = appService.getById(appId);
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        ThrowUtils.throwIf(!AppAccessUtils.canViewAppContent(app, loginUser),
+                ErrorCode.NO_AUTH_ERROR, "无权查看该应用代码");
         ThrowUtils.throwIf(CodeGenTypeEnum.VUE_PROJECT != CodeGenTypeEnum.getEnumByValue(app.getCodeGenType()),
                 ErrorCode.OPERATION_ERROR, "仅 Vue 项目支持文件列表");
 

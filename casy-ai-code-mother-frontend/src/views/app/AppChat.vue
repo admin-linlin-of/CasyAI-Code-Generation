@@ -23,7 +23,7 @@
         </div>
       </div>
       <a-space class="top-bar__actions">
-        <a-select v-model:value="modelType" style="width: 220px">
+        <a-select v-model:value="modelType" :disabled="!isOwnApp" style="width: 220px">
           <a-select-option
             v-for="opt in modelTypeOptions"
             :key="opt.value || 'auto'"
@@ -35,11 +35,18 @@
             </a-tooltip>
           </a-select-option>
         </a-select>
-        <a-select v-model:value="agentMode" :options="agentModeOptions" style="width: 150px" />
+        <a-select
+          v-model:value="agentMode"
+          :disabled="!isOwnApp"
+          :options="agentModeOptions"
+          style="width: 150px"
+        />
         <a-button @click="openDetailModal">详情</a-button>
-        <a-button :loading="deploying" type="primary" @click="doDeploy">部署</a-button>
+        <a-button v-if="isOwnApp" :loading="deploying" type="primary" @click="doDeploy">
+          部署
+        </a-button>
         <!-- 下载当前选中版本的代码压缩包 -->
-        <a-button :loading="downloading" @click="downloadCode">下载</a-button>
+        <a-button v-if="isOwnApp" :loading="downloading" @click="downloadCode">下载</a-button>
       </a-space>
     </header>
 
@@ -98,7 +105,10 @@
               </template>
             </div>
           </div>
-          <a-empty v-if="messages.length === 0" description="发送消息开始生成" />
+          <a-empty
+            v-if="messages.length === 0"
+            :description="isOwnApp ? '发送消息开始生成' : '暂无对话记录'"
+          />
         </div>
         <!-- 用户向上翻阅历史时停止自动滚动，出现「回到最新」悬浮按钮 -->
         <button
@@ -145,11 +155,21 @@
               </div>
             </div>
           </div>
+          <a-alert
+            v-if="appInfo && !isOwnApp"
+            class="chat-readonly-banner"
+            type="info"
+            show-icon
+            message="当前为精选案例预览，仅创建者可以继续对话"
+          />
           <a-textarea
             v-model:value="inputMessage"
+            :disabled="!isOwnApp"
             :maxlength="1000"
             :rows="3"
-            placeholder="继续描述你的页面需求...（可 Ctrl+V 粘贴图片）"
+            :placeholder="
+              isOwnApp ? '继续描述你的页面需求...（可 Ctrl+V 粘贴图片）' : '仅创建者可以继续对话'
+            "
             show-count
             @pressEnter="onPressEnter"
             @paste="onPasteImage"
@@ -164,7 +184,13 @@
               <template #icon><EditOutlined /></template>
               {{ visualEditorEnabled ? '退出编辑' : '可视化编辑' }}
             </a-button>
-            <a-button html-type="button" :loading="generating" type="primary" @click="sendMessage">
+            <a-button
+              html-type="button"
+              :disabled="!isOwnApp"
+              :loading="generating"
+              type="primary"
+              @click="sendMessage"
+            >
               {{ generating ? `生成中 ${formatDuration(genElapsed)}` : '发送' }}
             </a-button>
           </div>
@@ -241,7 +267,7 @@
             :project-paths="projectFilePaths"
             v-model:active-path="projectActivePath"
             :generating="false"
-            :read-only="false"
+            :read-only="!isOwnApp"
           />
 
           <!-- 打包失败 -->
@@ -253,9 +279,14 @@
                   selectedVersionBuildError
                 }}</pre>
               </template>
-              <a-button type="primary" :loading="retryingBuild" @click="retryBuild()"
-                >重新打包</a-button
+              <a-button
+                v-if="isOwnApp"
+                type="primary"
+                :loading="retryingBuild"
+                @click="retryBuild()"
               >
+                重新打包
+              </a-button>
             </a-empty>
           </div>
 
@@ -360,6 +391,7 @@
                   {{ version.buildError }}
                 </p>
                 <a-button
+                  v-if="isOwnApp"
                   class="version-item__retry"
                   size="small"
                   type="link"
@@ -420,11 +452,17 @@
         </div>
         <a-form layout="vertical" class="detail-form" @finish="doUpdateApp">
           <a-form-item label="应用名称" required>
-            <a-input v-model:value="detailForm.appName" :maxlength="40" show-count />
+            <a-input
+              v-model:value="detailForm.appName"
+              :disabled="!isOwnApp"
+              :maxlength="40"
+              show-count
+            />
           </a-form-item>
           <a-form-item label="应用类型">
             <a-select
               v-model:value="detailForm.appTypes"
+              :disabled="!isOwnApp"
               mode="multiple"
               :options="APP_TYPE_OPTIONS"
               placeholder="选择应用类型"
@@ -434,11 +472,12 @@
           <a-form-item label="是否公布">
             <a-switch
               v-model:checked="detailPublished"
+              :disabled="!isOwnApp"
               checked-children="公布"
               un-checked-children="不公布"
             />
           </a-form-item>
-          <a-space>
+          <a-space v-if="isOwnApp">
             <a-button type="primary" :loading="updating" @click="doUpdateApp">修改</a-button>
             <a-button danger :loading="deleting" @click="confirmDeleteApp">删除</a-button>
           </a-space>
@@ -1142,6 +1181,10 @@ const waitForVuePreviewReady = async (codeDir?: string, skipIfSuccess = false) =
 
 /** 版本打包失败后重新触发打包（走 SSE，不再 POST /build + 轮询） */
 const retryBuild = async (codeDir?: string) => {
+  if (!isOwnApp.value) {
+    message.warning('仅应用创建者可以重新打包')
+    return
+  }
   const dir = codeDir || selectedVersionCodeDir.value
   if (!isVueProject.value || !dir || generating.value || retryingBuild.value) return
   retryingBuild.value = true
@@ -1170,6 +1213,7 @@ const rightViewOptions = [
 /** 只有主预览 iframe 真正渲染时才允许进入编辑模式，避免用户在代码/构建状态下误操作 */
 const canUseVisualEditor = computed(
   () =>
+    isOwnApp.value &&
     rightViewMode.value === 'preview' &&
     showPreview.value &&
     selectedVersionPreviewReady.value &&
@@ -1870,6 +1914,10 @@ const openDetailModal = () => {
 }
 
 const doUpdateApp = async () => {
+  if (!isOwnApp.value) {
+    message.warning('仅应用创建者可以修改')
+    return
+  }
   const appName = detailForm.appName.trim()
   if (!appName) {
     message.warning('请输入应用名称')
@@ -1900,6 +1948,10 @@ const doUpdateApp = async () => {
 }
 
 const confirmDeleteApp = () => {
+  if (!isOwnApp.value) {
+    message.warning('仅应用创建者可以删除')
+    return
+  }
   Modal.confirm({
     title: '确认删除应用？',
     content: '删除后不可恢复，是否继续？',
@@ -2115,6 +2167,10 @@ const startStream = (messageText: string) => {
 
 /** 用户点击发送：入队 user 消息并启动 SSE */
 const sendMessage = () => {
+  if (!isOwnApp.value) {
+    message.warning('仅应用创建者可以继续对话')
+    return
+  }
   const messageText = inputMessage.value.trim()
   // 允许「仅图片」或「文字+图片」发送
   const readyImages = pendingImages.value.filter((p) => p.url && !p.uploading && !p.error)
@@ -2152,6 +2208,7 @@ const sendMessage = () => {
  * 输入框粘贴：若剪贴板含图片则拦截默认粘贴、本地预览并上传 OSS。
  */
 const onPasteImage = async (event: ClipboardEvent) => {
+  if (!isOwnApp.value) return
   const items = event.clipboardData?.items
   if (!items?.length) return
 
@@ -2220,6 +2277,10 @@ const onPressEnter = (event: KeyboardEvent) => {
 
 /** 部署当前选中版本到线上（/app/deploy） */
 const doDeploy = async () => {
+  if (!isOwnApp.value) {
+    message.warning('仅应用创建者可以部署')
+    return
+  }
   if (generating.value) {
     message.warning('请等待当前生成完成')
     return
@@ -2241,6 +2302,10 @@ const doDeploy = async () => {
 
 /** 下载当前选中版本的代码压缩包 */
 const downloadCode = async () => {
+  if (!isOwnApp.value) {
+    message.warning('仅应用创建者可以下载代码')
+    return
+  }
   if (!appId.value) {
     message.error('应用ID不存在')
     return
@@ -2504,7 +2569,8 @@ onBeforeUnmount(() => {
   padding: 14px;
 }
 
-.chat-error-banner {
+.chat-error-banner,
+.chat-readonly-banner {
   flex-shrink: 0;
   margin: 12px 12px 0;
   text-align: left;

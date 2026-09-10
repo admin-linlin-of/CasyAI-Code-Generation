@@ -125,7 +125,7 @@ public class AppController {
     }
 
     /**
-     * 根据 id 查看应用详情（非本人/非管理员不返回 initPrompt）
+     * 根据 id 查看应用详情（非本人/非管理员/非精选案例不返回 initPrompt）
      *
      * @param id 应用 id
      * @return 应用详情 VO
