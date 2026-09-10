@@ -105,23 +105,45 @@ export function useProjectFileStore() {
    * 4. touchMap 通知视图更新
    * 5. autoFollowWriting 开启时，将 activePath 切到本次写入的文件
    */
-  const ingestFileEvent = (payload: {
+  type FileEventPayload = {
     path: string
     content?: string
     append?: boolean
     done?: boolean
-  }) => {
-    if (!payload.path) return
+  }
+
+  const applyFileEvent = (payload: FileEventPayload): string | null => {
+    if (!payload.path) return null
     const file = ensureFile(payload.path)
     const chunk = payload.content ?? ''
     file.content = payload.append ? file.content + chunk : chunk
     file.language = pathToLanguage(payload.path)
     file.status = payload.done ? 'done' : 'generating'
     file.updatedAt = Date.now()
-    touchMap()
+    return payload.path
+  }
 
-    if (autoFollowWriting.value && (payload.done || file.status === 'generating')) {
-      activePath.value = payload.path
+  const ingestFileEvent = (payload: FileEventPayload) => {
+    const path = applyFileEvent(payload)
+    if (!path) return
+    touchMap()
+    if (autoFollowWriting.value && (payload.done || filesMap.value.get(path)?.status === 'generating')) {
+      activePath.value = path
+    }
+  }
+
+  /** 同一帧内多条 SSE 文件事件只触发一次 Map 拷贝，避免生成中卡死 */
+  const ingestFileEvents = (payloads: FileEventPayload[]) => {
+    if (!payloads.length) return
+    let lastPath = ''
+    for (const payload of payloads) {
+      const path = applyFileEvent(payload)
+      if (path) lastPath = path
+    }
+    if (!lastPath) return
+    touchMap()
+    if (autoFollowWriting.value) {
+      activePath.value = lastPath
     }
   }
 
@@ -196,6 +218,7 @@ export function useProjectFileStore() {
     hasContent,
     setActivePath,
     ingestFileEvent,
+    ingestFileEvents,
     refreshFromServer,
     reset,
   }

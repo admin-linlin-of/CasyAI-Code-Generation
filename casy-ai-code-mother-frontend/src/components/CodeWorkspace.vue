@@ -54,7 +54,6 @@
             v-if="activeFlatFile"
             :language="activeFlatFile.language"
             :model-value="activeFlatFile.content"
-            :display-value="flatShownContent"
             :read-only="readOnly"
             :streaming="generating"
           />
@@ -72,7 +71,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { FileOutlined } from '@ant-design/icons-vue'
 import CodeViewerPanel from '@/components/CodeViewerPanel.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
@@ -126,83 +125,6 @@ const activeProjectFile = computed(() =>
 
 const activeFlatFile = computed(() => props.files.find((file) => file.path === flatActivePath.value))
 
-const flatReveal = ref<Record<string, number>>({})
-let flatTimer: ReturnType<typeof setTimeout> | null = null
-
-const flatShownContent = computed(() => {
-  const file = activeFlatFile.value
-  if (!file) return ''
-  if (!props.generating) return file.content
-  const reached = flatReveal.value[file.path] ?? 0
-  return file.content.slice(0, Math.min(reached, file.content.length))
-})
-
-const clearFlatTimer = () => {
-  if (flatTimer) {
-    clearTimeout(flatTimer)
-    flatTimer = null
-  }
-}
-
-const flatTick = () => {
-  flatTimer = null
-  const file = activeFlatFile.value
-  if (!file || !props.generating) return
-  let current = flatReveal.value[file.path] ?? 0
-  const target = file.content.length
-  if (current > target) {
-    current = 0
-    flatReveal.value = { ...flatReveal.value, [file.path]: 0 }
-  }
-  if (current >= target) return
-  const remain = target - current
-  const step = Math.max(3, Math.min(48, Math.ceil(remain / 10)))
-  flatReveal.value = { ...flatReveal.value, [file.path]: Math.min(target, current + step) }
-  flatTimer = setTimeout(flatTick, 16)
-}
-
-const ensureFlatTypewriter = () => {
-  const file = activeFlatFile.value
-  if (props.generating && file) {
-    if ((flatReveal.value[file.path] ?? 0) < file.content.length) {
-      if (!flatTimer) flatTimer = setTimeout(flatTick, 16)
-    }
-    return
-  }
-  clearFlatTimer()
-}
-
-watch(
-  () => [props.generating, props.files, flatActivePath.value, activeFlatFile.value?.content] as const,
-  ensureFlatTypewriter,
-  { deep: true, immediate: true },
-)
-
-watch(
-  () => props.generating,
-  (isGenerating) => {
-    clearFlatTimer()
-    if (isGenerating) {
-      flatReveal.value = {}
-      ensureFlatTypewriter()
-      return
-    }
-    const full: Record<string, number> = {}
-    for (const file of props.files) full[file.path] = file.content.length
-    flatReveal.value = full
-  },
-  { immediate: true },
-)
-
-watch(
-  () => props.files,
-  (files) => {
-    if (!files.length) flatReveal.value = {}
-  },
-)
-
-onBeforeUnmount(clearFlatTimer)
-
 const onTreeSelect = (path: string) => {
   treeActivePath.value = path
 }
@@ -216,7 +138,7 @@ watch(
     const firstWithContent = files.find((file) => file.content.trim())
     if (firstWithContent) flatActivePath.value = firstWithContent.path
   },
-  { deep: true, immediate: true },
+  { immediate: true },
 )
 
 watch(

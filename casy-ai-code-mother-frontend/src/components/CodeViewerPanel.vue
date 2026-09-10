@@ -10,7 +10,6 @@
         v-if="file"
         :language="file.language"
         :model-value="file.content"
-        :display-value="displayContent"
         :read-only="readOnly"
         :streaming="generating"
       />
@@ -22,39 +21,14 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, watch } from 'vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
-import { useMonacoTypewriter } from '@/composables/useMonacoTypewriter'
-import type { ProjectFile, ProjectFileStatus } from '@/utils/projectFiles'
+import type { ProjectFile } from '@/utils/projectFiles'
 
-const props = defineProps<{
+defineProps<{
   file?: ProjectFile
   generating: boolean
   readOnly?: boolean
 }>()
-
-const content = ref('')
-const status = ref<ProjectFileStatus | undefined>()
-const currentPath = ref('')
-
-watch(
-  () => props.file,
-  (file) => {
-    if (file?.path !== currentPath.value) {
-      currentPath.value = file?.path ?? ''
-      content.value = ''
-    }
-    content.value = file?.content ?? ''
-    status.value = file?.status
-  },
-  { immediate: true, deep: true },
-)
-
-const { displayContent } = useMonacoTypewriter({
-  content,
-  generating: () => props.generating,
-  status,
-})
 </script>
 
 <style scoped>

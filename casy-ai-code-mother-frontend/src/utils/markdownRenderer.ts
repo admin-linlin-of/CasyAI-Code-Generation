@@ -19,15 +19,27 @@ hljs.registerLanguage('js', javascript)
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
+const highlightBlock = (str: string, lang: string): string => {
+  const language = lang && hljs.getLanguage(lang) ? lang : undefined
+  if (language) {
+    return `<pre class="hljs"><code>${hljs.highlight(str, { language }).value}</code></pre>`
+  }
+  return `<pre class="hljs"><code>${escapeHtml(str)}</code></pre>`
+}
+
 const md = new MarkdownIt({
   html: false, // 禁止原始 HTML，降低 XSS 风险
   linkify: true,
   breaks: true, // 单换行转 <br>
-  highlight(str, lang): string {
-    const language = lang && hljs.getLanguage(lang) ? lang : undefined
-    if (language) {
-      return `<pre class="hljs"><code>${hljs.highlight(str, { language }).value}</code></pre>`
-    }
+  highlight: highlightBlock,
+})
+
+/** 流式场景跳过 highlight.js，避免每帧对未闭合代码块全量高亮 */
+const mdPlain = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+  highlight(str): string {
     return `<pre class="hljs"><code>${escapeHtml(str)}</code></pre>`
   },
 })
@@ -59,10 +71,16 @@ function renderToolTags(html: string): string {
   })
 }
 
-export function renderMarkdown(markdown: string): string {
+export type RenderMarkdownOptions = {
+  /** 默认 true；流式输出传 false，跳过 highlight.js */
+  highlight?: boolean
+}
+
+export function renderMarkdown(markdown: string, options: RenderMarkdownOptions = {}): string {
   if (!markdown) return ''
+  const engine = options.highlight === false ? mdPlain : md
   // 工作流进度会输出 ![desc](url)，需要放行 img/src，否则素材和网站预览图渲染不出来
-  const html = DOMPurify.sanitize(md.render(markdown), {
+  const html = DOMPurify.sanitize(engine.render(markdown), {
     ADD_TAGS: ['pre', 'code', 'img'],
     ADD_ATTR: ['class', 'src', 'alt', 'title'],
   })

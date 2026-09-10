@@ -73,7 +73,7 @@
               <!-- AI 深度思考：SSE t=thinking 或历史 <aiThinking>；生成中标题带「中…」 -->
               <details v-if="msg.role === 'ai' && msg.thinking" class="message-item__thinking" open>
                 <summary>{{ msg.streaming ? '深度思考中…' : '深度思考' }}</summary>
-                <pre class="message-item__thinking-body">{{ msg.thinking }}</pre>
+                <pre class="message-item__thinking-body">{{ thinkingPreview(msg) }}</pre>
               </details>
               <!-- AI 消息：Markdown + 高亮 + 打字机；用户消息：纯文本 + 粘贴图片缩略图 -->
               <AiMarkdownMessage
@@ -83,17 +83,18 @@
                 :agent="isWorkflowAiMessage(msg)"
               />
               <template v-else>
-                <!-- 用户气泡内展示本轮粘贴并上传成功的图片 -->
-                <div v-if="msg.images?.length" class="message-item__images">
+                <!-- 用户气泡：粘贴图 / 历史 [图片]url 都渲染成缩略图，正文里不再露出原始地址 -->
+                <div v-if="userMessageImages(msg).length" class="message-item__images">
                   <img
-                    v-for="(img, imgIdx) in msg.images"
+                    v-for="(img, imgIdx) in userMessageImages(msg)"
                     :key="imgIdx"
                     :src="img"
                     class="message-item__image"
                     alt="粘贴图片"
+                    @click="openUserImage(img)"
                   />
                 </div>
-                <span v-if="msg.content">{{ msg.content }}</span>
+                <span v-if="userMessageText(msg)">{{ userMessageText(msg) }}</span>
               </template>
             </div>
           </div>
@@ -372,12 +373,15 @@
                 <span class="version-item__unavailable">无预览</span>
               </div>
               <iframe
-                v-else
+                v-else-if="shouldRenderVersionThumb(version)"
                 :key="`${version.codeDir}-${getVersionPreviewKey(version)}`"
                 :src="getVersionPreviewUrl(version)"
                 tabindex="-1"
                 title="version-preview"
               />
+              <div v-else class="version-item__building">
+                <span class="version-item__unavailable">预览</span>
+              </div>
             </div>
             <div class="version-item__meta">
               <span class="version-item__label">{{ formatVersionLabel(version) }}</span>
@@ -545,7 +549,7 @@ type ChatMessage = {
   id?: string | number
   role: 'user' | 'ai'
   content: string
-  /** 用户本轮粘贴上传的图片 URL（仅前端展示，历史消息无此字段） */
+  /** 用户粘贴上传的图片 URL；历史消息从正文 `[图片]url` 解析回填 */
   images?: string[]
   /** AI 深度思考内容（reasoning 流） */
   thinking?: string
@@ -630,7 +634,7 @@ const genPreviewHint = computed(() => {
   const raw = streamingMsg?.content ?? ''
   const toolMatch = raw.match(/<(fileWrite|fileModify|fileRead|fileDelete|dirRead)>([\s\S]*?)<\/\1>/gi)
   if (toolMatch?.length) {
-    const last = toolMatch[toolMatch.length - 1]
+    const last = toolMatch.at(-1) ?? ''
     const inner = last.match(/>([\s\S]*?)<\//)?.[1] ?? ''
     const path = inner.match(/[`']([^`']+)[`']/)?.[1]
     if (path) return `正在处理 ${path}`
@@ -639,10 +643,7 @@ const genPreviewHint = computed(() => {
   if (streamingMsg?.thinking && !(streamingMsg.content ?? '').trim()) return '模型深度思考中…'
   if (isVueProject.value) return '模型正在调用工具生成 Vue 项目…'
   if (streamingMsg && !isVueProject.value) {
-    const html = parseAiContentToVirtualFiles(streamingMsg.content ?? '').find((f) => f.path === 'index.html')
-      ?.content ?? ''
-    if (html.trim()) return '正在写入页面代码…'
-    if ((streamingMsg.content ?? '').trim()) return '正在输出设计说明…'
+    if ((streamingMsg.content ?? '').trim()) return '正在生成页面…'
     return '正在构思页面结构…'
   }
   return '模型正在生成代码…'
@@ -782,7 +783,7 @@ const {
   filePaths: projectFilePaths,
   activePath: projectActivePath,
   hasContent: projectHasContent,
-  ingestFileEvent,
+  ingestFileEvents,
   refreshFromServer: refreshProjectFiles,
   reset: resetProjectFiles,
 } = useProjectFileStore()
@@ -1018,6 +1019,16 @@ const isOwnApp = computed(() => {
 const getVersionPreviewKey = (version: API.AppVersion) =>
   version.codeDir ? (versionPreviewKeys.value[version.codeDir] ?? 0) : 0
 
+/** 版本缩略图 iframe 很重，只加载当前选中 + 最近两个已就绪版本，避免列表一长就把浏览器拖垮 */
+const MAX_VERSION_THUMBS = 2
+const shouldRenderVersionThumb = (version: API.AppVersion) => {
+  if (!version.codeDir || !isVersionPreviewReady(version)) return false
+  if (version.codeDir === selectedVersionCodeDir.value) return true
+  const ready = versionList.value.filter((v) => v.codeDir && isVersionPreviewReady(v))
+  const idx = ready.findIndex((v) => v.codeDir === version.codeDir)
+  return idx >= 0 && idx < MAX_VERSION_THUMBS
+}
+
 const markVersionPreviewReady = (codeDir: string) => {
   versionPreviewKeys.value[codeDir] = (versionPreviewKeys.value[codeDir] ?? 0) + 1
   previewRefreshKey.value++
@@ -1216,14 +1227,19 @@ const latestAiContent = computed(() => {
   return ''
 })
 
+/** 流式代码缓冲只解析一次，供右侧编辑器和聊天摘要共用 */
+const parsedLiveVirtualFiles = computed(() => {
+  if (!liveCodeBuffer.value.trim()) return [] as VirtualFile[]
+  return parseAiContentToVirtualFiles(liveCodeBuffer.value)
+})
+
 /** 优先实时缓冲 / 聊天解析，解析不到则用静态目录文件；生成中无内容时给空骨架 */
 const displayVirtualFiles = computed(() => {
-  if (liveCodeBuffer.value.trim()) {
-    const fromLive = parseAiContentToVirtualFiles(liveCodeBuffer.value)
-    if (hasVirtualFileContent(fromLive)) return fromLive
+  if (hasVirtualFileContent(parsedLiveVirtualFiles.value)) return parsedLiveVirtualFiles.value
+  if (!generating.value) {
+    const fromChat = parseAiContentToVirtualFiles(latestAiContent.value)
+    if (hasVirtualFileContent(fromChat)) return fromChat
   }
-  const fromChat = parseAiContentToVirtualFiles(latestAiContent.value)
-  if (hasVirtualFileContent(fromChat)) return fromChat
   if (generating.value) return codesToVirtualFiles({})
   return savedVirtualFiles.value
 })
@@ -1307,6 +1323,44 @@ const loadSavedCodeFiles = async () => {
   if (files.length) savedVirtualFiles.value = files
 }
 
+/** 用户消息里把图片写成 `[图片]https://...`（单独一行或夹在正文），发给模型用；界面还原成缩略图 */
+const BARE_IMAGE_URL =
+  /^(https?:\/\/\S+\.(?:png|jpe?g|gif|webp|bmp|svg)(?:\?\S*)?)$/i
+
+const splitUserImagesFromContent = (raw: string): { content: string; images: string[] } => {
+  if (!raw) return { content: '', images: [] }
+  const images: string[] = []
+  const withoutMarks = raw.replace(/\[图片\]\s*(\S+)/gi, (_, url: string) => {
+    if (url) images.push(url)
+    return ''
+  })
+  const textLines: string[] = []
+  for (const line of withoutMarks.split('\n')) {
+    const bare = line.trim().match(BARE_IMAGE_URL)
+    if (bare?.[1]) {
+      images.push(bare[1])
+      continue
+    }
+    textLines.push(line)
+  }
+  return {
+    content: textLines.join('\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim(),
+    images,
+  }
+}
+
+const userMessageImages = (msg: ChatMessage): string[] => {
+  if (msg.images?.length) return msg.images
+  return splitUserImagesFromContent(msg.content ?? '').images
+}
+
+const userMessageText = (msg: ChatMessage): string =>
+  splitUserImagesFromContent(msg.content ?? '').content
+
+const openUserImage = (url: string) => {
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
 /** 从持久化 message 中拆出深度思考（<aiThinking> 标签） */
 const splitThinkingFromHistory = (raw: string) => {
   const matched = raw.match(/^<aiThinking>([\s\S]*?)<\/aiThinking>\s*/i)
@@ -1323,10 +1377,12 @@ const splitThinkingFromHistory = (raw: string) => {
 const toChatMessage = (item: API.ChatHistoryVO): ChatMessage => {
   const raw = item.message || ''
   if (item.messageType === 'user') {
+    const { content, images } = splitUserImagesFromContent(raw)
     return {
       id: item.id,
       role: 'user',
-      content: raw,
+      content,
+      images: images.length ? images : undefined,
       createTime: item.createTime,
       streaming: false,
     }
@@ -1532,6 +1588,14 @@ const jumpToLatest = () => {
   void scrollToBottom()
 }
 
+/** 流式思考可能很长，界面只渲染末尾，避免 <pre> 每帧撑爆布局 */
+const THINKING_LIVE_CAP = 8000
+const thinkingPreview = (msg: ChatMessage) => {
+  const t = msg.thinking ?? ''
+  if (!msg.streaming || t.length <= THINKING_LIVE_CAP) return t
+  return `…（思考较长，仅显示末尾）\n${t.slice(-THINKING_LIVE_CAP)}`
+}
+
 // ─── 聊天区隐藏大段代码（代码统一展示在右侧代码区） ─────────────
 const CODE_FENCE_BLOCK =
   /```(?:html|css|js|jsx|javascript|json|xml|vue)?\s*(?:\r\n|\r|\n)?[\s\S]*?```/gi
@@ -1570,8 +1634,10 @@ const fileProgressLine = (name: string, content: string, streaming: boolean) => 
  */
 const traditionalChatDigest = (msg: ChatMessage): string => {
   const raw = msg.content ?? ''
-  const source = (msg.streaming && liveCodeBuffer.value.trim() ? liveCodeBuffer.value : raw).trim()
-  const files = parseAiContentToVirtualFiles(source)
+  const files =
+    msg.streaming && hasVirtualFileContent(parsedLiveVirtualFiles.value)
+      ? parsedLiveVirtualFiles.value
+      : parseAiContentToVirtualFiles(msg.streaming && liveCodeBuffer.value.trim() ? liveCodeBuffer.value : raw)
   const html = files.find((f) => f.path === 'index.html')?.content ?? ''
   const css = files.find((f) => f.path === 'style.css')?.content ?? ''
   const js = files.find((f) => f.path === 'script.js')?.content ?? ''
@@ -1609,6 +1675,8 @@ const isWorkflowAiMessage = (msg: ChatMessage) => {
   return looksLikeWorkflowContent(msg.content ?? '')
 }
 
+const bubbleMemo = new WeakMap<ChatMessage, { sig: string; value: string }>()
+
 /**
  * AI 消息在聊天区展示的正文：
  * - HTML / 多文件：即使 content 仍为空也要走 digest（思考阶段需要「正在理解需求…」）。
@@ -1616,6 +1684,16 @@ const isWorkflowAiMessage = (msg: ChatMessage) => {
  * - Vue 工程：聊天区只收到叙述与工具摘要，原样展示。
  */
 const aiBubbleContent = (msg: ChatMessage): string => {
+  const liveLen = msg.streaming ? liveCodeBuffer.value.length : 0
+  const sig = `${msg.streaming ? 1 : 0}:${(msg.content ?? '').length}:${liveLen}`
+  const hit = bubbleMemo.get(msg)
+  if (hit && hit.sig === sig) return hit.value
+  const value = computeAiBubbleContent(msg)
+  bubbleMemo.set(msg, { sig, value })
+  return value
+}
+
+const computeAiBubbleContent = (msg: ChatMessage): string => {
   const raw = msg.content ?? ''
   const failDetail = extractGenerationFailureText(raw)
   const failLine = failDetail ? `❌ 生成失败：${failDetail}` : ''
@@ -1633,9 +1711,127 @@ const aiBubbleContent = (msg: ChatMessage): string => {
 }
 
 const closeEventSource = () => {
+  flushStreamUi()
+  pendingThinking = ''
+  pendingContent = ''
+  pendingCode = ''
+  pendingFiles = []
+  streamAiMsg = null
   if (!eventSource) return
   eventSource.close()
   eventSource = null
+}
+
+type StreamFileEvent = {
+  path: string
+  content?: string
+  append?: boolean
+  done?: boolean
+}
+
+const STREAM_FLUSH_MS = 80
+const STREAM_SCROLL_MS = 120
+
+let streamFlushTimer = 0
+let streamScrollTimer = 0
+let pendingThinking = ''
+let pendingContent = ''
+let pendingCode = ''
+let pendingFiles: StreamFileEvent[] = []
+let streamAiMsg: ChatMessage | null = null
+
+const coalesceFileEvents = (events: StreamFileEvent[]): StreamFileEvent[] => {
+  const order: string[] = []
+  const map = new Map<string, StreamFileEvent>()
+  for (const event of events) {
+    if (!event.path) continue
+    const prev = map.get(event.path)
+    if (!prev) {
+      map.set(event.path, {
+        path: event.path,
+        content: event.content ?? '',
+        append: event.append,
+        done: event.done,
+      })
+      order.push(event.path)
+      continue
+    }
+    if (event.append === false) {
+      prev.content = event.content ?? ''
+      prev.append = false
+    } else {
+      prev.content = (prev.content ?? '') + (event.content ?? '')
+    }
+    if (event.done) prev.done = true
+  }
+  return order.map((path) => map.get(path)!)
+}
+
+const scheduleStreamScroll = () => {
+  if (streamScrollTimer) return
+  streamScrollTimer = window.setTimeout(() => {
+    streamScrollTimer = 0
+    void scrollToBottom()
+  }, STREAM_SCROLL_MS)
+}
+
+const flushStreamUi = () => {
+  if (streamFlushTimer) {
+    clearTimeout(streamFlushTimer)
+    streamFlushTimer = 0
+  }
+  const aiMsg = streamAiMsg
+  if (!aiMsg) {
+    pendingThinking = ''
+    pendingContent = ''
+    pendingCode = ''
+    pendingFiles = []
+    return
+  }
+  if (pendingThinking) {
+    aiMsg.thinking = (aiMsg.thinking ?? '') + pendingThinking
+    pendingThinking = ''
+  }
+  if (pendingContent) {
+    aiMsg.content += pendingContent
+    pendingContent = ''
+  }
+  if (pendingCode) {
+    liveCodeBuffer.value += pendingCode
+    pendingCode = ''
+  }
+  if (pendingFiles.length) {
+    ingestFileEvents(coalesceFileEvents(pendingFiles))
+    pendingFiles = []
+  }
+  if (isGenerationFailure(aiMsg.content)) {
+    generationFailedText.value = extractGenerationFailureText(aiMsg.content)
+  }
+  scheduleStreamScroll()
+}
+
+const scheduleStreamFlush = () => {
+  if (streamFlushTimer) return
+  streamFlushTimer = window.setTimeout(() => {
+    streamFlushTimer = 0
+    flushStreamUi()
+  }, STREAM_FLUSH_MS)
+}
+
+const cancelStreamUi = () => {
+  if (streamFlushTimer) {
+    clearTimeout(streamFlushTimer)
+    streamFlushTimer = 0
+  }
+  if (streamScrollTimer) {
+    clearTimeout(streamScrollTimer)
+    streamScrollTimer = 0
+  }
+  pendingThinking = ''
+  pendingContent = ''
+  pendingCode = ''
+  pendingFiles = []
+  streamAiMsg = null
 }
 
 /**
@@ -1769,6 +1965,11 @@ const startStream = (messageText: string) => {
   }
   const aiMsg: ChatMessage = { role: 'ai', content: '', thinking: '', streaming: true }
   messages.value.push(aiMsg)
+  streamAiMsg = aiMsg
+  pendingThinking = ''
+  pendingContent = ''
+  pendingCode = ''
+  pendingFiles = []
   const url = buildSseUrl()
   url.searchParams.set('appId', String(appId.value))
   url.searchParams.set('message', messageText)
@@ -1778,7 +1979,7 @@ const startStream = (messageText: string) => {
   eventSource = new EventSource(url.toString(), { withCredentials: true })
   let finished = false
 
-  /** 每收到一条 SSE data：thinking / file / 聊天文本 */
+  /** 每收到一条 SSE data：先写入缓冲，按帧刷新 UI，避免 token 级重绘卡死 */
   eventSource.onmessage = (event) => {
     if (finished) return
     try {
@@ -1794,42 +1995,32 @@ const startStream = (messageText: string) => {
         return
       }
       if (data.t === 'thinking') {
-        // 只进折叠块，不拼进 content；若片段误带落库标签则剥掉，避免界面露出 <aiThinking>
         const piece = (data.c ?? '').replace(/^<aiThinking>|<\/aiThinking>$/gi, '')
-        aiMsg.thinking = (aiMsg.thinking ?? '') + piece
+        pendingThinking += piece
       } else if (data.t === 'file') {
-        ingestFileEvent({
+        pendingFiles.push({
           path: data.path ?? '',
           content: data.content ?? data.c ?? '',
           append: data.append,
           done: data.done,
         })
       } else if (data.t === 'code') {
-        // 工作流 HTML/多文件：代码只进右侧面板，不污染工作流步骤卡片
-        liveCodeBuffer.value += data.c ?? ''
+        pendingCode += data.c ?? ''
       } else {
         const chunk = data.c ?? ''
-        aiMsg.content += chunk
-        // 传统 HTML / 多文件的代码也在这条文本流里。必须写入 liveCodeBuffer，
-        // displayVirtualFiles 才能响应式更新，右侧打字机才会动。
+        pendingContent += chunk
         if (!isVueProject.value && chunk) {
-          liveCodeBuffer.value += chunk
-        }
-        if (isGenerationFailure(chunk) || isGenerationFailure(aiMsg.content)) {
-          generationFailedText.value = extractGenerationFailureText(aiMsg.content)
+          pendingCode += chunk
         }
       }
     } catch {
       const rawChunk = event.data ?? ''
-      aiMsg.content += rawChunk
+      pendingContent += rawChunk
       if (!isVueProject.value && rawChunk) {
-        liveCodeBuffer.value += rawChunk
-      }
-      if (isGenerationFailure(rawChunk) || isGenerationFailure(aiMsg.content)) {
-        generationFailedText.value = extractGenerationFailureText(aiMsg.content)
+        pendingCode += rawChunk
       }
     }
-    scrollToBottom()
+    scheduleStreamFlush()
   }
 
   /**
@@ -1840,6 +2031,7 @@ const startStream = (messageText: string) => {
   eventSource.addEventListener('business-error', (event: MessageEvent) => {
     if (finished) return
     finished = true
+    flushStreamUi()
     let errorMessage = '生成失败，请重试'
     try {
       const data = JSON.parse(event.data) as { message?: string }
@@ -1867,6 +2059,7 @@ const startStream = (messageText: string) => {
   eventSource.addEventListener('done', async () => {
     if (finished) return
     finished = true
+    flushStreamUi()
     aiMsg.streaming = false
     generating.value = false
     stopGenTimer()
@@ -1897,9 +2090,13 @@ const startStream = (messageText: string) => {
   // 连接异常（后端出错 / 服务停止 / 网络中断）：停表并始终给出可见异常，
   // 不再静默丢弃已收到的部分内容
   eventSource.onerror = () => {
-    closeEventSource()
-    if (finished) return
+    if (finished) {
+      closeEventSource()
+      return
+    }
     finished = true
+    flushStreamUi()
+    closeEventSource()
     aiMsg.streaming = false
     generating.value = false
     stopGenTimer()
@@ -2001,7 +2198,9 @@ const addAndUploadImage = async (file: File) => {
 const removePendingImage = (id: string) => {
   const idx = pendingImages.value.findIndex((p) => p.id === id)
   if (idx < 0) return
-  URL.revokeObjectURL(pendingImages.value[idx].previewUrl)
+  const item = pendingImages.value[idx]
+  if (!item) return
+  URL.revokeObjectURL(item.previewUrl)
   pendingImages.value.splice(idx, 1)
 }
 
@@ -2125,6 +2324,7 @@ onBeforeUnmount(() => {
   visualEditorController?.destroy()
   visualEditorController = null
   closeEventSource()
+  cancelStreamUi()
   stopGenTimer()
   stopBuildTimer()
   resetVisualEditor()
@@ -2318,6 +2518,8 @@ onBeforeUnmount(() => {
 .message-item {
   display: flex;
   margin-bottom: 12px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
 }
 
 .message-item--ai {
@@ -2345,6 +2547,10 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-color);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.message-item--streaming {
+  content-visibility: visible;
 }
 
 .message-item--streaming .message-item__content {
@@ -2479,6 +2685,7 @@ onBeforeUnmount(() => {
   max-height: 120px;
   border-radius: 4px;
   object-fit: cover;
+  cursor: pointer;
   display: block;
 }
 

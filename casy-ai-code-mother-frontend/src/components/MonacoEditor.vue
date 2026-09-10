@@ -42,25 +42,62 @@ const { isDark } = useThemeStore()
 
 let monacoApi: Awaited<ReturnType<typeof loadMonaco>> | null = null
 let editor: import('monaco-editor').editor.IStandaloneCodeEditor | null = null
+let syncTimer = 0
 
 const getMonacoTheme = () => (isDark.value ? 'vs-dark' : 'vs')
 
-const syncContent = (value: string) => {
-  if (!editor) return
-  if (editor.getValue() === value) return
-  editor.setValue(value)
-  if (props.streaming) {
-    const model = editor.getModel()
-    const line = model?.getLineCount() ?? 1
-    editor.revealLine(line)
-  }
-}
+const editorLanguage = () => (props.streaming ? 'plaintext' : props.language)
 
 const syncLanguage = (language: string) => {
   if (!editor || !monacoApi) return
   const model = editor.getModel()
   if (!model) return
   monacoApi.editor.setModelLanguage(model, language)
+}
+
+/** 流式追加用 executeEdits，避免 setValue 全量重解析把页面卡死 */
+const syncContent = (value: string) => {
+  if (!editor) return
+  const current = editor.getValue()
+  if (current === value) return
+  const model = editor.getModel()
+  if (props.streaming && model && value.startsWith(current)) {
+    const lastLine = model.getLineCount()
+    const lastCol = model.getLineMaxColumn(lastLine)
+    editor.executeEdits('stream', [
+      {
+        range: {
+          startLineNumber: lastLine,
+          startColumn: lastCol,
+          endLineNumber: lastLine,
+          endColumn: lastCol,
+        },
+        text: value.slice(current.length),
+      },
+    ])
+    editor.revealLine(model.getLineCount())
+    return
+  }
+  editor.setValue(value)
+  if (props.streaming) {
+    editor.revealLine(model?.getLineCount() ?? 1)
+  }
+}
+
+const scheduleSyncContent = (value: string) => {
+  if (!props.streaming) {
+    if (syncTimer) {
+      clearTimeout(syncTimer)
+      syncTimer = 0
+    }
+    syncContent(value)
+    return
+  }
+  if (syncTimer) return
+  syncTimer = window.setTimeout(() => {
+    syncTimer = 0
+    syncContent(shownValue.value)
+  }, 50)
 }
 
 onMounted(async () => {
@@ -70,7 +107,7 @@ onMounted(async () => {
 
   editor = monacoApi.editor.create(containerRef.value, {
     value: shownValue.value,
-    language: props.language,
+    language: editorLanguage(),
     theme: getMonacoTheme(),
     readOnly: props.readOnly,
     automaticLayout: true,
@@ -80,6 +117,11 @@ onMounted(async () => {
     lineNumbers: 'on',
     wordWrap: 'on',
     tabSize: 2,
+    quickSuggestions: false,
+    occurrencesHighlight: 'off',
+    renderValidationDecorations: 'off',
+    folding: !props.streaming,
+    links: false,
   })
 
   syncContent(shownValue.value)
@@ -87,8 +129,14 @@ onMounted(async () => {
   editor?.layout()
 })
 
-watch(shownValue, syncContent)
-watch(() => props.language, syncLanguage)
+watch(shownValue, scheduleSyncContent)
+watch(
+  () => [props.streaming, props.language] as const,
+  () => {
+    syncLanguage(editorLanguage())
+    editor?.updateOptions({ folding: !props.streaming })
+  },
+)
 watch(
   () => props.readOnly,
   (readOnly) => editor?.updateOptions({ readOnly }),
@@ -99,6 +147,7 @@ watch(isDark, () => {
 })
 
 onBeforeUnmount(() => {
+  if (syncTimer) clearTimeout(syncTimer)
   editor?.dispose()
   editor = null
   monacoApi = null

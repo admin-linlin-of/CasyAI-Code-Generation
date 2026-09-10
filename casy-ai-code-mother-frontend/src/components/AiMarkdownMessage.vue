@@ -31,12 +31,12 @@
             <span class="wf-step__chev" />
           </button>
           <div v-show="isStepOpen(s.no)" class="wf-step__detail">
-            <div v-if="s.body" class="wf-step__md ai-md__body" v-html="toHtml(s.body)" />
+            <div v-if="s.body" class="wf-step__md ai-md__body" v-html="stepHtmlMap[s.no] || ''" />
             <div v-else class="wf-step__pending">本步无文字记录</div>
           </div>
         </div>
       </div>
-      <div v-if="!live && workflow?.footer" class="wf__result" v-html="toHtml(workflow.footer)" />
+      <div v-if="!live && footerHtml" class="wf__result" v-html="footerHtml" />
     </div>
 
     <!-- ══ 生成中 & 尚无正文：传统模式等待卡片 ══ -->
@@ -74,8 +74,8 @@ import { aiContentToMarkdown } from '@/utils/aiContentMarkdown'
 import { renderMarkdown } from '@/utils/markdownRenderer'
 
 const WAITING_HINTS = ['正在理解需求', '正在规划页面结构', '正在准备素材', '正在生成代码']
-const STREAM_CPS = 36
-const CATCHUP_CPS = 72
+/** 流式 Markdown 刷新间隔：避免每个 token 都走 markdown-it + DOMPurify */
+const STREAM_RENDER_MS = 120
 
 type WfStep = { no: string; title: string; body: string }
 type WfView = { title: string; status: string; steps: WfStep[]; footer: string; head: string }
@@ -146,17 +146,13 @@ const parseWorkflow = (raw: string): WfView | null => {
 }
 
 const cleanContent = computed(() => stripHeartbeat(props.content))
-const displayLen = ref(0)
 const everStreamed = ref(false)
-let rafId = 0
-let lastTs = 0
 
 const live = computed(() => !!props.streaming)
 /** 传统模式首包未到：展示计时卡片，不显示工作流假步骤 */
 const waitingClassic = computed(
   () => !props.agent && live.value && cleanContent.value.trim().length === 0,
 )
-const visibleRaw = computed(() => cleanContent.value.slice(0, displayLen.value))
 const workflow = computed(() => parseWorkflow(cleanContent.value))
 const wfSteps = computed(() => workflow.value?.steps ?? [])
 const isAgent = computed(() => !!props.agent)
@@ -197,16 +193,65 @@ const displaySteps = computed((): WfStep[] => {
   }
   return steps
 })
-const html = computed(() => renderMarkdown(aiContentToMarkdown(visibleRaw.value)))
-const typing = computed(
-  () => everStreamed.value && displayLen.value < cleanContent.value.length,
-)
+const html = ref('')
+const stepHtmlMap = ref<Record<string, string>>({})
+const footerHtml = ref('')
+/** 流式中显示光标，不再逐字打字（每个字符重跑 Markdown 会卡死页面） */
+const typing = computed(() => live.value && everStreamed.value && !isAgent.value)
 
 const hintIndex = ref(0)
 const elapsed = ref(0)
 let hintTimer = 0
 let elapsedTimer = 0
+let renderTimer = 0
 const opened = ref<Record<string, boolean>>({})
+const stepHtmlCache = new Map<string, { body: string; html: string }>()
+
+const toHtml = (md: string, highlight: boolean) =>
+  renderMarkdown(aiContentToMarkdown(md), { highlight })
+
+const paintMarkdown = () => {
+  const highlight = !live.value
+  if (!isAgent.value) {
+    html.value = cleanContent.value ? toHtml(cleanContent.value, highlight) : ''
+    return
+  }
+  const next: Record<string, string> = {}
+  const steps = displaySteps.value
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i]
+    if (!s.body) {
+      next[s.no] = ''
+      continue
+    }
+    const hit = stepHtmlCache.get(s.no)
+    if (hit && hit.body === s.body) {
+      next[s.no] = hit.html
+      continue
+    }
+    const rendered = toHtml(s.body, highlight || i < steps.length - 1)
+    stepHtmlCache.set(s.no, { body: s.body, html: rendered })
+    next[s.no] = rendered
+  }
+  stepHtmlMap.value = next
+  footerHtml.value = workflow.value?.footer ? toHtml(workflow.value.footer, true) : ''
+}
+
+const scheduleMarkdownPaint = () => {
+  if (!live.value) {
+    if (renderTimer) {
+      clearTimeout(renderTimer)
+      renderTimer = 0
+    }
+    paintMarkdown()
+    return
+  }
+  if (renderTimer) return
+  renderTimer = window.setTimeout(() => {
+    renderTimer = 0
+    paintMarkdown()
+  }, STREAM_RENDER_MS)
+}
 
 const latestToolHint = computed(() => parseLatestToolHint(cleanContent.value))
 const toolActionCount = computed(() => {
@@ -237,8 +282,6 @@ const toggleStep = (no: string) => {
   opened.value = { ...opened.value, [no]: !isStepOpen(no) }
 }
 
-const toHtml = (md: string) => renderMarkdown(aiContentToMarkdown(md))
-
 watch(
   live,
   (isLive) => {
@@ -250,7 +293,10 @@ watch(
       clearInterval(elapsedTimer)
       elapsedTimer = 0
     }
-    if (!isLive) return
+    if (!isLive) {
+      stepHtmlCache.clear()
+      return
+    }
     hintIndex.value = 0
     elapsed.value = 0
     opened.value = {}
@@ -266,69 +312,22 @@ watch(
   { immediate: true },
 )
 
-const stopAnim = () => {
-  if (rafId) cancelAnimationFrame(rafId)
-  rafId = 0
-  lastTs = 0
-}
-
-const tick = (ts: number) => {
-  const target = cleanContent.value.length
-  const lag = target - displayLen.value
-  if (lag <= 0) {
-    rafId = 0
-    lastTs = 0
-    return
-  }
-  if (!lastTs) lastTs = ts
-  const dt = Math.min(48, ts - lastTs)
-  lastTs = ts
-  const cps = props.streaming ? STREAM_CPS : CATCHUP_CPS
-  const step = Math.max(1, Math.round((cps * dt) / 1000))
-  displayLen.value = Math.min(target, displayLen.value + step)
-  rafId = requestAnimationFrame(tick)
-}
-
-const ensureAnim = () => {
-  if (!everStreamed.value) return
-  if (displayLen.value < cleanContent.value.length && !rafId) {
-    rafId = requestAnimationFrame(tick)
-  }
-}
-
-const showInstant = () => {
-  displayLen.value = cleanContent.value.length
-  stopAnim()
-}
-
-watch(
-  () => cleanContent.value.length,
-  () => {
-    // 工作流按步骤解析，不再对整段 Markdown 打字，避免步骤标题被拆成普通正文
-    if (props.agent || !everStreamed.value || !props.streaming) {
-      showInstant()
-      return
-    }
-    ensureAnim()
-  },
-)
-
 watch(
   () => props.streaming,
   (streaming) => {
-    if (streaming) {
-      everStreamed.value = true
-      if (!props.agent) ensureAnim()
-      else showInstant()
-      return
-    }
-    showInstant()
+    if (streaming) everStreamed.value = true
   },
   { immediate: true },
 )
 
+watch(
+  () => [cleanContent.value, displaySteps.value, live.value] as const,
+  scheduleMarkdownPaint,
+  { immediate: true },
+)
+
 onBeforeUnmount(() => {
-  stopAnim()
+  if (renderTimer) clearTimeout(renderTimer)
   if (hintTimer) clearInterval(hintTimer)
   if (elapsedTimer) clearInterval(elapsedTimer)
 })
